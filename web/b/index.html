@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared bet · Bank Track</title>
+<meta name="robots" content="noindex">
+<style>
+  :root { --bg:#eef1ee; --card:#fff; --ink:#142019; --muted:#5d6a62; --line:#d6ddd7; --accent:#1d6b45; --on:#fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1612; --card:#17201b; --ink:#e6ede8; --muted:#95a39a; --line:#2b3830; --accent:#4fbf86; --on:#0b1510; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width:480px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .brand { color:var(--accent); font-weight:700; letter-spacing:.04em; text-transform:uppercase; font-size:13px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin:16px 0; }
+  .leg { padding:10px 0; border-top:1px solid var(--line); display:flex; gap:12px; justify-content:space-between; }
+  .leg:first-of-type { border-top:0; }
+  .muted { color:var(--muted); font-size:14px; }
+  .odds { font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; }
+  .total { display:flex; justify-content:space-between; margin-top:8px; padding-top:10px; border-top:2px solid var(--line); font-weight:700; }
+  .btn { display:block; width:100%; text-align:center; padding:14px; border-radius:999px; font-weight:600; text-decoration:none; border:1px solid var(--accent); margin-top:10px; font-size:16px; cursor:pointer; }
+  .primary { background:var(--accent); color:var(--on); }
+  .secondary { background:transparent; color:var(--accent); }
+  .err { color:#c2402f; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">Bank Track</div>
+  <h1 id="title">Shared bet</h1>
+  <p class="muted">Someone shared this bet with you. Open it in Bank Track to log the same bet.</p>
+  <div class="card" id="bet"><span class="muted">Loading…</span></div>
+  <a class="btn primary" id="open" href="#">Open in Bank Track</a>
+  <button class="btn secondary" id="copy" type="button">Copy link</button>
+  <a class="btn secondary" href="https://github.com/jonathanemc23/BetAssistance/releases/latest">Get the Android app</a>
+</main>
+<script>
+(() => {
+  const code = location.hash.slice(1);
+  const box = document.getElementById("bet");
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  let bet = null;
+  try {
+    const b64 = code.replace(/-/g, "+").replace(/_/g, "/");
+    const bytes = Uint8Array.from(atob(b64 + "===".slice((b64.length + 3) % 4)), c => c.charCodeAt(0));
+    bet = JSON.parse(new TextDecoder().decode(bytes));
+  } catch (e) { bet = null; }
+  if (!bet || bet.v !== 1) {
+    box.innerHTML = '<span class="err">This link is incomplete or damaged. Ask for it to be shared again.</span>';
+    document.getElementById("open").style.display = "none";
+    return;
+  }
+  const odds = n => Number(n).toFixed(2);
+  const row = (sel, ev, o) => `<div class="leg"><div><div>${esc(sel)}</div>${ev ? `<div class="muted">${esc(ev)}</div>` : ""}</div><div class="odds">${odds(o)}</div></div>`;
+  const legs = Array.isArray(bet.l) ? bet.l : [];
+  const type = { single: "Single", parlay: "Parlay", system: "System", other: "Other" }[bet.t] || "Bet";
+  document.getElementById("title").textContent = bet.t === "parlay" ? `${legs.length}-leg parlay` : type + " bet";
+  box.innerHTML = (bet.t === "parlay" ? legs.map(l => row(l.s, l.e, l.o)).join("") : row(bet.s, [bet.e, bet.p].filter(Boolean).join(" · "), bet.o)) +
+    `<div class="total"><span>${bet.t === "parlay" ? "Combined odds" : "Odds"}</span><span class="odds">${odds(bet.o)}</span></div>` +
+    (bet.b ? `<div class="muted" style="margin-top:6px">Bookmaker: ${esc(bet.b)}</div>` : "");
+  const fallback = encodeURIComponent("https://github.com/jonathanemc23/BetAssistance/releases/latest");
+  const android = /Android/i.test(navigator.userAgent);
+  document.getElementById("open").href = android
+    ? `intent://bet?d=${code}#Intent;scheme=banktrack;package=com.banktrack.app;S.browser_fallback_url=${fallback};end`
+    : `banktrack://bet?d=${code}`;
+  document.getElementById("copy").onclick = async () => {
+    try { await navigator.clipboard.writeText(location.href); document.getElementById("copy").textContent = "Link copied"; }
+    catch { prompt("Copy this link", location.href); }
+  };
+})();
+</script>
+</body>
+</html>

@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../data/store.dart';
 import '../logic/stats.dart';
-import 'bank_screens.dart';
 import 'bet_form.dart';
 import 'format.dart';
+import 'share_ui.dart';
 
-enum BetFilter { all, open, won, lost, settled }
+enum BetFilter { all, open, won, lost, parlays }
 
-/// Screen 1: bankroll control, key stats and the bet register.
+/// The bet register: every bet, filters, quick settling and sharing.
 class BetsScreen extends StatefulWidget {
   const BetsScreen({super.key, required this.store});
   final BankStore store;
@@ -21,53 +21,49 @@ class BetsScreenState extends State<BetsScreen> {
   BetFilter _filter = BetFilter.all;
   BankStore get store => widget.store;
 
-  void _toast(String? msg) {
-    if (msg != null && mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
-
-  Future<void> openBet([Bet? b]) async {
-    final msg = await Navigator.push<String>(
-        context, MaterialPageRoute(builder: (_) => BetFormPage(store: store, bet: b)));
-    _toast(msg);
-  }
-
   bool _matches(Bet b) => switch (_filter) {
         BetFilter.all => true,
         BetFilter.open => b.status == BetStatus.pending,
         BetFilter.won => b.status == BetStatus.won,
         BetFilter.lost => b.status == BetStatus.lost,
-        BetFilter.settled => b.isSettled,
+        BetFilter.parlays => b.isParlay,
       };
+
+  Future<void> _actions(Bet b) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Edit'), onTap: () => Navigator.pop(c, 'edit')),
+          ListTile(leading: const Icon(Icons.share_outlined), title: const Text('Share link'), onTap: () => Navigator.pop(c, 'share')),
+          ListTile(leading: const Icon(Icons.replay), title: const Text('Log this bet again'), onTap: () => Navigator.pop(c, 'again')),
+        ]),
+      ),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'edit':
+        await openBetForm(context, store, bet: b);
+      case 'share':
+        await showShareBet(context, store, b);
+      case 'again':
+        await openBetForm(context, store,
+            template: b.asNew(date: isoDate(DateTime.now()), created: DateTime.now().toIso8601String()));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final fmt = Fmt(store.settings);
-    final s = store.stats;
     final list = store.bets.where(_matches).toList();
+    final pl = list.where((b) => b.isSettled).fold<double>(0, (a, b) => a + b.profit);
     final theme = Theme.of(context);
 
     return CustomScrollView(slivers: [
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
         sliver: SliverList.list(children: [
-          _BankCard(store: store, fmt: fmt, stats: s, onToast: _toast),
-          const SizedBox(height: 12),
-          _KpiGrid(tiles: [
-            _Kpi('Profit / loss', fmt.money(s.profit, sign: true),
-                '${s.units >= 0 ? '+' : '−'}${s.units.abs().toStringAsFixed(1)} units', BankColors.forValue(context, s.profit)),
-            _Kpi('ROI', fmt.pct(s.roi), 'on ${fmt.money(s.turnover)} staked', BankColors.forValue(context, s.roi)),
-            _Kpi('Win rate', '${(s.winRate * 100).toStringAsFixed(0)}%', '${s.wins}W · ${s.losses}L', null),
-            _Kpi('Bets', '${s.count}', '${s.settledCount} settled · ${s.pendingCount} open', null),
-            _Kpi('Avg odds', s.avgOdds == 0 ? '–' : formatOdds(s.avgOdds, store.settings.oddsFormat), 'won and lost bets', null),
-            _Kpi('At risk', fmt.money(s.exposure), '${s.pendingCount} open bets', null),
-          ]),
-          const SizedBox(height: 20),
-          Row(children: [
-            Text('Bet register', style: theme.textTheme.titleLarge),
-            const Spacer(),
-            Text('${list.length} bets', style: theme.textTheme.bodySmall),
-          ]),
-          const SizedBox(height: 8),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(children: [
@@ -80,7 +76,7 @@ class BetsScreenState extends State<BetsScreen> {
                       BetFilter.open => 'Open',
                       BetFilter.won => 'Won',
                       BetFilter.lost => 'Lost',
-                      BetFilter.settled => 'Settled',
+                      BetFilter.parlays => 'Parlays',
                     }),
                     selected: _filter == f,
                     showCheckmark: false,
@@ -89,9 +85,17 @@ class BetsScreenState extends State<BetsScreen> {
                 ),
             ]),
           ),
+          const SizedBox(height: 4),
+          Row(children: [
+            Text('${list.length} bets', style: theme.textTheme.bodySmall),
+            const Spacer(),
+            Text('Settled P/L ', style: theme.textTheme.bodySmall),
+            Text(fmt.money(pl, sign: true),
+                style: theme.textTheme.bodySmall?.copyWith(color: BankColors.forValue(context, pl), fontWeight: FontWeight.w600)),
+          ]),
           const SizedBox(height: 8),
           if (store.bets.isEmpty)
-            _EmptyState(onAdd: () => openBet())
+            _EmptyState(onAdd: () => openBetForm(context, store))
           else if (list.isEmpty)
             const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No bets match this filter.'))),
         ]),
@@ -104,7 +108,8 @@ class BetsScreenState extends State<BetsScreen> {
           itemBuilder: (_, i) => _BetTile(
             bet: list[i],
             fmt: fmt,
-            onTap: () => openBet(list[i]),
+            onTap: () => openBetForm(context, store, bet: list[i]),
+            onLongPress: () => _actions(list[i]),
             onSettle: (st) => store.settle(list[i], st),
           ),
         ),
@@ -113,102 +118,12 @@ class BetsScreenState extends State<BetsScreen> {
   }
 }
 
-class _BankCard extends StatelessWidget {
-  const _BankCard({required this.store, required this.fmt, required this.stats, required this.onToast});
-  final BankStore store;
-  final Fmt fmt;
-  final Stats stats;
-  final void Function(String?) onToast;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Card(
-      color: cs.primaryContainer,
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('BANKROLL', style: TextStyle(letterSpacing: 1.2, fontSize: 12, color: cs.onPrimaryContainer)),
-          const SizedBox(height: 4),
-          Text(fmt.money(stats.balance),
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w700, color: cs.onPrimaryContainer, fontFeatures: const [FontFeature.tabularFigures()])),
-          Text('${fmt.money(stats.available)} available · started at ${fmt.money(store.settings.startBankroll)}',
-              style: TextStyle(color: cs.onPrimaryContainer.withValues(alpha: 0.8))),
-          const SizedBox(height: 12),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            FilledButton.tonalIcon(
-              onPressed: () async => onToast(await showTxSheet(context, store, TxKind.deposit)),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Deposit'),
-            ),
-            FilledButton.tonalIcon(
-              onPressed: () async => onToast(await showTxSheet(context, store, TxKind.withdrawal)),
-              icon: const Icon(Icons.remove, size: 18),
-              label: const Text('Withdraw'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TransactionsPage(store: store))),
-              child: const Text('History'),
-            ),
-          ]),
-        ]),
-      ),
-    );
-  }
-}
-
-class _Kpi {
-  const _Kpi(this.label, this.value, this.sub, this.color);
-  final String label, value, sub;
-  final Color? color;
-}
-
-class _KpiGrid extends StatelessWidget {
-  const _KpiGrid({required this.tiles});
-  final List<_Kpi> tiles;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return LayoutBuilder(builder: (context, c) {
-      final cols = c.maxWidth > 560 ? 3 : 2;
-      final w = (c.maxWidth - (cols - 1) * 8) / cols;
-      return Wrap(spacing: 8, runSpacing: 8, children: [
-        for (final t in tiles)
-          SizedBox(
-            width: w,
-            child: Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(t.label.toUpperCase(),
-                      style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1, color: theme.colorScheme.onSurfaceVariant)),
-                  const SizedBox(height: 4),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(t.value,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                            color: t.color, fontWeight: FontWeight.w600, fontFeatures: const [FontFeature.tabularFigures()])),
-                  ),
-                  Text(t.sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
-                ]),
-              ),
-            ),
-          ),
-      ]);
-    });
-  }
-}
-
 class _BetTile extends StatelessWidget {
-  const _BetTile({required this.bet, required this.fmt, required this.onTap, required this.onSettle});
+  const _BetTile({required this.bet, required this.fmt, required this.onTap, required this.onLongPress, required this.onSettle});
   final Bet bet;
   final Fmt fmt;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
   final void Function(BetStatus) onSettle;
 
   @override
@@ -216,11 +131,13 @@ class _BetTile extends StatelessWidget {
     final theme = Theme.of(context);
     final color = BankColors.forStatus(context, bet.status);
     final pending = bet.status == BetStatus.pending;
+    final sub = betSubtitle(bet);
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         child: IntrinsicHeight(
           child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Container(width: 5, color: color),
@@ -228,16 +145,21 @@ class _BetTile extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(bet.selection, style: theme.textTheme.titleSmall),
-                  if (bet.event.isNotEmpty) Text(bet.event, style: theme.textTheme.bodySmall),
+                  Row(children: [
+                    if (bet.type != BetType.single) ...[
+                      _TypeBadge(type: bet.type),
+                      const SizedBox(width: 6),
+                    ],
+                    Expanded(child: Text(betTitle(bet), style: theme.textTheme.titleSmall)),
+                  ]),
+                  if (sub.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
+                    ),
                   const SizedBox(height: 4),
                   Text(
-                    [
-                      Fmt.date(bet.date),
-                      bet.sport,
-                      if (bet.book.isNotEmpty) bet.book,
-                      '${fmt.money(bet.stake)} @ ${formatOdds(bet.odds, fmt.settings.oddsFormat)}',
-                    ].join(' · '),
+                    '${betMeta(bet, fmt)} · ${fmt.money(bet.stake)} @ ${formatOdds(bet.odds, fmt.settings.oddsFormat)}',
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ]),
@@ -268,6 +190,21 @@ class _BetTile extends StatelessWidget {
           ]),
         ),
       ),
+    );
+  }
+}
+
+class _TypeBadge extends StatelessWidget {
+  const _TypeBadge({required this.type});
+  final BetType type;
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(4)),
+      child: Text(type.label.toUpperCase(),
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: cs.onSecondaryContainer)),
     );
   }
 }
@@ -304,8 +241,8 @@ class _EmptyState extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Your betting ledger starts here', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            const Text('Set your starting bankroll from the settings icon, then log each bet with its stake and odds. '
-                'Bank Track works out your balance, profit, ROI and win rate, and charts them as you settle bets.'),
+            const Text('Log each bet with its stake and odds, as a single, a parlay or another type. '
+                'Long-press a bet to share it as a link or log it again.'),
             const SizedBox(height: 12),
             FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add), label: const Text('Log your first bet')),
           ]),
