@@ -6,12 +6,17 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      HAS_KEY: ${{ secrets.KEYSTORE_BASE64 != '' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -25,15 +30,32 @@ jobs:
       # Sign with the real release key when the repository has it as secrets,
       # so the APK installs over earlier releases and keeps the user's data.
       - name: Restore release key
-        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        if: env.HAS_KEY == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEY_PROPERTIES: ${{ secrets.KEY_PROPERTIES }}
         run: |
           echo "$KEYSTORE_BASE64" | base64 -d > android/app/banktrack-release.jks
-          echo "$KEY_PROPERTIES" > android/key.properties
+          printf '%s\n' "$KEY_PROPERTIES" > android/key.properties
       - run: flutter build apk --release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: bank-track-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+      # Publish a GitHub release with the APK for every release-signed build on
+      # main. Debug-signed builds are never published: installing one would
+      # block later updates and force an uninstall that deletes the user's bets.
+      - name: Publish release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.HAS_KEY == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//')
+          TAG="v${VERSION/+/-build}"
+          cp build/app/outputs/flutter-apk/app-release.apk "bank-track-${TAG}.apk"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "bank-track-${TAG}.apk" --clobber
+          else
+            gh release create "$TAG" "bank-track-${TAG}.apk" --title "Bank Track ${TAG}" \
+              --notes "Install on Android by opening this APK on the phone. Updates install over the previous version and keep your data."
+          fi
