@@ -47,6 +47,9 @@ class BankStore extends ChangeNotifier {
     await load();
   }
 
+  Future<String?> pref(String key) => _db.pref(key);
+  Future<void> setPref(String key, String value) => _db.setPref(key, value);
+
   Future<void> saveSettings(Settings s) async {
     await _db.saveSettings(s);
     await load();

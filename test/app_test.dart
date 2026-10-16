@@ -7,6 +7,11 @@ import 'package:bank_track/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:bank_track/data/fixtures.dart';
+
+import 'fixtures_test.dart' show espnEvent, board;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Loads real Roboto and Material Icons so screenshots are readable.
@@ -57,6 +62,7 @@ Future<BankStore> seededStore() async {
     ],
   ));
   await db.saveTx(const BankTx(kind: TxKind.deposit, amount: 200, date: '2026-08-01', note: 'Top up'));
+  await db.setPref('matches.country', 'eng');
   final store = BankStore(db);
   await store.load();
   return store;
@@ -76,7 +82,7 @@ void main() {
     }
 
     final store = (await tester.runAsync(seededStore))!;
-    await tester.pumpWidget(BankTrackApp(store: store));
+    await tester.pumpWidget(BankTrackApp(store: store, fixtures: FixturesApi(client: _fixturesClient()), today: DateTime(2026, 10, 18)));
     await tester.pumpAndSettle();
 
     // Summary is the main page and holds no bet list.
@@ -108,33 +114,55 @@ void main() {
     await tester.tap(find.text('Log bet'));
     await tester.pumpAndSettle();
     expect(find.text('Log a bet'), findsOneWidget);
-    await tester.enterText(find.widgetWithText(TextFormField, 'Selection'), 'Arsenal to win');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Event (optional)'), 'Arsenal vs Chelsea');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Odds (e.g. 2.50)'), '2.10');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Selection, e.g. Arsenal to win'), 'Arsenal to win');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Event (optional), e.g. Arsenal vs Chelsea'), 'Arsenal vs Chelsea');
+    await tester.enterText(find.widgetWithText(TextFormField, '2.50'), '2.10');
     await tester.pumpAndSettle();
+    expect(find.text('\$42.00'), findsOneWidget);
     expect(find.text('Returns \$42.00'), findsOneWidget);
     await shot('log_bet');
 
     await tester.tap(find.text('Parlay'));
     await tester.pumpAndSettle();
-    expect(find.text('Leg 1'), findsOneWidget);
-    expect(find.text('Leg 2'), findsOneWidget);
-    final legSelections = find.widgetWithText(TextFormField, 'Selection');
-    expect(tester.widget<TextFormField>(legSelections.first).controller!.text, 'Arsenal to win');
-    await tester.enterText(legSelections.at(1), 'Lakers ML');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Odds (e.g. 2.50)').at(1), '1.50');
+    final legSelection = find.widgetWithText(TextFormField, 'Selection');
+    expect(legSelection, findsNWidgets(2));
+    // Leg 1 carried over what was typed for the single.
+    expect(tester.widget<TextFormField>(legSelection.first).controller!.text, 'Arsenal to win');
+    await tester.enterText(legSelection.at(1), 'Lakers ML');
+    await tester.enterText(find.widgetWithText(TextFormField, '2.50').at(1), '1.50');
     await tester.pumpAndSettle();
     expect(find.text('Combined 3.15'), findsOneWidget);
     await shot('log_parlay');
 
     await tester.runAsync(() async {
-      await tester.tap(find.widgetWithText(FilledButton, 'Log bet'));
+      await tester.tap(find.text('Log bet').last);
       await Future<void>.delayed(const Duration(milliseconds: 300));
     });
     await tester.pumpAndSettle();
     final saved = store.bets.firstWhere((b) => b.isParlay && b.status == BetStatus.pending);
     expect(saved.legs.map((l) => l.selection), ['Arsenal to win', 'Lakers ML']);
     expect(saved.odds, closeTo(3.15, 1e-9));
+
+    // Matches.
+    await tester.tap(find.text('Matches'));
+    for (var i = 0; i < 3; i++) {
+      await tester.pump();
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('England'), findsOneWidget);
+    expect(find.text('Arsenal'), findsOneWidget);
+    expect(find.text('PREMIER LEAGUE'), findsOneWidget);
+    expect(find.text('LIVE'), findsOneWidget);
+    await shot('matches');
+
+    await tester.tap(find.text('Arsenal'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Log a bet on this match'));
+    await tester.pumpAndSettle();
+    expect(find.text('Arsenal vs Chelsea'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     // Charts.
     await tester.tap(find.text('Charts'));
@@ -143,3 +171,24 @@ void main() {
     await shot('charts');
   });
 }
+
+http.Client _fixturesClient() => MockClient((req) async {
+      if (req.url.queryParameters['dates'] != '20261018') return http.Response(board([]), 200);
+      return switch (req.url.pathSegments[req.url.pathSegments.length - 2]) {
+        'eng.1' => http.Response(
+            board([
+              espnEvent('1', '2026-10-18T11:30:00Z', 'Leeds United', 'Everton', state: 'post', completed: true, detail: 'FT', hs: '0', as: '3'),
+              espnEvent('2', '2026-10-18T14:00:00Z', 'Arsenal', 'Chelsea', state: 'in', detail: "67'", hs: '2', as: '1'),
+              espnEvent('3', '2026-10-18T16:30:00Z', 'AFC Bournemouth', 'Sunderland'),
+              espnEvent('4', '2026-10-18T19:00:00Z', 'Manchester City', 'Liverpool'),
+            ]),
+            200),
+        'eng.2' => http.Response(
+            board([
+              espnEvent('5', '2026-10-18T14:00:00Z', 'Coventry City', 'Middlesbrough'),
+              espnEvent('6', '2026-10-18T14:00:00Z', 'Norwich City', 'Watford'),
+            ]),
+            200),
+        _ => http.Response(board([]), 200),
+      };
+    });
