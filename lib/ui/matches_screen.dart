@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../data/fixtures.dart';
+import '../data/models.dart';
 import '../data/store.dart';
+import '../logic/stats.dart';
 import 'bet_form.dart';
 
 /// Matches tab: football fixtures for a country on a chosen day.
@@ -82,8 +84,11 @@ class _MatchesScreenState extends State<MatchesScreen> {
     if (!_strip.hasClients) return;
     final i = _day.difference(_today).inDays + _span;
     if (i < 0 || i > _span * 2) return;
-    _strip.animateTo((i * 60.0 - 120).clamp(0, _strip.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    _strip.animateTo(
+      (i * 60.0 - 120).clamp(0, _strip.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
   }
 
   Future<void> _pickCountry() async {
@@ -115,108 +120,148 @@ class _MatchesScreenState extends State<MatchesScreen> {
       showDragHandle: true,
       builder: (c) => _MatchSheet(
         match: m,
+        oddsFormat: widget.store.settings.oddsFormat,
         onLogBet: () {
           Navigator.pop(c);
           openBetForm(context, widget.store, template: m.toBetTemplate());
+        },
+        onPick: (selection, odds) {
+          Navigator.pop(c);
+          _pick(m, selection, odds);
         },
       ),
     );
   }
 
+  /// Tapping a price opens the form with that pick and price filled in.
+  void _pick(Match m, String selection, double odds) => openBetForm(
+    context,
+    widget.store,
+    template: m.toBetTemplate(selection: selection, odds: odds),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-        child: Row(children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: ActionChip(
-                avatar: Text(_country?.flag ?? '🌍', style: const TextStyle(fontSize: 18)),
-                label: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text(_country?.name ?? 'Country', style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const Icon(Icons.expand_more, size: 18),
-                ]),
-                onPressed: _pickCountry,
-              ),
-            ),
-          ),
-          IconButton(tooltip: 'Pick a date', icon: const Icon(Icons.calendar_month_outlined), onPressed: _pickDate),
-          IconButton(
-              tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: _loading ? null : () => _load(refresh: true)),
-        ]),
-      ),
-      SizedBox(
-        height: 64,
-        child: ListView.builder(
-          controller: _strip,
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          itemCount: _span * 2 + 1,
-          itemBuilder: (_, i) {
-            final d = _today.add(Duration(days: i - _span));
-            final sel = d == _day;
-            final isToday = d == _today;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () => _setDay(d),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 52,
-                  decoration: BoxDecoration(
-                    color: sel ? cs.primary : cs.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(16),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ActionChip(
+                    avatar: Text(_country?.flag ?? '🌍', style: const TextStyle(fontSize: 18)),
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_country?.name ?? 'Country', style: const TextStyle(fontWeight: FontWeight.w600)),
+                        const Icon(Icons.expand_more, size: 18),
+                      ],
+                    ),
+                    onPressed: _pickCountry,
                   ),
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Text(isToday ? 'Today' : DateFormat.E().format(d),
-                        style: theme.textTheme.labelSmall?.copyWith(color: sel ? cs.onPrimary : cs.onSurfaceVariant)),
-                    Text('${d.day}',
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700, color: sel ? cs.onPrimary : cs.onSurface)),
-                  ]),
                 ),
               ),
-            );
-          },
+              IconButton(tooltip: 'Pick a date', icon: const Icon(Icons.calendar_month_outlined), onPressed: _pickDate),
+              IconButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh),
+                onPressed: _loading ? null : () => _load(refresh: true),
+              ),
+            ],
+          ),
         ),
-      ),
-      if (_day.difference(_today).inDays.abs() > _span)
-        Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Text(DateFormat.yMMMMEEEEd().format(_day), style: theme.textTheme.labelLarge),
+        SizedBox(
+          height: 64,
+          child: ListView.builder(
+            controller: _strip,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: _span * 2 + 1,
+            itemBuilder: (_, i) {
+              final d = _today.add(Duration(days: i - _span));
+              final sel = d == _day;
+              final isToday = d == _today;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => _setDay(d),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 52,
+                    decoration: BoxDecoration(
+                      color: sel ? cs.primary : cs.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          isToday ? 'Today' : DateFormat.E().format(d),
+                          style: theme.textTheme.labelSmall?.copyWith(color: sel ? cs.onPrimary : cs.onSurfaceVariant),
+                        ),
+                        Text(
+                          '${d.day}',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: sel ? cs.onPrimary : cs.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ),
-      const SizedBox(height: 4),
-      if (_loading) const LinearProgressIndicator(minHeight: 2) else const SizedBox(height: 2),
-      Expanded(child: RefreshIndicator(onRefresh: () => _load(refresh: true), child: _body(theme))),
-    ]);
+        if (_day.difference(_today).inDays.abs() > _span)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(DateFormat.yMMMMEEEEd().format(_day), style: theme.textTheme.labelLarge),
+          ),
+        const SizedBox(height: 4),
+        if (_loading) const LinearProgressIndicator(minHeight: 2) else const SizedBox(height: 2),
+        Expanded(
+          child: RefreshIndicator(onRefresh: () => _load(refresh: true), child: _body(theme)),
+        ),
+      ],
+    );
   }
 
   Widget _body(ThemeData theme) {
-    Widget message(IconData icon, String text, {Widget? action}) => ListView(children: [
-          const SizedBox(height: 80),
-          Icon(icon, size: 48, color: theme.colorScheme.outline),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(text, textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
-          ),
-          if (action != null) ...[const SizedBox(height: 12), Center(child: action)],
-        ]);
+    Widget message(IconData icon, String text, {Widget? action}) => ListView(
+      children: [
+        const SizedBox(height: 80),
+        Icon(icon, size: 48, color: theme.colorScheme.outline),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Text(text, textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
+        ),
+        if (action != null) ...[const SizedBox(height: 12), Center(child: action)],
+      ],
+    );
 
     if (_error != null) {
-      return message(Icons.wifi_off, _error!,
-          action: FilledButton.tonal(onPressed: () => _load(refresh: true), child: const Text('Try again')));
+      return message(
+        Icons.wifi_off,
+        _error!,
+        action: FilledButton.tonal(onPressed: () => _load(refresh: true), child: const Text('Try again')),
+      );
     }
     final list = _matches;
     if (list == null) return ListView();
     if (list.isEmpty) {
-      return message(Icons.sports_soccer,
-          'No matches for ${_country?.name} on ${DateFormat.MMMEd().format(_day)}. Try another day or country.');
+      return message(
+        Icons.sports_soccer,
+        'No matches for ${_country?.name} on ${DateFormat.MMMEd().format(_day)}. Try another day or country.',
+      );
     }
 
     // Group by league, leagues in the country's order.
@@ -228,29 +273,46 @@ class _MatchesScreenState extends State<MatchesScreen> {
     final slugs = groups.keys.toList()..sort((a, b) => (order[a] ?? 99).compareTo(order[b] ?? 99));
     final live = list.where((m) => m.state == MatchState.live).length;
 
-    return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
-      Text('${list.length} matches${live > 0 ? ' · $live live' : ''}', style: theme.textTheme.bodySmall),
-      for (final slug in slugs) ...[
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
-          child: Row(children: [
-            Text(groups[slug]!.first.league.name.toUpperCase(),
-                style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: theme.colorScheme.primary)),
-            const SizedBox(width: 8),
-            Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
-          ]),
-        ),
-        for (final m in groups[slug]!)
-          Padding(padding: const EdgeInsets.only(bottom: 8), child: _MatchCard(match: m, onTap: () => _openMatch(m))),
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      children: [
+        Text('${list.length} matches${live > 0 ? ' · $live live' : ''}', style: theme.textTheme.bodySmall),
+        for (final slug in slugs) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+            child: Row(
+              children: [
+                Text(
+                  groups[slug]!.first.league.name.toUpperCase(),
+                  style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: theme.colorScheme.primary),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+              ],
+            ),
+          ),
+          for (final m in groups[slug]!)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _MatchCard(
+                match: m,
+                oddsFormat: widget.store.settings.oddsFormat,
+                onTap: () => _openMatch(m),
+                onPick: (sel, odds) => _pick(m, sel, odds),
+              ),
+            ),
+        ],
       ],
-    ]);
+    );
   }
 }
 
 class _MatchCard extends StatelessWidget {
-  const _MatchCard({required this.match, required this.onTap});
+  const _MatchCard({required this.match, required this.oddsFormat, required this.onTap, required this.onPick});
   final Match match;
+  final OddsFormat oddsFormat;
   final VoidCallback onTap;
+  final void Function(String selection, double odds) onPick;
 
   @override
   Widget build(BuildContext context) {
@@ -264,25 +326,36 @@ class _MatchCard extends StatelessWidget {
       MatchState.finished => 'FT',
       MatchState.other => m.detail,
     };
-    final homeWon = m.state == MatchState.finished && (int.tryParse(m.home.score ?? '') ?? 0) > (int.tryParse(m.away.score ?? '') ?? 0);
-    final awayWon = m.state == MatchState.finished && (int.tryParse(m.away.score ?? '') ?? 0) > (int.tryParse(m.home.score ?? '') ?? 0);
+    final homeWon =
+        m.state == MatchState.finished &&
+        (int.tryParse(m.home.score ?? '') ?? 0) > (int.tryParse(m.away.score ?? '') ?? 0);
+    final awayWon =
+        m.state == MatchState.finished &&
+        (int.tryParse(m.away.score ?? '') ?? 0) > (int.tryParse(m.home.score ?? '') ?? 0);
 
-    Widget row(Team t, bool bold) => Row(children: [
-          _Logo(url: t.logo, name: t.name),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(t.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyLarge?.copyWith(fontWeight: bold ? FontWeight.w700 : FontWeight.w500)),
+    Widget row(Team t, bool bold) => Row(
+      children: [
+        _Logo(url: t.logo, name: t.name),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            t.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: bold ? FontWeight.w700 : FontWeight.w500),
           ),
-          if (m.hasScore)
-            Text(t.score ?? '-',
-                style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: live ? cs.error : null,
-                    fontFeatures: const [FontFeature.tabularFigures()])),
-        ]);
+        ),
+        if (m.hasScore)
+          Text(
+            t.score ?? '-',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: live ? cs.error : null,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+      ],
+    );
 
     return Material(
       color: cs.surfaceContainerLow,
@@ -292,29 +365,51 @@ class _MatchCard extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 16, 12),
-          child: Row(children: [
-            SizedBox(
-              width: 56,
-              child: live
-                  ? Column(children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(6)),
-                        child: Text('LIVE', style: TextStyle(color: cs.onError, fontSize: 10, fontWeight: FontWeight.w800)),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(status, style: theme.textTheme.labelSmall?.copyWith(color: cs.error)),
-                    ])
-                  : Text(status,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      style: theme.textTheme.labelLarge?.copyWith(
+          child: Row(
+            children: [
+              SizedBox(
+                width: 56,
+                child: live
+                    ? Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(6)),
+                            child: Text(
+                              'LIVE',
+                              style: TextStyle(color: cs.onError, fontSize: 10, fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(status, style: theme.textTheme.labelSmall?.copyWith(color: cs.error)),
+                        ],
+                      )
+                    : Text(
+                        status,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        style: theme.textTheme.labelLarge?.copyWith(
                           color: m.state == MatchState.scheduled ? cs.onSurface : cs.onSurfaceVariant,
-                          fontWeight: FontWeight.w600)),
-            ),
-            Container(width: 1, height: 44, margin: const EdgeInsets.only(right: 12), color: cs.outlineVariant),
-            Expanded(child: Column(children: [row(m.home, homeWon), const SizedBox(height: 8), row(m.away, awayWon)])),
-          ]),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+              ),
+              Container(width: 1, height: 44, margin: const EdgeInsets.only(right: 12), color: cs.outlineVariant),
+              Expanded(
+                child: Column(
+                  children: [
+                    row(m.home, homeWon),
+                    const SizedBox(height: 8),
+                    row(m.away, awayWon),
+                    if (m.odds != null && m.state != MatchState.finished) ...[
+                      const SizedBox(height: 10),
+                      OddsRow(match: m, format: oddsFormat, onPick: onPick),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -333,8 +428,10 @@ class _Logo extends StatelessWidget {
     final fallback = CircleAvatar(
       radius: size / 2,
       backgroundColor: cs.secondaryContainer,
-      child: Text(name.isEmpty ? '?' : name.characters.first,
-          style: TextStyle(fontSize: size * 0.45, fontWeight: FontWeight.w700, color: cs.onSecondaryContainer)),
+      child: Text(
+        name.isEmpty ? '?' : name.characters.first,
+        style: TextStyle(fontSize: size * 0.45, fontWeight: FontWeight.w700, color: cs.onSecondaryContainer),
+      ),
     );
     if (url == null || url!.isEmpty) return fallback;
     return Image.network(
@@ -348,59 +445,139 @@ class _Logo extends StatelessWidget {
 }
 
 class _MatchSheet extends StatelessWidget {
-  const _MatchSheet({required this.match, required this.onLogBet});
+  const _MatchSheet({required this.match, required this.oddsFormat, required this.onLogBet, required this.onPick});
   final Match match;
+  final OddsFormat oddsFormat;
   final VoidCallback onLogBet;
+  final void Function(String selection, double odds) onPick;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final m = match;
     Widget side(Team t) => Expanded(
-          child: Column(children: [
-            _Logo(url: t.logo, name: t.name, size: 56),
-            const SizedBox(height: 8),
-            Text(t.name, textAlign: TextAlign.center, style: theme.textTheme.titleSmall),
-          ]),
-        );
+      child: Column(
+        children: [
+          _Logo(url: t.logo, name: t.name, size: 56),
+          const SizedBox(height: 8),
+          Text(t.name, textAlign: TextAlign.center, style: theme.textTheme.titleSmall),
+        ],
+      ),
+    );
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(m.league.name, style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
-          const SizedBox(height: 16),
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            side(m.home),
-            Padding(
-              padding: const EdgeInsets.only(top: 14),
-              child: Text(
-                m.hasScore ? '${m.home.score ?? '-'}  –  ${m.away.score ?? '-'}' : 'vs',
-                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(m.league.name, style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                side(m.home),
+                Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: Text(
+                    m.hasScore ? '${m.home.score ?? '-'}  –  ${m.away.score ?? '-'}' : 'vs',
+                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                side(m.away),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              [
+                DateFormat.yMMMEd().add_Hm().format(m.kickoff.toLocal()),
+                if (m.state != MatchState.scheduled) m.detail,
+                if (m.venue != null) m.venue!,
+              ].join(' · '),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall,
+            ),
+            if (m.odds != null) ...[
+              const SizedBox(height: 20),
+              OddsRow(match: m, format: oddsFormat, onPick: onPick, large: true),
+              if (m.odds!.provider.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text('Odds by ${m.odds!.provider} · tap one to log it', style: theme.textTheme.bodySmall),
+              ],
+            ],
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onLogBet,
+                icon: const Icon(Icons.add),
+                label: const Text('Log a bet on this match'),
               ),
             ),
-            side(m.away),
-          ]),
-          const SizedBox(height: 16),
-          Text(
-            [
-              DateFormat.yMMMEd().add_Hm().format(m.kickoff.toLocal()),
-              if (m.state != MatchState.scheduled) m.detail,
-              if (m.venue != null) m.venue!,
-            ].join(' · '),
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onLogBet,
-              icon: const Icon(Icons.add),
-              label: const Text('Log a bet on this match'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 1 / X / 2 price buttons. Missing prices are left out.
+class OddsRow extends StatelessWidget {
+  const OddsRow({super.key, required this.match, required this.format, required this.onPick, this.large = false});
+  final Match match;
+  final OddsFormat format;
+  final void Function(String selection, double odds) onPick;
+  final bool large;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final o = match.odds!;
+    final picks = [
+      if (o.home != null) ('1', '${match.home.name} to win', o.home!),
+      if (o.draw != null) ('X', 'Draw', o.draw!),
+      if (o.away != null) ('2', '${match.away.name} to win', o.away!),
+    ];
+    return Row(
+      children: [
+        for (final (i, p) in picks.indexed) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: Material(
+              color: cs.primaryContainer.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => onPick(p.$2, p.$3),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: large ? 12 : 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(p.$1, style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                      const SizedBox(width: 4),
+                      // Long prices (e.g. fractional 100/30) shrink rather than overflow.
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            formatOdds(p.$3, format),
+                            style: (large ? theme.textTheme.titleSmall : theme.textTheme.labelLarge)?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: cs.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-        ]),
-      ),
+        ],
+      ],
     );
   }
 }
@@ -420,30 +597,36 @@ class _CountryPickerState extends State<_CountryPicker> {
     final list = countries.where((c) => c.name.toLowerCase().contains(_q.toLowerCase())).toList();
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.75,
-      child: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: TextField(
-            decoration: const InputDecoration(hintText: 'Search country', prefixIcon: Icon(Icons.search)),
-            onChanged: (v) => setState(() => _q = v),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TextField(
+              decoration: const InputDecoration(hintText: 'Search country', prefixIcon: Icon(Icons.search)),
+              onChanged: (v) => setState(() => _q = v),
+            ),
           ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: list.length,
-            itemBuilder: (_, i) {
-              final c = list[i];
-              return ListTile(
-                leading: Text(c.flag, style: const TextStyle(fontSize: 26)),
-                title: Text(c.name),
-                subtitle: Text(c.leagues.map((l) => l.name).join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis),
-                trailing: c.code == widget.selected?.code ? const Icon(Icons.check) : null,
-                onTap: () => Navigator.pop(context, c),
-              );
-            },
+          Expanded(
+            child: ListView.builder(
+              itemCount: list.length,
+              itemBuilder: (_, i) {
+                final c = list[i];
+                return ListTile(
+                  leading: Text(c.flag, style: const TextStyle(fontSize: 26)),
+                  title: Text(c.name),
+                  subtitle: Text(
+                    c.leagues.map((l) => l.name).join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: c.code == widget.selected?.code ? const Icon(Icons.check) : null,
+                  onTap: () => Navigator.pop(context, c),
+                );
+              },
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }

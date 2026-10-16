@@ -12,6 +12,7 @@ import 'package:http/testing.dart';
 import 'package:bank_track/data/fixtures.dart';
 
 import 'fixtures_test.dart' show espnEvent, board;
+
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Loads real Roboto and Material Icons so screenshots are readable.
@@ -48,19 +49,49 @@ Future<BankStore> seededStore() async {
     ('2026-10-16', 'Soccer', 'Man City vs Arsenal', 'Arsenal +0.5', 25, 1.95, BetStatus.pending, null),
   ];
   for (final r in rows) {
-    await db.saveBet(Bet(
-        date: r.$1, sport: r.$2, event: r.$3, selection: r.$4, stake: r.$5, odds: r.$6, status: r.$7,
-        cashout: r.$8, created: '${r.$1}T12:00:00'));
+    await db.saveBet(
+      Bet(
+        date: r.$1,
+        sport: r.$2,
+        event: r.$3,
+        selection: r.$4,
+        stake: r.$5,
+        odds: r.$6,
+        status: r.$7,
+        cashout: r.$8,
+        created: '${r.$1}T12:00:00',
+      ),
+    );
   }
-  await db.saveBet(Bet(
-    type: BetType.parlay, selection: '3-leg parlay', sport: 'Mixed', date: '2026-10-12', stake: 10,
-    odds: 1.8 * 1.65 * 2.05, created: '2026-10-12T12:00:00', status: BetStatus.won,
-    legs: const [
-      BetLeg(selection: 'Liverpool ML', event: 'Liverpool vs Everton', sport: 'Soccer', odds: 1.8, status: BetStatus.won),
-      BetLeg(selection: 'Celtics -3.5', event: 'Celtics vs Heat', sport: 'Basketball', odds: 1.65, status: BetStatus.won),
-      BetLeg(selection: 'Over 2.5 goals', event: 'PSG vs Lyon', sport: 'Soccer', odds: 2.05, status: BetStatus.won),
-    ],
-  ));
+  await db.saveBet(
+    Bet(
+      type: BetType.parlay,
+      selection: '3-leg parlay',
+      sport: 'Mixed',
+      date: '2026-10-12',
+      stake: 10,
+      odds: 1.8 * 1.65 * 2.05,
+      created: '2026-10-12T12:00:00',
+      status: BetStatus.won,
+      legs: const [
+        BetLeg(
+          selection: 'Liverpool ML',
+          event: 'Liverpool vs Everton',
+          sport: 'Soccer',
+          odds: 1.8,
+          status: BetStatus.won,
+        ),
+        BetLeg(
+          selection: 'Celtics -3.5',
+          event: 'Celtics vs Heat',
+          sport: 'Basketball',
+          odds: 1.65,
+          status: BetStatus.won,
+        ),
+        BetLeg(selection: 'Over 2.5 goals', event: 'PSG vs Lyon', sport: 'Soccer', odds: 2.05, status: BetStatus.won),
+      ],
+    ),
+  );
   await db.saveTx(const BankTx(kind: TxKind.deposit, amount: 200, date: '2026-08-01', note: 'Top up'));
   await db.setPref('matches.country', 'eng');
   final store = BankStore(db);
@@ -82,7 +113,13 @@ void main() {
     }
 
     final store = (await tester.runAsync(seededStore))!;
-    await tester.pumpWidget(BankTrackApp(store: store, fixtures: FixturesApi(client: _fixturesClient()), today: DateTime(2026, 10, 18)));
+    await tester.pumpWidget(
+      BankTrackApp(
+        store: store,
+        fixtures: FixturesApi(client: _fixturesClient()),
+        today: DateTime(2026, 10, 18),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // Summary is the main page and holds no bet list.
@@ -115,7 +152,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Log a bet'), findsOneWidget);
     await tester.enterText(find.widgetWithText(TextFormField, 'Selection, e.g. Arsenal to win'), 'Arsenal to win');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Event (optional), e.g. Arsenal vs Chelsea'), 'Arsenal vs Chelsea');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Event (optional), e.g. Arsenal vs Chelsea'),
+      'Arsenal vs Chelsea',
+    );
     await tester.enterText(find.widgetWithText(TextFormField, '2.50'), '2.10');
     await tester.pumpAndSettle();
     expect(find.text('\$42.00'), findsOneWidget);
@@ -164,6 +204,15 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
+    // Tapping a price pre-fills the pick and the odds.
+    await tester.tap(find.text('2.10'));
+    await tester.pumpAndSettle();
+    expect(find.text('AFC Bournemouth vs Sunderland'), findsOneWidget);
+    expect(find.text('AFC Bournemouth to win'), findsOneWidget);
+    expect(find.text('2.10'), findsWidgets);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
     // Charts.
     await tester.tap(find.text('Charts'));
     await tester.pumpAndSettle();
@@ -173,22 +222,34 @@ void main() {
 }
 
 http.Client _fixturesClient() => MockClient((req) async {
-      if (req.url.queryParameters['dates'] != '20261018') return http.Response(board([]), 200);
-      return switch (req.url.pathSegments[req.url.pathSegments.length - 2]) {
-        'eng.1' => http.Response(
-            board([
-              espnEvent('1', '2026-10-18T11:30:00Z', 'Leeds United', 'Everton', state: 'post', completed: true, detail: 'FT', hs: '0', as: '3'),
-              espnEvent('2', '2026-10-18T14:00:00Z', 'Arsenal', 'Chelsea', state: 'in', detail: "67'", hs: '2', as: '1'),
-              espnEvent('3', '2026-10-18T16:30:00Z', 'AFC Bournemouth', 'Sunderland'),
-              espnEvent('4', '2026-10-18T19:00:00Z', 'Manchester City', 'Liverpool'),
-            ]),
-            200),
-        'eng.2' => http.Response(
-            board([
-              espnEvent('5', '2026-10-18T14:00:00Z', 'Coventry City', 'Middlesbrough'),
-              espnEvent('6', '2026-10-18T14:00:00Z', 'Norwich City', 'Watford'),
-            ]),
-            200),
-        _ => http.Response(board([]), 200),
-      };
-    });
+  if (req.url.queryParameters['dates'] != '20261018') return http.Response(board([]), 200);
+  return switch (req.url.pathSegments[req.url.pathSegments.length - 2]) {
+    'eng.1' => http.Response(
+      board([
+        espnEvent(
+          '1',
+          '2026-10-18T11:30:00Z',
+          'Leeds United',
+          'Everton',
+          state: 'post',
+          completed: true,
+          detail: 'FT',
+          hs: '0',
+          as: '3',
+        ),
+        espnEvent('2', '2026-10-18T14:00:00Z', 'Arsenal', 'Chelsea', state: 'in', detail: "67'", hs: '2', as: '1'),
+        espnEvent('3', '2026-10-18T16:30:00Z', 'AFC Bournemouth', 'Sunderland', odds: [2.1, 3.4, 3.6]),
+        espnEvent('4', '2026-10-18T19:00:00Z', 'Manchester City', 'Liverpool'),
+      ]),
+      200,
+    ),
+    'eng.2' => http.Response(
+      board([
+        espnEvent('5', '2026-10-18T14:00:00Z', 'Coventry City', 'Middlesbrough'),
+        espnEvent('6', '2026-10-18T14:00:00Z', 'Norwich City', 'Watford'),
+      ]),
+      200,
+    ),
+    _ => http.Response(board([]), 200),
+  };
+});

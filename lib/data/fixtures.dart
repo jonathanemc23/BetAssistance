@@ -31,35 +31,94 @@ const countries = <Country>[
     League('fifa.world', 'World Cup'),
     League('fifa.friendly', 'International friendlies'),
   ]),
-  Country('arg', 'Argentina', '🇦🇷', [League('arg.1', 'Liga Profesional'), League('arg.copa', 'Copa Argentina')]),
+  Country('arg', 'Argentina', '🇦🇷', [
+    League('arg.1', 'Liga Profesional'),
+    League('arg.2', 'Primera Nacional'),
+    League('arg.copa', 'Copa Argentina'),
+  ]),
   Country('aus', 'Australia', '🇦🇺', [League('aus.1', 'A-League')]),
+  Country('aut', 'Austria', '🇦🇹', [League('aut.1', 'Bundesliga')]),
   Country('bel', 'Belgium', '🇧🇪', [League('bel.1', 'Pro League')]),
-  Country('bra', 'Brazil', '🇧🇷', [League('bra.1', 'Série A'), League('bra.2', 'Série B'), League('bra.copa_do_brazil', 'Copa do Brasil')]),
-  Country('chi', 'Chile', '🇨🇱', [League('chi.1', 'Primera División')]),
-  Country('col', 'Colombia', '🇨🇴', [League('col.1', 'Primera A'), League('col.2', 'Primera B')]),
-  Country('ecu', 'Ecuador', '🇪🇨', [League('ecu.1', 'LigaPro')]),
+  Country('bol', 'Bolivia', '🇧🇴', [League('bol.1', 'División Profesional')]),
+  Country('bra', 'Brazil', '🇧🇷', [
+    League('bra.1', 'Série A'),
+    League('bra.2', 'Série B'),
+    League('bra.3', 'Série C'),
+    League('bra.copa_do_brazil', 'Copa do Brasil'),
+  ]),
+  Country('chi', 'Chile', '🇨🇱', [League('chi.1', 'Primera División'), League('chi.copa_chi', 'Copa Chile')]),
+  Country('chn', 'China', '🇨🇳', [League('chn.1', 'Super League')]),
+  // ESPN's Primera B feed (col.2) has had no fixtures since 2025; it stays
+  // listed so matches show up again if ESPN resumes it.
+  Country('col', 'Colombia', '🇨🇴', [
+    League('col.1', 'Primera A'),
+    League('col.2', 'Primera B'),
+    League('col.copa', 'Copa Colombia'),
+  ]),
+  Country('crc', 'Costa Rica', '🇨🇷', [League('crc.1', 'Primera División')]),
+  Country('den', 'Denmark', '🇩🇰', [League('den.1', 'Superliga')]),
+  Country('ecu', 'Ecuador', '🇪🇨', [League('ecu.1', 'LigaPro'), League('ecu.2', 'Serie B')]),
   Country('eng', 'England', '🏴󠁧󠁢󠁥󠁮󠁧󠁿', [
     League('eng.1', 'Premier League'),
     League('eng.2', 'Championship'),
     League('eng.3', 'League One'),
+    League('eng.4', 'League Two'),
+    League('eng.5', 'National League'),
     League('eng.fa', 'FA Cup'),
     League('eng.league_cup', 'EFL Cup'),
+    League('eng.w.1', "Women's Super League"),
   ]),
-  Country('fra', 'France', '🇫🇷', [League('fra.1', 'Ligue 1'), League('fra.2', 'Ligue 2'), League('fra.coupe_de_france', 'Coupe de France')]),
-  Country('ger', 'Germany', '🇩🇪', [League('ger.1', 'Bundesliga'), League('ger.2', '2. Bundesliga'), League('ger.dfb_pokal', 'DFB-Pokal')]),
-  Country('ita', 'Italy', '🇮🇹', [League('ita.1', 'Serie A'), League('ita.2', 'Serie B'), League('ita.coppa_italia', 'Coppa Italia')]),
+  Country('fra', 'France', '🇫🇷', [
+    League('fra.1', 'Ligue 1'),
+    League('fra.2', 'Ligue 2'),
+    League('fra.coupe_de_france', 'Coupe de France'),
+  ]),
+  Country('ger', 'Germany', '🇩🇪', [
+    League('ger.1', 'Bundesliga'),
+    League('ger.2', '2. Bundesliga'),
+    League('ger.3', '3. Liga'),
+    League('ger.dfb_pokal', 'DFB-Pokal'),
+  ]),
+  Country('gre', 'Greece', '🇬🇷', [League('gre.1', 'Super League')]),
+  Country('gua', 'Guatemala', '🇬🇹', [League('gua.1', 'Liga Nacional')]),
+  Country('hon', 'Honduras', '🇭🇳', [League('hon.1', 'Liga Nacional')]),
+  Country('ita', 'Italy', '🇮🇹', [
+    League('ita.1', 'Serie A'),
+    League('ita.2', 'Serie B'),
+    League('ita.coppa_italia', 'Coppa Italia'),
+  ]),
   Country('jpn', 'Japan', '🇯🇵', [League('jpn.1', 'J1 League')]),
   Country('mex', 'Mexico', '🇲🇽', [League('mex.1', 'Liga MX'), League('mex.2', 'Liga de Expansión')]),
-  Country('ned', 'Netherlands', '🇳🇱', [League('ned.1', 'Eredivisie')]),
+  Country('ned', 'Netherlands', '🇳🇱', [
+    League('ned.1', 'Eredivisie'),
+    League('ned.2', 'Eerste Divisie'),
+    League('ned.cup', 'KNVB Cup'),
+  ]),
+  Country('nor', 'Norway', '🇳🇴', [League('nor.1', 'Eliteserien')]),
   Country('par', 'Paraguay', '🇵🇾', [League('par.1', 'Primera División')]),
   Country('per', 'Peru', '🇵🇪', [League('per.1', 'Liga 1')]),
-  Country('por', 'Portugal', '🇵🇹', [League('por.1', 'Primeira Liga')]),
+  Country('por', 'Portugal', '🇵🇹', [
+    League('por.1', 'Primeira Liga'),
+    League('por.taca.portugal', 'Taça de Portugal'),
+  ]),
   Country('ksa', 'Saudi Arabia', '🇸🇦', [League('ksa.1', 'Pro League')]),
-  Country('sco', 'Scotland', '🏴󠁧󠁢󠁳󠁣󠁴󠁿', [League('sco.1', 'Premiership')]),
-  Country('esp', 'Spain', '🇪🇸', [League('esp.1', 'LaLiga'), League('esp.2', 'LaLiga 2'), League('esp.copa_del_rey', 'Copa del Rey')]),
+  Country('sco', 'Scotland', '🏴󠁧󠁢󠁳󠁣󠁴󠁿', [League('sco.1', 'Premiership'), League('sco.2', 'Championship')]),
+  Country('esp', 'Spain', '🇪🇸', [
+    League('esp.1', 'LaLiga'),
+    League('esp.2', 'LaLiga 2'),
+    League('esp.copa_del_rey', 'Copa del Rey'),
+  ]),
+  Country('swe', 'Sweden', '🇸🇪', [League('swe.1', 'Allsvenskan')]),
+  Country('sui', 'Switzerland', '🇨🇭', [League('sui.1', 'Super League')]),
   Country('tur', 'Turkey', '🇹🇷', [League('tur.1', 'Süper Lig')]),
-  Country('usa', 'United States', '🇺🇸', [League('usa.1', 'MLS'), League('usa.nwsl', 'NWSL')]),
+  Country('usa', 'United States', '🇺🇸', [
+    League('usa.1', 'MLS'),
+    League('usa.usl.1', 'USL Championship'),
+    League('usa.open', 'U.S. Open Cup'),
+    League('usa.nwsl', 'NWSL'),
+  ]),
   Country('uru', 'Uruguay', '🇺🇾', [League('uru.1', 'Primera División')]),
+  Country('ven', 'Venezuela', '🇻🇪', [League('ven.1', 'Liga FUTVE')]),
 ];
 
 Country? countryByCode(String? code) {
@@ -72,9 +131,40 @@ Country? countryByCode(String? code) {
 /// Starting country from the phone's region (ISO 3166 alpha-2), else England.
 Country defaultCountry(String? region) {
   const iso = {
-    'AR': 'arg', 'AU': 'aus', 'BE': 'bel', 'BR': 'bra', 'CL': 'chi', 'CO': 'col', 'EC': 'ecu', 'GB': 'eng',
-    'FR': 'fra', 'DE': 'ger', 'IT': 'ita', 'JP': 'jpn', 'MX': 'mex', 'NL': 'ned', 'PY': 'par', 'PE': 'per',
-    'PT': 'por', 'SA': 'ksa', 'ES': 'esp', 'TR': 'tur', 'US': 'usa', 'UY': 'uru',
+    'AR': 'arg',
+    'AU': 'aus',
+    'AT': 'aut',
+    'BE': 'bel',
+    'BO': 'bol',
+    'BR': 'bra',
+    'CL': 'chi',
+    'CN': 'chn',
+    'CO': 'col',
+    'CR': 'crc',
+    'DK': 'den',
+    'EC': 'ecu',
+    'GB': 'eng',
+    'FR': 'fra',
+    'DE': 'ger',
+    'GR': 'gre',
+    'GT': 'gua',
+    'HN': 'hon',
+    'IT': 'ita',
+    'JP': 'jpn',
+    'MX': 'mex',
+    'NL': 'ned',
+    'NO': 'nor',
+    'PY': 'par',
+    'PE': 'per',
+    'PT': 'por',
+    'SA': 'ksa',
+    'ES': 'esp',
+    'SE': 'swe',
+    'CH': 'sui',
+    'TR': 'tur',
+    'US': 'usa',
+    'UY': 'uru',
+    'VE': 'ven',
   };
   return countryByCode(iso[region?.toUpperCase()]) ?? countryByCode('eng')!;
 }
@@ -89,6 +179,17 @@ class Team {
   final String? score;
 }
 
+/// 1X2 prices (decimal) from the bookmaker ESPN shows for the match.
+class MatchOdds {
+  const MatchOdds({required this.home, required this.draw, required this.away, this.provider = ''});
+  final double? home;
+  final double? draw;
+  final double? away;
+  final String provider;
+
+  bool get isEmpty => home == null && draw == null && away == null;
+}
+
 class Match {
   const Match({
     required this.id,
@@ -99,6 +200,7 @@ class Match {
     required this.state,
     required this.detail,
     this.venue,
+    this.odds,
   });
   final String id;
   final League league;
@@ -108,20 +210,22 @@ class Match {
   final MatchState state;
   final String detail; // "FT", "67'", "Postponed"...
   final String? venue;
+  final MatchOdds? odds;
 
   String get title => '${home.name} vs ${away.name}';
   bool get hasScore => state == MatchState.live || state == MatchState.finished;
 
-  /// A pending single bet on this match, for the bet form.
-  Bet toBetTemplate() => Bet(
-        selection: '',
-        event: title,
-        sport: 'Soccer',
-        date: isoDate(kickoff.toLocal()),
-        stake: 0,
-        odds: 0,
-        created: DateTime.now().toIso8601String(),
-      );
+  /// A pending single bet on this match, for the bet form. Pass a pick
+  /// (e.g. from the odds buttons) to pre-fill the selection and price.
+  Bet toBetTemplate({String selection = '', double odds = 0}) => Bet(
+    selection: selection,
+    event: title,
+    sport: 'Soccer',
+    date: isoDate(kickoff.toLocal()),
+    stake: 0,
+    odds: odds,
+    created: DateTime.now().toIso8601String(),
+  );
 }
 
 /// Parses one ESPN scoreboard response. Unknown or malformed events are skipped.
@@ -147,21 +251,52 @@ List<Match> parseScoreboard(String body, League league) {
         'post' => type['completed'] == true ? MatchState.finished : MatchState.other,
         _ => MatchState.other,
       };
-      out.add(Match(
-        id: e['id'].toString(),
-        league: league,
-        kickoff: DateTime.parse(e['date'] as String).toUtc(),
-        home: team(side('home')),
-        away: team(side('away')),
-        state: state,
-        detail: (type['shortDetail'] ?? type['detail'] ?? '') as String,
-        venue: comp['venue']?['fullName'] as String?,
-      ));
+      out.add(
+        Match(
+          id: e['id'].toString(),
+          league: league,
+          kickoff: DateTime.parse(e['date'] as String).toUtc(),
+          home: team(side('home')),
+          away: team(side('away')),
+          state: state,
+          detail: (type['shortDetail'] ?? type['detail'] ?? '') as String,
+          venue: comp['venue']?['fullName'] as String?,
+          odds: _odds(comp['odds']),
+        ),
+      );
     } catch (_) {
       // Skip events we can't read rather than failing the whole day.
     }
   }
   return out;
+}
+
+/// First usable entry of ESPN's `odds` list (often `[null]` or missing).
+/// Reads decimal `value`, falling back to American `moneyLine`.
+MatchOdds? _odds(Object? raw) {
+  if (raw is! List) return null;
+  for (final o in raw) {
+    if (o is! Map<String, dynamic>) continue;
+    double? price(Object? side) {
+      if (side is! Map) return null;
+      final v = side['value'];
+      final d = v is num ? v.toDouble() : double.tryParse('${v ?? ''}');
+      if (d != null && d > 1) return d;
+      final ml = side['moneyLine'];
+      final a = ml is num ? ml.toDouble() : double.tryParse('${ml ?? ''}');
+      if (a == null || a.abs() < 100) return null;
+      return a > 0 ? 1 + a / 100 : 1 + 100 / -a;
+    }
+
+    final odds = MatchOdds(
+      home: price(o['homeTeamOdds']),
+      draw: price(o['drawOdds']),
+      away: price(o['awayTeamOdds']),
+      provider: (o['provider']?['displayName'] ?? o['provider']?['name'] ?? '') as String,
+    );
+    if (!odds.isEmpty) return odds;
+  }
+  return null;
 }
 
 String _ymd(DateTime d) =>
@@ -209,13 +344,14 @@ class FixturesApi {
       throw const FixturesException("Couldn't load matches. Check your connection and try again.");
     }
     final seen = <String>{};
-    final list = [
-      for (final m in results.expand((r) => r))
-        if (seen.add(m.id) && _sameDay(m.kickoff.toLocal(), local)) m,
-    ]..sort((a, b) {
-        final c = a.kickoff.compareTo(b.kickoff);
-        return c != 0 ? c : a.home.name.compareTo(b.home.name);
-      });
+    final list =
+        [
+          for (final m in results.expand((r) => r))
+            if (seen.add(m.id) && _sameDay(m.kickoff.toLocal(), local)) m,
+        ]..sort((a, b) {
+          final c = a.kickoff.compareTo(b.kickoff);
+          return c != 0 ? c : a.home.name.compareTo(b.home.name);
+        });
     _cache[key] = (DateTime.now(), list);
     return list;
   }
