@@ -19,17 +19,8 @@ void main() {
   tearDown(() => dir.deleteSync(recursive: true));
 
   Bet sample() => Bet(
-    selection: 'Arsenal to win',
-    event: 'Arsenal vs Chelsea',
-    sport: 'Soccer',
-    date: '2026-10-01',
-    stake: 20,
-    odds: 2.1,
-    book: 'Book',
-    status: BetStatus.won,
-    notes: 'n',
-    created: '2026-10-01T10:00:00',
-  );
+      selection: 'Arsenal to win', event: 'Arsenal vs Chelsea', sport: 'Soccer', date: '2026-10-01',
+      stake: 20, odds: 2.1, book: 'Book', status: BetStatus.won, notes: 'n', created: '2026-10-01T10:00:00');
 
   test('data written by one app launch is there on the next', () async {
     var db = await AppDatabase.open(factory: factory, path: path);
@@ -102,18 +93,11 @@ void main() {
 
   test('upgrading from the first release (v1) keeps bets and makes them singles', () async {
     // Build a database exactly as release 0.1.0 left it.
-    final old = await factory.openDatabase(
-      path,
-      options: OpenDatabaseOptions(version: 1, onCreate: (db, _) => migrations[0](db)),
-    );
+    final old = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 1, onCreate: (db, _) => migrations[0](db)));
     await old.insert('bets', {
-      'selection': 'Arsenal to win',
-      'sport': 'Soccer',
-      'date': '2026-10-01',
-      'stake': 20,
-      'odds': 2.1,
-      'status': 'won',
-      'created': '2026-10-01T10:00:00',
+      'selection': 'Arsenal to win', 'sport': 'Soccer', 'date': '2026-10-01', 'stake': 20, 'odds': 2.1,
+      'status': 'won', 'created': '2026-10-01T10:00:00',
     });
     await old.insert('transactions', {'kind': 'deposit', 'amount': 50, 'date': '2026-10-02'});
     await old.insert('settings', {'key': 'currency', 'value': 'EUR'});
@@ -134,16 +118,8 @@ void main() {
   test('parlay legs are saved, replaced on edit and removed with the bet', () async {
     final db = await AppDatabase.open(factory: factory, path: path);
     final parlay = Bet(
-      type: BetType.parlay,
-      selection: '2-leg parlay',
-      date: '2026-10-01',
-      stake: 10,
-      odds: 3,
-      created: 'x',
-      legs: const [
-        BetLeg(selection: 'A', odds: 1.5),
-        BetLeg(selection: 'B', odds: 2, sport: 'Tennis'),
-      ],
+      type: BetType.parlay, selection: '2-leg parlay', date: '2026-10-01', stake: 10, odds: 3, created: 'x',
+      legs: const [BetLeg(selection: 'A', odds: 1.5), BetLeg(selection: 'B', odds: 2, sport: 'Tennis')],
     );
     final id = await db.saveBet(parlay);
     var saved = (await db.bets()).single;
@@ -151,22 +127,14 @@ void main() {
     expect(saved.legs.map((l) => l.selection), ['A', 'B']);
     expect(saved.legs.last.sport, 'Tennis');
 
-    await db.saveBet(
-      Bet(
-        id: id,
-        type: BetType.parlay,
-        selection: '3-leg parlay',
-        date: '2026-10-01',
-        stake: 10,
-        odds: 6,
-        created: 'x',
-        legs: const [
-          BetLeg(selection: 'A', odds: 1.5, status: BetStatus.won),
-          BetLeg(selection: 'B', odds: 2),
-          BetLeg(selection: 'C', odds: 2),
-        ],
-      ),
-    );
+    await db.saveBet(Bet(
+      id: id, type: BetType.parlay, selection: '3-leg parlay', date: '2026-10-01', stake: 10, odds: 6, created: 'x',
+      legs: const [
+        BetLeg(selection: 'A', odds: 1.5, status: BetStatus.won),
+        BetLeg(selection: 'B', odds: 2),
+        BetLeg(selection: 'C', odds: 2),
+      ],
+    ));
     saved = (await db.bets()).single;
     expect(saved.legs, hasLength(3));
     expect(saved.legs.first.status, BetStatus.won);
@@ -178,10 +146,8 @@ void main() {
   });
 
   test('an older app refuses a newer database instead of wiping it', () async {
-    final raw = await factory.openDatabase(
-      path,
-      options: OpenDatabaseOptions(version: 1, onCreate: (db, _) => migrations[0](db)),
-    );
+    final raw = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 1, onCreate: (db, _) => migrations[0](db)));
     await raw.insert('settings', {'key': 'currency', 'value': 'GBP'});
     await raw.setVersion(5);
     await raw.close();

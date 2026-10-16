@@ -19,22 +19,10 @@ class Stats {
   final double units;
 
   const Stats({
-    required this.profit,
-    required this.turnover,
-    required this.roi,
-    required this.deposits,
-    required this.withdrawals,
-    required this.exposure,
-    required this.pendingCount,
-    required this.wins,
-    required this.losses,
-    required this.count,
-    required this.settledCount,
-    required this.winRate,
-    required this.avgOdds,
-    required this.balance,
-    required this.available,
-    required this.units,
+    required this.profit, required this.turnover, required this.roi, required this.deposits,
+    required this.withdrawals, required this.exposure, required this.pendingCount, required this.wins,
+    required this.losses, required this.count, required this.settledCount, required this.winRate,
+    required this.avgOdds, required this.balance, required this.available, required this.units,
   });
 
   /// Same rules as the web version: ROI is profit over settled, non-void
@@ -42,7 +30,9 @@ class Stats {
   factory Stats.compute(Settings s, List<Bet> bets, List<BankTx> txs) {
     final settled = bets.where((b) => b.isSettled).toList();
     final profit = settled.fold<double>(0, (a, b) => a + b.profit);
-    final turnover = settled.where((b) => b.status != BetStatus.voided).fold<double>(0, (a, b) => a + b.stake);
+    final turnover = settled
+        .where((b) => b.status != BetStatus.voided)
+        .fold<double>(0, (a, b) => a + b.stake);
     final dep = txs.where((t) => t.kind == TxKind.deposit).fold<double>(0, (a, t) => a + t.amount);
     final wd = txs.where((t) => t.kind == TxKind.withdrawal).fold<double>(0, (a, t) => a + t.amount);
     final pending = bets.where((b) => b.status == BetStatus.pending).toList();
