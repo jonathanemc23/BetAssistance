@@ -550,16 +550,24 @@ class OddsRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
                 onTap: () => onPick(p.$2, p.$3),
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: large ? 12 : 6),
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: large ? 12 : 6),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(p.$1, style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
-                      Text(
-                        formatOdds(p.$3, format),
-                        style: (large ? theme.textTheme.titleSmall : theme.textTheme.labelLarge)?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: cs.onPrimaryContainer,
+                      const SizedBox(width: 4),
+                      // Long prices (e.g. fractional 100/30) shrink rather than overflow.
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            formatOdds(p.$3, format),
+                            style: (large ? theme.textTheme.titleSmall : theme.textTheme.labelLarge)?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: cs.onPrimaryContainer,
+                            ),
+                          ),
                         ),
                       ),
                     ],
