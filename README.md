@@ -56,6 +56,10 @@ screenshots in `test/screenshots/`.
 ## CI
 
 `.github/workflows/android.yml` analyzes, tests and builds the APK on GitHub.
+On `main`, once the signing secrets below exist, it also publishes a GitHub
+release named after `version:` in `pubspec.yaml` with the signed APK attached.
+Without the secrets it builds a debug-signed APK as a CI check only; don't
+install that on a real phone, since later signed releases can't update it.
 To sign CI builds with the release key, add two repository secrets:
 `KEYSTORE_BASE64` (`base64 -w0 android/app/banktrack-release.jks`) and
 `KEY_PROPERTIES` (the contents of `android/key.properties`).
