@@ -59,7 +59,7 @@ void main() {
     migrations.add((db) => db.execute("ALTER TABLE bets ADD COLUMN tag TEXT NOT NULL DEFAULT ''"));
     try {
       final upgraded = await AppDatabase.open(factory: factory, path: path);
-      expect(await upgraded.db.getVersion(), 2);
+      expect(await upgraded.db.getVersion(), schemaVersion);
       final rows = await upgraded.db.query('bets');
       expect(rows.single['selection'], 'Arsenal to win');
       expect(rows.single['tag'], '');
@@ -84,11 +84,65 @@ void main() {
       migrations.removeLast();
     }
     final again = await factory.openDatabase(path);
-    expect(await again.getVersion(), 1);
+    expect(await again.getVersion(), schemaVersion);
     expect(await again.query('bets'), hasLength(1));
     final cols = await again.rawQuery('PRAGMA table_info(bets)');
     expect(cols.any((c) => c['name'] == 'tag'), isFalse);
     await again.close();
+  });
+
+  test('upgrading from the first release (v1) keeps bets and makes them singles', () async {
+    // Build a database exactly as release 0.1.0 left it.
+    final old = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 1, onCreate: (db, _) => migrations[0](db)));
+    await old.insert('bets', {
+      'selection': 'Arsenal to win', 'sport': 'Soccer', 'date': '2026-10-01', 'stake': 20, 'odds': 2.1,
+      'status': 'won', 'created': '2026-10-01T10:00:00',
+    });
+    await old.insert('transactions', {'kind': 'deposit', 'amount': 50, 'date': '2026-10-02'});
+    await old.insert('settings', {'key': 'currency', 'value': 'EUR'});
+    await old.close();
+
+    final db = await AppDatabase.open(factory: factory, path: path);
+    expect(await db.db.getVersion(), schemaVersion);
+    final bets = await db.bets();
+    expect(bets.single.selection, 'Arsenal to win');
+    expect(bets.single.type, BetType.single);
+    expect(bets.single.legs, isEmpty);
+    expect(bets.single.profit, closeTo(22, 1e-9));
+    expect((await db.transactions()).single.amount, 50);
+    expect((await db.settings()).currency, 'EUR');
+    await db.close();
+  });
+
+  test('parlay legs are saved, replaced on edit and removed with the bet', () async {
+    final db = await AppDatabase.open(factory: factory, path: path);
+    final parlay = Bet(
+      type: BetType.parlay, selection: '2-leg parlay', date: '2026-10-01', stake: 10, odds: 3, created: 'x',
+      legs: const [BetLeg(selection: 'A', odds: 1.5), BetLeg(selection: 'B', odds: 2, sport: 'Tennis')],
+    );
+    final id = await db.saveBet(parlay);
+    var saved = (await db.bets()).single;
+    expect(saved.type, BetType.parlay);
+    expect(saved.legs.map((l) => l.selection), ['A', 'B']);
+    expect(saved.legs.last.sport, 'Tennis');
+
+    await db.saveBet(Bet(
+      id: id, type: BetType.parlay, selection: '3-leg parlay', date: '2026-10-01', stake: 10, odds: 6, created: 'x',
+      legs: const [
+        BetLeg(selection: 'A', odds: 1.5, status: BetStatus.won),
+        BetLeg(selection: 'B', odds: 2),
+        BetLeg(selection: 'C', odds: 2),
+      ],
+    ));
+    saved = (await db.bets()).single;
+    expect(saved.legs, hasLength(3));
+    expect(saved.legs.first.status, BetStatus.won);
+
+    await db.deleteBet(id);
+    expect(await db.bets(), isEmpty);
+    expect(await db.db.query('bet_legs'), isEmpty);
+    await db.close();
   });
 
   test('an older app refuses a newer database instead of wiping it', () async {

@@ -5,10 +5,21 @@ target iOS later.
 
 ## What's in it
 
-- **Bets screen**: bankroll card (balance, available after open bets, deposit
-  and withdraw, history), stat tiles (profit/loss and units, ROI, win rate,
-  number of bets, average odds, money at risk), and the bet register with
-  filters, one-tap Won/Lost settling and a form to log or edit a bet.
+- **Summary** (main page): bankroll card (balance, available after open bets,
+  deposit and withdraw, history), stat tiles (profit/loss and units, ROI, win
+  rate, number of bets, average odds, money at risk) and bets per type.
+- **Bets**: the bet register with filters, one-tap Won/Lost settling, and a
+  long-press menu to edit, share or log a bet again.
+- **Log a bet**: sectioned form with bet type (single, parlay, system, other),
+  parlay legs with their own odds and results (combined odds and the parlay's
+  result are worked out from the legs), unit stake shortcuts and a live
+  returns bar.
+- **Share links**: a bet is encoded in the link itself
+  (`https://jonathanemc23.github.io/BetAssistance/b/#<code>`). The page shows
+  the bet and opens it in the app pre-filled; the app also opens
+  `banktrack://bet?d=<code>` links and pasted links (link icon on the Bets tab).
+  The page is published by `.github/workflows/pages.yml` from `web/`; GitHub
+  Pages must be enabled with source "GitHub Actions".
 - **Charts screen**: bankroll over time, profit by month, results breakdown,
   profit and ROI by sport.
 - **Settings**: starting bankroll and date, unit size, currency, decimal or

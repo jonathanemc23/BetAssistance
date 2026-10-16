@@ -138,3 +138,12 @@ String formatOdds(double dec, OddsFormat fmt) {
   }
   return dec.toStringAsFixed(2);
 }
+
+/// Number of bets per type, for the summary.
+Map<BetType, int> countByType(List<Bet> bets) {
+  final m = <BetType, int>{};
+  for (final b in bets) {
+    m[b.type] = (m[b.type] ?? 0) + 1;
+  }
+  return m;
+}

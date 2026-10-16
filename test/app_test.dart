@@ -47,6 +47,15 @@ Future<BankStore> seededStore() async {
         date: r.$1, sport: r.$2, event: r.$3, selection: r.$4, stake: r.$5, odds: r.$6, status: r.$7,
         cashout: r.$8, created: '${r.$1}T12:00:00'));
   }
+  await db.saveBet(Bet(
+    type: BetType.parlay, selection: '3-leg parlay', sport: 'Mixed', date: '2026-10-12', stake: 10,
+    odds: 1.8 * 1.65 * 2.05, created: '2026-10-12T12:00:00', status: BetStatus.won,
+    legs: const [
+      BetLeg(selection: 'Liverpool ML', event: 'Liverpool vs Everton', sport: 'Soccer', odds: 1.8, status: BetStatus.won),
+      BetLeg(selection: 'Celtics -3.5', event: 'Celtics vs Heat', sport: 'Basketball', odds: 1.65, status: BetStatus.won),
+      BetLeg(selection: 'Over 2.5 goals', event: 'PSG vs Lyon', sport: 'Soccer', odds: 2.05, status: BetStatus.won),
+    ],
+  ));
   await db.saveTx(const BankTx(kind: TxKind.deposit, amount: 200, date: '2026-08-01', note: 'Top up'));
   final store = BankStore(db);
   await store.load();
@@ -57,21 +66,31 @@ void main() {
   sqfliteFfiInit();
   final shots = Platform.environment['SCREENSHOTS'] == '1';
 
-  testWidgets('both screens render with data and a bet can be settled', (tester) async {
+  testWidgets('summary, register, form with parlay legs, and charts', (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
     if (shots) await tester.runAsync(loadFonts);
+    Future<void> shot(String name) async {
+      if (shots) await expectLater(find.byType(BankTrackApp), matchesGoldenFile('screenshots/$name.png'));
+    }
 
     final store = (await tester.runAsync(seededStore))!;
     await tester.pumpWidget(BankTrackApp(store: store));
     await tester.pumpAndSettle();
 
+    // Summary is the main page and holds no bet list.
     expect(find.text('BANKROLL'), findsOneWidget);
     expect(find.text('ROI'), findsOneWidget);
-    expect(find.text('WIN RATE'), findsOneWidget);
+    expect(find.text('Barcelona to win'), findsNothing);
+    await shot('summary');
+
+    // Bet register tab.
+    await tester.tap(find.text('Bets'));
+    await tester.pumpAndSettle();
     expect(find.text('Bet register'), findsOneWidget);
-    if (shots) await expectLater(find.byType(BankTrackApp), matchesGoldenFile('screenshots/bets.png'));
+    expect(find.text('3-leg parlay'), findsOneWidget);
+    await shot('bets');
 
     // Settle the newest open bet as won.
     final before = store.stats.wins;
@@ -85,24 +104,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.stats.wins, before + 1);
 
-    await tester.tap(find.text('Charts'));
-    await tester.pumpAndSettle();
-    expect(find.text('Bankroll over time'), findsOneWidget);
-    expect(find.text('Profit by month'), findsOneWidget);
-    if (shots) await expectLater(find.byType(BankTrackApp), matchesGoldenFile('screenshots/charts.png'));
-    await tester.drag(find.byType(ListView).last, const Offset(0, -900));
-    await tester.pumpAndSettle();
-    expect(find.text('Profit by sport'), findsOneWidget);
-    if (shots) await expectLater(find.byType(BankTrackApp), matchesGoldenFile('screenshots/charts_2.png'));
-
-    await tester.tap(find.text('Bets'));
-    await tester.pumpAndSettle();
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -700));
-    await tester.pumpAndSettle();
-    if (shots) await expectLater(find.byType(BankTrackApp), matchesGoldenFile('screenshots/bets_list.png'));
+    // Log-a-bet form, single then parlay.
     await tester.tap(find.text('Log bet'));
     await tester.pumpAndSettle();
     expect(find.text('Log a bet'), findsOneWidget);
-    if (shots) await expectLater(find.byType(BankTrackApp), matchesGoldenFile('screenshots/log_bet.png'));
+    await tester.enterText(find.widgetWithText(TextFormField, 'Selection'), 'Arsenal to win');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Event (optional)'), 'Arsenal vs Chelsea');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Odds (e.g. 2.50)'), '2.10');
+    await tester.pumpAndSettle();
+    expect(find.text('Returns \$42.00'), findsOneWidget);
+    await shot('log_bet');
+
+    await tester.tap(find.text('Parlay'));
+    await tester.pumpAndSettle();
+    expect(find.text('Leg 1'), findsOneWidget);
+    expect(find.text('Leg 2'), findsOneWidget);
+    final legSelections = find.widgetWithText(TextFormField, 'Selection');
+    expect(tester.widget<TextFormField>(legSelections.first).controller!.text, 'Arsenal to win');
+    await tester.enterText(legSelections.at(1), 'Lakers ML');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Odds (e.g. 2.50)').at(1), '1.50');
+    await tester.pumpAndSettle();
+    expect(find.text('Combined 3.15'), findsOneWidget);
+    await shot('log_parlay');
+
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Log bet'));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pumpAndSettle();
+    final saved = store.bets.firstWhere((b) => b.isParlay && b.status == BetStatus.pending);
+    expect(saved.legs.map((l) => l.selection), ['Arsenal to win', 'Lakers ML']);
+    expect(saved.odds, closeTo(3.15, 1e-9));
+
+    // Charts.
+    await tester.tap(find.text('Charts'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bankroll over time'), findsOneWidget);
+    await shot('charts');
   });
 }
