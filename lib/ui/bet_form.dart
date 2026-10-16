@@ -67,7 +67,7 @@ class _BetFormPageState extends State<BetFormPage> {
     _selection = TextEditingController(text: b != null && !b.isParlay ? b.selection : '');
     _event = TextEditingController(text: b != null && !b.isParlay ? b.event : '');
     _stake = TextEditingController(text: stake > 0 ? _num(stake) : '');
-    _odds = TextEditingController(text: b != null && !b.isParlay ? formatOdds(b.odds, _settings.oddsFormat) : '');
+    _odds = TextEditingController(text: b != null && !b.isParlay && b.odds > 1 ? formatOdds(b.odds, _settings.oddsFormat) : '');
     _book = TextEditingController(text: b?.book ?? '');
     _notes = TextEditingController(text: widget.bet?.notes ?? '');
     _cashout = TextEditingController(text: widget.bet?.cashout != null ? _num(widget.bet!.cashout!) : '');
@@ -92,7 +92,7 @@ class _BetFormPageState extends State<BetFormPage> {
 
   void _addLeg([BetLeg? l]) {
     final leg = _Leg(l);
-    if (l != null) leg.odds.text = formatOdds(l.odds, _settings.oddsFormat);
+    if (l != null && l.odds > 1) leg.odds.text = formatOdds(l.odds, _settings.oddsFormat);
     if (l == null) leg.sport = _legs.isNotEmpty ? _legs.last.sport : _sport;
     leg.odds.addListener(_refresh);
     _legs.add(leg);
@@ -217,283 +217,443 @@ class _BetFormPageState extends State<BetFormPage> {
   String? _oddsValidator(String? v) =>
       _parse(v ?? '') != null ? null : (_settings.oddsFormat == OddsFormat.american ? 'Use +150 or -110' : 'Above 1.00');
 
+  void _setDateOffset(int days) =>
+      setState(() => _date = isoDate(DateTime.now().subtract(Duration(days: days))));
+
   @override
   Widget build(BuildContext context) {
     final fmt = Fmt(_settings);
     final theme = Theme.of(context);
     final american = _settings.oddsFormat == OddsFormat.american;
-    final oddsLabel = american ? 'Odds (+150 / -110)' : 'Odds (e.g. 2.50)';
+    final oddsHint = american ? '+150' : '2.50';
     final s = _stakeVal, o = _oddsVal;
+    final ready = s != null && s > 0 && o != null;
     const gap = SizedBox(height: 12);
+    final today = isoDate(DateTime.now());
+    final yesterday = isoDate(DateTime.now().subtract(const Duration(days: 1)));
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_isNew ? (widget.template != null ? 'Log shared bet' : 'Log a bet') : 'Edit bet'),
-        actions: [
-          IconButton(
-            tooltip: 'Share link',
-            icon: const Icon(Icons.share_outlined),
-            onPressed: () {
-              if (_oddsVal == null) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add the odds first')));
-                return;
-              }
-              showShareBet(context, widget.store, _build());
-            },
-          ),
-          if (!_isNew) IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline), onPressed: _delete),
-        ],
-      ),
       body: Form(
         key: _form,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-          children: [
-            _Section(
-              title: 'Bet type',
-              child: SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<BetType>(
-                  segments: [
-                    for (final t in BetType.values) ButtonSegment(value: t, label: Text(t.label)),
-                  ],
-                  selected: {_type},
-                  showSelectedIcon: false,
-                  onSelectionChanged: (v) => _setType(v.first),
-                ),
-              ),
+        child: CustomScrollView(slivers: [
+          SliverToBoxAdapter(
+            child: _SlipHeader(
+              title: _isNew ? (widget.template != null ? 'New bet' : 'Log a bet') : 'Edit bet',
+              type: _type,
+              onType: _setType,
+              returns: ready ? fmt.money(s * o) : '–',
+              chips: [
+                'Odds ${o == null ? '–' : formatOdds(o, _settings.oddsFormat)}',
+                'Stake ${s != null && s > 0 ? fmt.money(s) : '–'}',
+                if (ready) 'Profit ${fmt.money(s * (o - 1))}',
+                if (o != null) '${(100 / o).toStringAsFixed(1)}% implied',
+              ],
+              onShare: () {
+                if (_oddsVal == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add the odds first')));
+                  return;
+                }
+                showShareBet(context, widget.store, _build());
+              },
+              onDelete: _isNew ? null : _delete,
             ),
-            if (!_parlay)
-              _Section(
-                title: 'Selection',
-                child: Column(children: [
-                  TextFormField(
-                    controller: _selection,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      labelText: _type == BetType.system ? 'System (e.g. Trixie, 2/3)' : 'Selection',
-                      hintText: 'e.g. Arsenal to win, Over 2.5 goals',
-                      prefixIcon: const Icon(Icons.sports_score),
-                    ),
-                    validator: (v) => (v ?? '').trim().isEmpty ? 'Add what you bet on' : null,
-                  ),
-                  gap,
-                  TextFormField(
-                    controller: _event,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                        labelText: 'Event (optional)', hintText: 'e.g. Arsenal vs Chelsea', prefixIcon: Icon(Icons.event)),
-                  ),
-                  gap,
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(
-                      child: _SportField(value: _sport, onChanged: (v) => setState(() => _sport = v)),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _odds,
-                        keyboardType: TextInputType.numberWithOptions(decimal: true, signed: american),
-                        decoration: InputDecoration(labelText: oddsLabel),
-                        validator: _oddsValidator,
-                      ),
-                    ),
-                  ]),
-                ]),
-              )
-            else
-              _Section(
-                title: 'Parlay legs',
-                trailing: o == null
-                    ? null
-                    : Text('Combined ${formatOdds(o, _settings.oddsFormat)}',
-                        style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
-                child: Column(children: [
-                  for (var i = 0; i < _legs.length; i++) ...[
-                    _LegCard(
-                      key: ObjectKey(_legs[i]),
-                      index: i,
-                      leg: _legs[i],
-                      oddsLabel: oddsLabel,
-                      american: american,
-                      oddsValidator: _oddsValidator,
-                      showResult: !_isNew || _legs.any((l) => l.status != BetStatus.pending),
-                      onRemove: _legs.length > 2
-                          ? () => setState(() => _legs.removeAt(i).dispose())
-                          : null,
-                      onChanged: _refresh,
-                      onStatus: _legStatusChanged,
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => setState(() => _addLeg()),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add leg'),
-                    ),
-                  ),
-                ]),
-              ),
-            _Section(
-              title: 'Stake',
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            sliver: SliverList.list(children: [
+              if (!_parlay) ...[
+                const _Label('What did you bet on?'),
                 TextFormField(
-                  controller: _stake,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  controller: _selection,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: theme.textTheme.titleMedium,
                   decoration: InputDecoration(
-                    labelText: 'Stake (${_settings.currency})',
-                    prefixIcon: const Icon(Icons.payments_outlined),
+                    hintText: _type == BetType.system ? 'System, e.g. Trixie 2/3' : 'Selection, e.g. Arsenal to win',
                   ),
-                  validator: (_) => (_stakeVal ?? 0) > 0 ? null : 'Enter a stake above zero',
+                  validator: (v) => (v ?? '').trim().isEmpty ? 'Add what you bet on' : null,
                 ),
-                if (_settings.unit > 0) ...[
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    Text('Units', style: theme.textTheme.bodySmall),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(children: [
-                          for (final u in const [0.5, 1, 2, 3, 5])
-                            Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: ActionChip(
-                                visualDensity: VisualDensity.compact,
-                                tooltip: fmt.money(u * _settings.unit),
-                                label: Text('${_num(u.toDouble())}u'),
-                                onPressed: () => _stake.text = _num(u * _settings.unit),
-                              ),
-                            ),
-                        ]),
+                gap,
+                TextFormField(
+                  controller: _event,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(hintText: 'Event (optional), e.g. Arsenal vs Chelsea', prefixIcon: Icon(Icons.stadium_outlined)),
+                ),
+                gap,
+                _SportPicker(value: _sport, onChanged: (v) => setState(() => _sport = v)),
+                const _Label('Odds'),
+                _BigField(
+                  controller: _odds,
+                  hint: oddsHint,
+                  icon: Icons.trending_up,
+                  signed: american,
+                  validator: _oddsValidator,
+                ),
+              ] else ...[
+                _Label('Legs', trailing: o == null ? null : 'Combined ${formatOdds(o, _settings.oddsFormat)}'),
+                for (var i = 0; i < _legs.length; i++)
+                  _LegCard(
+                    key: ObjectKey(_legs[i]),
+                    index: i,
+                    last: i == _legs.length - 1,
+                    leg: _legs[i],
+                    oddsHint: oddsHint,
+                    american: american,
+                    oddsValidator: _oddsValidator,
+                    showResult: !_isNew || _legs.any((l) => l.status != BetStatus.pending),
+                    onRemove: _legs.length > 2 ? () => setState(() => _legs.removeAt(i).dispose()) : null,
+                    onChanged: _refresh,
+                    onStatus: _legStatusChanged,
+                  ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 40),
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => _addLeg()),
+                    icon: const Icon(Icons.add_circle_outline),
+                    label: const Text('Add leg'),
+                  ),
+                ),
+              ],
+              const _Label('Stake'),
+              _BigField(
+                controller: _stake,
+                hint: '0',
+                icon: Icons.payments_outlined,
+                suffix: _settings.currency,
+                validator: (_) => (_stakeVal ?? 0) > 0 ? null : 'Enter a stake above zero',
+              ),
+              if (_settings.unit > 0) ...[
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(children: [
+                    for (final u in const [0.5, 1, 2, 3, 5])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: _Pill(
+                          label: '${_num(u.toDouble())}u',
+                          selected: _stakeVal == u * _settings.unit,
+                          onTap: () => _stake.text = _num(u * _settings.unit),
+                        ),
                       ),
-                    ),
                   ]),
-                ],
-              ]),
-            ),
-            _Section(
-              title: 'Details',
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: _pickDate,
-                    child: InputDecorator(
-                      decoration: const InputDecoration(labelText: 'Date', prefixIcon: Icon(Icons.calendar_today, size: 18)),
-                      child: Text(Fmt.date(_date)),
-                    ),
-                  ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _book,
-                    decoration: const InputDecoration(labelText: 'Bookmaker'),
-                  ),
+              ],
+              const _Label('When and where'),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                _Pill(label: 'Today', selected: _date == today, onTap: () => _setDateOffset(0)),
+                _Pill(label: 'Yesterday', selected: _date == yesterday, onTap: () => _setDateOffset(1)),
+                _Pill(
+                  label: _date == today || _date == yesterday ? 'Other date' : Fmt.date(_date),
+                  icon: Icons.calendar_today,
+                  selected: _date != today && _date != yesterday,
+                  onTap: _pickDate,
                 ),
               ]),
-            ),
-            _Section(
-              title: 'Result',
-              trailing: _parlay ? Text('Set from the legs', style: theme.textTheme.bodySmall) : null,
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Wrap(spacing: 8, runSpacing: 4, children: [
-                  for (final st in BetStatus.values)
-                    ChoiceChip(
-                      label: Text(st.label),
-                      selected: _status == st,
-                      selectedColor: BankColors.forStatus(context, st).withValues(alpha: 0.2),
-                      onSelected: (_) => setState(() => _status = st),
-                    ),
-                ]),
-                if (_status == BetStatus.cashout) ...[
-                  gap,
-                  TextFormField(
-                    controller: _cashout,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Cash-out amount received'),
-                    validator: (v) => (double.tryParse((v ?? '').replaceAll(',', '.')) ?? -1) >= 0
-                        ? null
-                        : 'Enter the amount you received',
+              gap,
+              TextFormField(
+                controller: _book,
+                decoration: const InputDecoration(hintText: 'Bookmaker (optional)', prefixIcon: Icon(Icons.storefront_outlined)),
+              ),
+              _Label('Result', trailing: _parlay ? 'Set from the legs' : null),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                for (final st in BetStatus.values)
+                  _Pill(
+                    label: st.label,
+                    color: BankColors.forStatus(context, st),
+                    selected: _status == st,
+                    onTap: () => setState(() => _status = st),
                   ),
-                ],
               ]),
-            ),
-            _Section(
-              title: 'Notes',
-              child: TextFormField(
+              if (_status == BetStatus.cashout) ...[
+                gap,
+                TextFormField(
+                  controller: _cashout,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(hintText: 'Cash-out amount received'),
+                  validator: (v) =>
+                      (double.tryParse((v ?? '').replaceAll(',', '.')) ?? -1) >= 0 ? null : 'Enter the amount you received',
+                ),
+              ],
+              const _Label('Notes'),
+              TextFormField(
                 controller: _notes,
                 minLines: 2,
                 maxLines: 5,
                 decoration: const InputDecoration(hintText: 'Why you took it, tipster, anything to remember'),
               ),
-            ),
-          ],
-        ),
+            ]),
+          ),
+        ]),
       ),
-      bottomNavigationBar: _SlipBar(
-        fmt: fmt,
-        stake: s,
-        odds: o,
-        oddsText: o == null ? '–' : formatOdds(o, _settings.oddsFormat),
-        saveLabel: _isNew ? 'Log bet' : 'Save',
-        onSave: _save,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+          child: _GradientButton(
+            label: _isNew ? 'Log bet' : 'Save changes',
+            sub: ready ? 'Returns ${fmt.money(s * o)}' : null,
+            onTap: _save,
+          ),
+        ),
       ),
     );
   }
 }
 
-class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.child, this.trailing});
+const _sportEmoji = {
+  'Soccer': '⚽', 'Basketball': '🏀', 'American Football': '🏈', 'Tennis': '🎾', 'Baseball': '⚾',
+  'Ice Hockey': '🏒', 'MMA': '🥋', 'Boxing': '🥊', 'Cricket': '🏏', 'Golf': '⛳', 'Esports': '🎮', 'Other': '🎯',
+};
+
+/// Gradient header: title, bet type switch and the live slip numbers.
+class _SlipHeader extends StatelessWidget {
+  const _SlipHeader({
+    required this.title,
+    required this.type,
+    required this.onType,
+    required this.returns,
+    required this.chips,
+    required this.onShare,
+    required this.onDelete,
+  });
   final String title;
-  final Widget child;
-  final Widget? trailing;
+  final BetType type;
+  final ValueChanged<BetType> onType;
+  final String returns;
+  final List<String> chips;
+  final VoidCallback onShare;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.only(top: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Text(title.toUpperCase(),
-                style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: theme.colorScheme.primary)),
-            const Spacer(),
-            ?trailing,
+    final dark = theme.brightness == Brightness.dark;
+    const fg = Colors.white;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: dark
+              ? const [Color(0xFF0E3B26), Color(0xFF1B5E3F)]
+              : const [Color(0xFF1D6B45), Color(0xFF2E9461)],
+        ),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 20),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const BackButton(color: fg),
+              Expanded(
+                child: Text(title,
+                    style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w700)),
+              ),
+              IconButton(tooltip: 'Share link', color: fg, icon: const Icon(Icons.ios_share), onPressed: onShare),
+              if (onDelete != null)
+                IconButton(tooltip: 'Delete', color: fg, icon: const Icon(Icons.delete_outline), onPressed: onDelete),
+            ]),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(99)),
+                child: Row(children: [
+                  for (final t in BetType.values)
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => onType(t),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(vertical: 9),
+                          decoration: BoxDecoration(
+                            color: t == type ? Colors.white : Colors.transparent,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Text(t.label,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: t == type ? const Color(0xFF1D6B45) : fg,
+                              )),
+                        ),
+                      ),
+                    ),
+                ]),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('POTENTIAL RETURN',
+                    style: theme.textTheme.labelSmall?.copyWith(color: fg.withValues(alpha: 0.75), letterSpacing: 1.4)),
+                const SizedBox(height: 2),
+                Text(returns,
+                    style: theme.textTheme.displaySmall?.copyWith(
+                        color: fg, fontWeight: FontWeight.w800, fontFeatures: const [FontFeature.tabularFigures()])),
+                const SizedBox(height: 10),
+                Wrap(spacing: 6, runSpacing: 6, children: [
+                  for (final c in chips)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(99)),
+                      child: Text(c, style: const TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
+                ]),
+              ]),
+            ),
           ]),
-          const SizedBox(height: 12),
-          child,
+        ),
+      ),
+    );
+  }
+}
+
+class _Label extends StatelessWidget {
+  const _Label(this.text, {this.trailing});
+  final String text;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 22, 2, 10),
+      child: Row(children: [
+        Text(text, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+        const Spacer(),
+        if (trailing != null)
+          Text(trailing!, style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
+      ]),
+    );
+  }
+}
+
+/// Large numeric field for odds and stake.
+class _BigField extends StatelessWidget {
+  const _BigField({
+    required this.controller,
+    required this.hint,
+    required this.icon,
+    required this.validator,
+    this.suffix,
+    this.signed = false,
+  });
+  final TextEditingController controller;
+  final String hint;
+  final IconData icon;
+  final String? suffix;
+  final bool signed;
+  final FormFieldValidator<String> validator;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return TextFormField(
+      controller: controller,
+      keyboardType: TextInputType.numberWithOptions(decimal: true, signed: signed),
+      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: Icon(icon),
+        suffixText: suffix,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      ),
+      validator: validator,
+    );
+  }
+}
+
+/// Rounded selectable pill used for units, dates and results.
+class _Pill extends StatelessWidget {
+  const _Pill({required this.label, required this.selected, required this.onTap, this.color, this.icon});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final Color? color;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final c = color ?? cs.primary;
+    return InkWell(
+      borderRadius: BorderRadius.circular(99),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? c : cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          if (icon != null) ...[
+            Icon(icon, size: 15, color: selected ? Colors.white : cs.onSurfaceVariant),
+            const SizedBox(width: 6),
+          ],
+          Text(label,
+              style: TextStyle(fontWeight: FontWeight.w600, color: selected ? Colors.white : cs.onSurfaceVariant)),
         ]),
       ),
     );
   }
 }
 
-class _SportField extends StatelessWidget {
-  const _SportField({required this.value, required this.onChanged});
+class _SportPicker extends StatelessWidget {
+  const _SportPicker({required this.value, required this.onChanged});
   final String value;
   final ValueChanged<String> onChanged;
 
   @override
-  Widget build(BuildContext context) => DropdownButtonFormField<String>(
-        initialValue: sports.contains(value) ? value : 'Other',
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Sport'),
-        items: [for (final sp in sports) DropdownMenuItem(value: sp, child: Text(sp, overflow: TextOverflow.ellipsis))],
-        onChanged: (v) => onChanged(v ?? value),
-      );
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 76,
+      child: ListView(scrollDirection: Axis.horizontal, children: [
+        for (final sp in sports)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => onChanged(sp),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 76,
+                decoration: BoxDecoration(
+                  color: sp == value ? cs.primaryContainer : cs.surfaceContainerHighest,
+                  border: Border.all(color: sp == value ? cs.primary : Colors.transparent, width: 1.5),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Text(_sportEmoji[sp] ?? '🎯', style: const TextStyle(fontSize: 24)),
+                  const SizedBox(height: 4),
+                  Text(sp == 'American Football' ? 'NFL' : sp,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: sp == value ? cs.onPrimaryContainer : cs.onSurfaceVariant)),
+                ]),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
 }
 
 class _LegCard extends StatelessWidget {
   const _LegCard({
     super.key,
     required this.index,
+    required this.last,
     required this.leg,
-    required this.oddsLabel,
+    required this.oddsHint,
     required this.american,
     required this.oddsValidator,
     required this.showResult,
@@ -502,8 +662,9 @@ class _LegCard extends StatelessWidget {
     required this.onStatus,
   });
   final int index;
+  final bool last;
   final _Leg leg;
-  final String oddsLabel;
+  final String oddsHint;
   final bool american;
   final FormFieldValidator<String> oddsValidator;
   final bool showResult;
@@ -515,131 +676,146 @@ class _LegCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    const gap = SizedBox(height: 10);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 12),
-      decoration: BoxDecoration(
-        border: Border.all(color: cs.outlineVariant),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          CircleAvatar(
-            radius: 12,
-            backgroundColor: cs.primaryContainer,
-            child: Text('${index + 1}', style: TextStyle(fontSize: 12, color: cs.onPrimaryContainer, fontWeight: FontWeight.w700)),
-          ),
-          const SizedBox(width: 8),
-          Text('Leg ${index + 1}', style: theme.textTheme.titleSmall),
-          const Spacer(),
-          if (onRemove != null)
-            IconButton(
-              tooltip: 'Remove leg',
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.close),
-              onPressed: onRemove,
-            )
-          else
-            const SizedBox(height: 40),
-        ]),
-        TextFormField(
-          controller: leg.selection,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(labelText: 'Selection', isDense: true),
-          validator: (v) => (v ?? '').trim().isEmpty ? 'Add the selection' : null,
-        ),
-        gap,
-        TextFormField(
-          controller: leg.event,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(labelText: 'Event (optional)', isDense: true),
-        ),
-        gap,
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-            child: _SportField(
-              value: leg.sport,
-              onChanged: (v) {
-                leg.sport = v;
-                onChanged();
-              },
+    return IntrinsicHeight(
+      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        // Timeline: numbered dot with a line to the next leg.
+        SizedBox(
+          width: 32,
+          child: Column(children: [
+            Container(
+              width: 28,
+              height: 28,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle),
+              child: Text('${index + 1}', style: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w800)),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextFormField(
-              controller: leg.odds,
-              keyboardType: TextInputType.numberWithOptions(decimal: true, signed: american),
-              decoration: InputDecoration(labelText: oddsLabel, isDense: true),
-              validator: oddsValidator,
-            ),
-          ),
-        ]),
-        if (showResult) ...[
-          gap,
-          Wrap(spacing: 6, children: [
-            for (final st in const [BetStatus.pending, BetStatus.won, BetStatus.lost, BetStatus.voided])
-              ChoiceChip(
-                label: Text(st.label),
-                visualDensity: VisualDensity.compact,
-                selected: leg.status == st,
-                selectedColor: BankColors.forStatus(context, st).withValues(alpha: 0.2),
-                onSelected: (_) {
-                  leg.status = st;
-                  onStatus();
-                },
-              ),
+            if (!last) Expanded(child: Container(width: 2, color: cs.primary.withValues(alpha: 0.3))),
           ]),
-        ],
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.fromLTRB(12, 4, 4, 12),
+            decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(18)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Text(_sportEmoji[leg.sport] ?? '🎯', style: const TextStyle(fontSize: 16)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: sports.contains(leg.sport) ? leg.sport : 'Other',
+                      isDense: true,
+                      style: theme.textTheme.labelLarge,
+                      items: [for (final sp in sports) DropdownMenuItem(value: sp, child: Text(sp))],
+                      onChanged: (v) {
+                        leg.sport = v ?? leg.sport;
+                        onChanged();
+                      },
+                    ),
+                  ),
+                ),
+                if (onRemove != null)
+                  IconButton(
+                    tooltip: 'Remove leg',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: onRemove,
+                  )
+                else
+                  const SizedBox(height: 40),
+              ]),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  flex: 3,
+                  child: TextFormField(
+                    controller: leg.selection,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(hintText: 'Selection', isDense: true),
+                    validator: (v) => (v ?? '').trim().isEmpty ? 'Add the selection' : null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 92,
+                  child: TextFormField(
+                    controller: leg.odds,
+                    keyboardType: TextInputType.numberWithOptions(decimal: true, signed: american),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    decoration: InputDecoration(hintText: oddsHint, isDense: true),
+                    validator: oddsValidator,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ]),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: TextFormField(
+                  controller: leg.event,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(hintText: 'Event (optional)', isDense: true),
+                ),
+              ),
+              if (showResult) ...[
+                const SizedBox(height: 10),
+                Wrap(spacing: 6, runSpacing: 6, children: [
+                  for (final st in const [BetStatus.pending, BetStatus.won, BetStatus.lost, BetStatus.voided])
+                    _Pill(
+                      label: st.label,
+                      color: BankColors.forStatus(context, st),
+                      selected: leg.status == st,
+                      onTap: () {
+                        leg.status = st;
+                        onStatus();
+                      },
+                    ),
+                ]),
+              ],
+            ]),
+          ),
+        ),
       ]),
     );
   }
 }
 
-/// Sticky bottom bar: what the slip pays, and the save button.
-class _SlipBar extends StatelessWidget {
-  const _SlipBar({
-    required this.fmt,
-    required this.stake,
-    required this.odds,
-    required this.oddsText,
-    required this.saveLabel,
-    required this.onSave,
-  });
-  final Fmt fmt;
-  final double? stake, odds;
-  final String oddsText, saveLabel;
-  final VoidCallback onSave;
+class _GradientButton extends StatelessWidget {
+  const _GradientButton({required this.label, required this.onTap, this.sub});
+  final String label;
+  final String? sub;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final ok = stake != null && stake! > 0 && odds != null;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainer,
-        border: Border(top: BorderSide(color: theme.colorScheme.outlineVariant)),
+        gradient: const LinearGradient(colors: [Color(0xFF1D6B45), Color(0xFF2E9461)]),
+        borderRadius: BorderRadius.circular(18),
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-          child: Row(children: [
-            Expanded(
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(ok ? 'Returns ${fmt.money(stake! * odds!)}' : 'Returns –',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                Text(
-                  ok
-                      ? 'Profit ${fmt.money(stake! * (odds! - 1))} · odds $oddsText · ${(100 / odds!).toStringAsFixed(1)}% implied'
-                      : 'Add stake and odds',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ]),
-            ),
-            const SizedBox(width: 12),
-            FilledButton(onPressed: onSave, child: Text(saveLabel)),
-          ]),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            child: Row(children: [
+              Text(label, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(sub ?? '',
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.arrow_forward, color: Colors.white),
+            ]),
+          ),
         ),
       ),
     );

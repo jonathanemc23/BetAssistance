@@ -1,0 +1,449 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import '../data/fixtures.dart';
+import '../data/store.dart';
+import 'bet_form.dart';
+
+/// Matches tab: football fixtures for a country on a chosen day.
+class MatchesScreen extends StatefulWidget {
+  const MatchesScreen({super.key, required this.store, required this.api, this.today});
+  final BankStore store;
+  final FixturesApi api;
+
+  /// Overrides "today" in tests.
+  final DateTime? today;
+
+  @override
+  State<MatchesScreen> createState() => _MatchesScreenState();
+}
+
+class _MatchesScreenState extends State<MatchesScreen> {
+  static const _span = 7; // days shown either side of today in the strip
+  late DateTime _today;
+  late DateTime _day;
+  Country? _country;
+  List<Match>? _matches;
+  String? _error;
+  bool _loading = false;
+  int _request = 0;
+  final _strip = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    final now = widget.today ?? DateTime.now();
+    _today = DateTime(now.year, now.month, now.day);
+    _day = _today;
+    _init();
+  }
+
+  Future<void> _init() async {
+    final saved = countryByCode(await widget.store.pref('matches.country'));
+    if (!mounted) return;
+    final region = WidgetsBinding.instance.platformDispatcher.locale.countryCode;
+    setState(() => _country = saved ?? defaultCountry(region));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToDay());
+    await _load();
+  }
+
+  @override
+  void dispose() {
+    _strip.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load({bool refresh = false}) async {
+    final country = _country;
+    if (country == null) return;
+    final req = ++_request;
+    setState(() {
+      _loading = true;
+      _error = null;
+      if (!refresh) _matches = null;
+    });
+    try {
+      final list = await widget.api.matches(country, _day, refresh: refresh);
+      if (mounted && req == _request) setState(() => _matches = list);
+    } catch (e) {
+      if (mounted && req == _request) setState(() => _error = e.toString());
+    } finally {
+      if (mounted && req == _request) setState(() => _loading = false);
+    }
+  }
+
+  void _setDay(DateTime d) {
+    setState(() => _day = DateTime(d.year, d.month, d.day));
+    _scrollToDay();
+    _load();
+  }
+
+  void _scrollToDay() {
+    if (!_strip.hasClients) return;
+    final i = _day.difference(_today).inDays + _span;
+    if (i < 0 || i > _span * 2) return;
+    _strip.animateTo((i * 60.0 - 120).clamp(0, _strip.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+  }
+
+  Future<void> _pickCountry() async {
+    final c = await showModalBottomSheet<Country>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _CountryPicker(selected: _country),
+    );
+    if (c == null || !mounted) return;
+    setState(() => _country = c);
+    widget.store.setPref('matches.country', c.code);
+    _load();
+  }
+
+  Future<void> _pickDate() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _day,
+      firstDate: DateTime(2015),
+      lastDate: _today.add(const Duration(days: 365)),
+    );
+    if (d != null) _setDay(d);
+  }
+
+  void _openMatch(Match m) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => _MatchSheet(
+        match: m,
+        onLogBet: () {
+          Navigator.pop(c);
+          openBetForm(context, widget.store, template: m.toBetTemplate());
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+        child: Row(children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ActionChip(
+                avatar: Text(_country?.flag ?? '🌍', style: const TextStyle(fontSize: 18)),
+                label: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(_country?.name ?? 'Country', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const Icon(Icons.expand_more, size: 18),
+                ]),
+                onPressed: _pickCountry,
+              ),
+            ),
+          ),
+          IconButton(tooltip: 'Pick a date', icon: const Icon(Icons.calendar_month_outlined), onPressed: _pickDate),
+          IconButton(
+              tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: _loading ? null : () => _load(refresh: true)),
+        ]),
+      ),
+      SizedBox(
+        height: 64,
+        child: ListView.builder(
+          controller: _strip,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          itemCount: _span * 2 + 1,
+          itemBuilder: (_, i) {
+            final d = _today.add(Duration(days: i - _span));
+            final sel = d == _day;
+            final isToday = d == _today;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => _setDay(d),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 52,
+                  decoration: BoxDecoration(
+                    color: sel ? cs.primary : cs.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Text(isToday ? 'Today' : DateFormat.E().format(d),
+                        style: theme.textTheme.labelSmall?.copyWith(color: sel ? cs.onPrimary : cs.onSurfaceVariant)),
+                    Text('${d.day}',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700, color: sel ? cs.onPrimary : cs.onSurface)),
+                  ]),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+      if (_day.difference(_today).inDays.abs() > _span)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(DateFormat.yMMMMEEEEd().format(_day), style: theme.textTheme.labelLarge),
+        ),
+      const SizedBox(height: 4),
+      if (_loading) const LinearProgressIndicator(minHeight: 2) else const SizedBox(height: 2),
+      Expanded(child: RefreshIndicator(onRefresh: () => _load(refresh: true), child: _body(theme))),
+    ]);
+  }
+
+  Widget _body(ThemeData theme) {
+    Widget message(IconData icon, String text, {Widget? action}) => ListView(children: [
+          const SizedBox(height: 80),
+          Icon(icon, size: 48, color: theme.colorScheme.outline),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(text, textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
+          ),
+          if (action != null) ...[const SizedBox(height: 12), Center(child: action)],
+        ]);
+
+    if (_error != null) {
+      return message(Icons.wifi_off, _error!,
+          action: FilledButton.tonal(onPressed: () => _load(refresh: true), child: const Text('Try again')));
+    }
+    final list = _matches;
+    if (list == null) return ListView();
+    if (list.isEmpty) {
+      return message(Icons.sports_soccer,
+          'No matches for ${_country?.name} on ${DateFormat.MMMEd().format(_day)}. Try another day or country.');
+    }
+
+    // Group by league, leagues in the country's order.
+    final order = {for (final (i, l) in (_country?.leagues ?? const <League>[]).indexed) l.slug: i};
+    final groups = <String, List<Match>>{};
+    for (final m in list) {
+      groups.putIfAbsent(m.league.slug, () => []).add(m);
+    }
+    final slugs = groups.keys.toList()..sort((a, b) => (order[a] ?? 99).compareTo(order[b] ?? 99));
+    final live = list.where((m) => m.state == MatchState.live).length;
+
+    return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
+      Text('${list.length} matches${live > 0 ? ' · $live live' : ''}', style: theme.textTheme.bodySmall),
+      for (final slug in slugs) ...[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+          child: Row(children: [
+            Text(groups[slug]!.first.league.name.toUpperCase(),
+                style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: theme.colorScheme.primary)),
+            const SizedBox(width: 8),
+            Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+          ]),
+        ),
+        for (final m in groups[slug]!)
+          Padding(padding: const EdgeInsets.only(bottom: 8), child: _MatchCard(match: m, onTap: () => _openMatch(m))),
+      ],
+    ]);
+  }
+}
+
+class _MatchCard extends StatelessWidget {
+  const _MatchCard({required this.match, required this.onTap});
+  final Match match;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final m = match;
+    final live = m.state == MatchState.live;
+    final status = switch (m.state) {
+      MatchState.scheduled => DateFormat.Hm().format(m.kickoff.toLocal()),
+      MatchState.live => m.detail,
+      MatchState.finished => 'FT',
+      MatchState.other => m.detail,
+    };
+    final homeWon = m.state == MatchState.finished && (int.tryParse(m.home.score ?? '') ?? 0) > (int.tryParse(m.away.score ?? '') ?? 0);
+    final awayWon = m.state == MatchState.finished && (int.tryParse(m.away.score ?? '') ?? 0) > (int.tryParse(m.home.score ?? '') ?? 0);
+
+    Widget row(Team t, bool bold) => Row(children: [
+          _Logo(url: t.logo, name: t.name),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(t.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyLarge?.copyWith(fontWeight: bold ? FontWeight.w700 : FontWeight.w500)),
+          ),
+          if (m.hasScore)
+            Text(t.score ?? '-',
+                style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: live ? cs.error : null,
+                    fontFeatures: const [FontFeature.tabularFigures()])),
+        ]);
+
+    return Material(
+      color: cs.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 16, 12),
+          child: Row(children: [
+            SizedBox(
+              width: 56,
+              child: live
+                  ? Column(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(6)),
+                        child: Text('LIVE', style: TextStyle(color: cs.onError, fontSize: 10, fontWeight: FontWeight.w800)),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(status, style: theme.textTheme.labelSmall?.copyWith(color: cs.error)),
+                    ])
+                  : Text(status,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                          color: m.state == MatchState.scheduled ? cs.onSurface : cs.onSurfaceVariant,
+                          fontWeight: FontWeight.w600)),
+            ),
+            Container(width: 1, height: 44, margin: const EdgeInsets.only(right: 12), color: cs.outlineVariant),
+            Expanded(child: Column(children: [row(m.home, homeWon), const SizedBox(height: 8), row(m.away, awayWon)])),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _Logo extends StatelessWidget {
+  const _Logo({required this.url, required this.name, this.size = 24});
+  final String? url;
+  final String name;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final fallback = CircleAvatar(
+      radius: size / 2,
+      backgroundColor: cs.secondaryContainer,
+      child: Text(name.isEmpty ? '?' : name.characters.first,
+          style: TextStyle(fontSize: size * 0.45, fontWeight: FontWeight.w700, color: cs.onSecondaryContainer)),
+    );
+    if (url == null || url!.isEmpty) return fallback;
+    return Image.network(
+      url!,
+      width: size,
+      height: size,
+      errorBuilder: (_, _, _) => fallback,
+      loadingBuilder: (_, child, p) => p == null ? child : SizedBox(width: size, height: size),
+    );
+  }
+}
+
+class _MatchSheet extends StatelessWidget {
+  const _MatchSheet({required this.match, required this.onLogBet});
+  final Match match;
+  final VoidCallback onLogBet;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final m = match;
+    Widget side(Team t) => Expanded(
+          child: Column(children: [
+            _Logo(url: t.logo, name: t.name, size: 56),
+            const SizedBox(height: 8),
+            Text(t.name, textAlign: TextAlign.center, style: theme.textTheme.titleSmall),
+          ]),
+        );
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(m.league.name, style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
+          const SizedBox(height: 16),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            side(m.home),
+            Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: Text(
+                m.hasScore ? '${m.home.score ?? '-'}  –  ${m.away.score ?? '-'}' : 'vs',
+                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+            side(m.away),
+          ]),
+          const SizedBox(height: 16),
+          Text(
+            [
+              DateFormat.yMMMEd().add_Hm().format(m.kickoff.toLocal()),
+              if (m.state != MatchState.scheduled) m.detail,
+              if (m.venue != null) m.venue!,
+            ].join(' · '),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onLogBet,
+              icon: const Icon(Icons.add),
+              label: const Text('Log a bet on this match'),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _CountryPicker extends StatefulWidget {
+  const _CountryPicker({required this.selected});
+  final Country? selected;
+  @override
+  State<_CountryPicker> createState() => _CountryPickerState();
+}
+
+class _CountryPickerState extends State<_CountryPicker> {
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final list = countries.where((c) => c.name.toLowerCase().contains(_q.toLowerCase())).toList();
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.75,
+      child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: TextField(
+            decoration: const InputDecoration(hintText: 'Search country', prefixIcon: Icon(Icons.search)),
+            onChanged: (v) => setState(() => _q = v),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: list.length,
+            itemBuilder: (_, i) {
+              final c = list[i];
+              return ListTile(
+                leading: Text(c.flag, style: const TextStyle(fontSize: 26)),
+                title: Text(c.name),
+                subtitle: Text(c.leagues.map((l) => l.name).join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis),
+                trailing: c.code == widget.selected?.code ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(context, c),
+              );
+            },
+          ),
+        ),
+      ]),
+    );
+  }
+}

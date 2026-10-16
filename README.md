@@ -14,6 +14,9 @@ target iOS later.
   parlay legs with their own odds and results (combined odds and the parlay's
   result are worked out from the legs), unit stake shortcuts and a live
   returns bar.
+- **Matches**: football fixtures for a country on any day, from ESPN's free
+  public scoreboard feed (no key). Country list and league slugs are in
+  `lib/data/fixtures.dart`; tap a match to log a bet on it.
 - **Share links**: a bet is encoded in the link itself
   (`https://jonathanemc23.github.io/BetAssistance/b/#<code>`). The page shows
   the bet and opens it in the app pre-filled; the app also opens

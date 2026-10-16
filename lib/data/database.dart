@@ -141,6 +141,15 @@ class AppDatabase {
 
   Future<void> deleteTx(int id) => db.delete('transactions', where: 'id = ?', whereArgs: [id]);
 
+  // Small app preferences (e.g. the Matches tab country), stored next to settings.
+  Future<String?> pref(String key) async {
+    final rows = await db.query('settings', where: 'key = ?', whereArgs: ['pref.$key']);
+    return rows.isEmpty ? null : rows.first['value'] as String;
+  }
+
+  Future<void> setPref(String key, String value) => db.insert('settings', {'key': 'pref.$key', 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace);
+
   // Settings
   Future<Settings> settings() async {
     final rows = await db.query('settings');
