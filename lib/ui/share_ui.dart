@@ -18,52 +18,59 @@ Future<void> showShareBet(BuildContext context, BankStore store, Bet bet) {
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text('Share this bet', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 4),
-            Text('Anyone with Bank Track who opens the link gets the same bet ready to log. '
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Share this bet', style: theme.textTheme.titleLarge),
+              const SizedBox(height: 4),
+              Text(
+                'Anyone with Bank Track who opens the link gets the same bet ready to log. '
                 'Your result and notes are not included.',
-                style: theme.textTheme.bodySmall),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
+                style: theme.textTheme.bodySmall,
               ),
-              child: Text(link, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
-            ),
-            const SizedBox(height: 16),
-            Row(children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.copy),
-                  label: const Text('Copy link'),
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: link));
-                    if (c.mounted) {
-                      Navigator.pop(c);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied')));
-                    }
-                  },
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
                 ),
+                child: Text(link, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.share),
-                  label: const Text('Share'),
-                  onPressed: () {
-                    Navigator.pop(c);
-                    SharePlus.instance.share(ShareParams(
-                      text: BetLink.shareText(bet, store.settings),
-                      subject: 'Bet from Bank Track',
-                    ));
-                  },
-                ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.copy),
+                      label: const Text('Copy link'),
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: link));
+                        if (c.mounted) {
+                          Navigator.pop(c);
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied')));
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.share),
+                      label: const Text('Share'),
+                      onPressed: () {
+                        Navigator.pop(c);
+                        SharePlus.instance.share(
+                          ShareParams(text: BetLink.shareText(bet, store.settings), subject: 'Bet from Bank Track'),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ]),
-          ]),
+            ],
+          ),
         ),
       );
     },
@@ -76,8 +83,7 @@ Future<Bet?> showPasteLink(BuildContext context) async {
   if (!context.mounted) return null;
   final ctrl = TextEditingController(text: clip?.text ?? '');
   String? error;
-  Bet? decode() => BetLink.decode(ctrl.text,
-      today: isoDate(DateTime.now()), created: DateTime.now().toIso8601String());
+  Bet? decode() => BetLink.decode(ctrl.text, today: isoDate(DateTime.now()), created: DateTime.now().toIso8601String());
   final bet = await showDialog<Bet>(
     context: context,
     builder: (c) => StatefulBuilder(
@@ -117,8 +123,5 @@ String betSubtitle(Bet b) {
   return b.event;
 }
 
-String betMeta(Bet b, Fmt fmt) => [
-      Fmt.date(b.date),
-      if (!b.isParlay) b.sport,
-      if (b.book.isNotEmpty) b.book,
-    ].join(' · ');
+String betMeta(Bet b, Fmt fmt) =>
+    [Fmt.date(b.date), if (!b.isParlay) b.sport, if (b.book.isNotEmpty) b.book].join(' · ');

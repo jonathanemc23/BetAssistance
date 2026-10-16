@@ -103,31 +103,32 @@ class AppDatabase {
     for (final r in await db.query('bet_legs', orderBy: 'bet_id, position')) {
       legs.putIfAbsent(r['bet_id'] as int, () => []).add(BetLeg.fromRow(r));
     }
-    return (await db.query('bets', orderBy: 'date DESC, created DESC'))
-        .map((r) => Bet.fromRow(r, legs[r['id']] ?? const []))
-        .toList();
+    return (await db.query(
+      'bets',
+      orderBy: 'date DESC, created DESC',
+    )).map((r) => Bet.fromRow(r, legs[r['id']] ?? const [])).toList();
   }
 
   /// Saves the bet and replaces its legs in one transaction.
   Future<int> saveBet(Bet b) => db.transaction((txn) async {
-        final int id;
-        if (b.id == null) {
-          id = await txn.insert('bets', b.toRow());
-        } else {
-          id = b.id!;
-          await txn.update('bets', b.toRow(), where: 'id = ?', whereArgs: [id]);
-          await txn.delete('bet_legs', where: 'bet_id = ?', whereArgs: [id]);
-        }
-        for (var i = 0; i < b.legs.length; i++) {
-          await txn.insert('bet_legs', b.legs[i].toRow(id, i));
-        }
-        return id;
-      });
+    final int id;
+    if (b.id == null) {
+      id = await txn.insert('bets', b.toRow());
+    } else {
+      id = b.id!;
+      await txn.update('bets', b.toRow(), where: 'id = ?', whereArgs: [id]);
+      await txn.delete('bet_legs', where: 'bet_id = ?', whereArgs: [id]);
+    }
+    for (var i = 0; i < b.legs.length; i++) {
+      await txn.insert('bet_legs', b.legs[i].toRow(id, i));
+    }
+    return id;
+  });
 
   Future<void> deleteBet(int id) => db.transaction((txn) async {
-        await txn.delete('bet_legs', where: 'bet_id = ?', whereArgs: [id]);
-        await txn.delete('bets', where: 'id = ?', whereArgs: [id]);
-      });
+    await txn.delete('bet_legs', where: 'bet_id = ?', whereArgs: [id]);
+    await txn.delete('bets', where: 'id = ?', whereArgs: [id]);
+  });
 
   // Deposits and withdrawals
   Future<List<BankTx>> transactions() async =>
@@ -147,8 +148,8 @@ class AppDatabase {
     return rows.isEmpty ? null : rows.first['value'] as String;
   }
 
-  Future<void> setPref(String key, String value) => db.insert('settings', {'key': 'pref.$key', 'value': value},
-      conflictAlgorithm: ConflictAlgorithm.replace);
+  Future<void> setPref(String key, String value) =>
+      db.insert('settings', {'key': 'pref.$key', 'value': value}, conflictAlgorithm: ConflictAlgorithm.replace);
 
   // Settings
   Future<Settings> settings() async {
@@ -157,9 +158,8 @@ class AppDatabase {
   }
 
   Future<void> saveSettings(Settings s) => db.transaction((txn) async {
-        for (final e in s.toMap().entries) {
-          await txn.insert('settings', {'key': e.key, 'value': e.value},
-              conflictAlgorithm: ConflictAlgorithm.replace);
-        }
-      });
+    for (final e in s.toMap().entries) {
+      await txn.insert('settings', {'key': e.key, 'value': e.value}, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  });
 }

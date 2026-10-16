@@ -7,11 +7,14 @@ import 'stats.dart';
 /// with Bank Track can open it and get the same bet pre-filled.
 ///
 /// Formats accepted when opening:
-///   https://jonathanemc23.github.io/BetAssistance/b/#<code>  (web landing page)
+///   https://raw.githack.com/jonathanemc23/BetAssistance/main/web/b/index.html#<code>
+///   https://jonathanemc23.github.io/BetAssistance/b/#<code>  (older links, GitHub Pages)
 ///   banktrack://bet?d=<code>                                (opens the app directly)
 ///   <code>                                                  (pasted on its own)
 class BetLink {
-  static const webBase = 'https://jonathanemc23.github.io/BetAssistance/b/';
+  /// The landing page (web/b/index.html) served straight from the repo's main
+  /// branch, so it works without GitHub Pages being switched on.
+  static const webBase = 'https://raw.githack.com/jonathanemc23/BetAssistance/main/web/b/index.html';
   static const scheme = 'banktrack';
 
   /// Compact JSON, base64url without padding. Results, ids and notes are
@@ -46,7 +49,8 @@ class BetLink {
     final lines = <String>[
       if (b.isParlay) ...[
         '${b.legs.length}-leg parlay @ $odds',
-        for (final l in b.legs) '• ${l.selection}${l.event.isEmpty ? '' : ' (${l.event})'} @ ${formatOdds(l.odds, s.oddsFormat)}',
+        for (final l in b.legs)
+          '• ${l.selection}${l.event.isEmpty ? '' : ' (${l.event})'} @ ${formatOdds(l.odds, s.oddsFormat)}',
       ] else
         '${b.selection}${b.event.isEmpty ? '' : ' (${b.event})'} @ $odds',
       '',
@@ -66,12 +70,7 @@ class BetLink {
       final type = BetTypeX.parse(m['t'] as String?);
       final legs = [
         for (final l in (m['l'] as List? ?? const []).cast<Map<String, dynamic>>())
-          BetLeg(
-            selection: _str(l['s']),
-            event: _str(l['e']),
-            sport: _sport(l['p']),
-            odds: (l['o'] as num).toDouble(),
-          ),
+          BetLeg(selection: _str(l['s']), event: _str(l['e']), sport: _sport(l['p']), odds: (l['o'] as num).toDouble()),
       ];
       final odds = type == BetType.parlay && legs.isNotEmpty ? parlayOdds(legs) : (m['o'] as num).toDouble();
       if (odds <= 1) return null;
@@ -98,9 +97,9 @@ class BetLink {
     if (uri != null && (uri.scheme == 'https' || uri.scheme == 'http')) {
       return uri.fragment.isNotEmpty ? uri.fragment : uri.queryParameters['d'];
     }
-    // A link inside a longer message: take the part after '#'.
-    final i = s.indexOf('/b/#');
-    if (i >= 0) return s.substring(i + 4).split(RegExp(r'\s')).first;
+    // A link inside a longer message, e.g. the whole shared text pasted.
+    final link = RegExp(r'(https?|banktrack)://\S+').firstMatch(s);
+    if (link != null && link.group(0) != s) return _extractCode(link.group(0)!);
     return RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(s) ? s : null;
   }
 

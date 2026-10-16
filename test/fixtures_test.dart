@@ -6,25 +6,52 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 /// Minimal ESPN scoreboard event, same shape as the live feed.
-Map<String, Object?> espnEvent(String id, String date, String home, String away,
-        {String state = 'pre', bool completed = false, String detail = 'Scheduled', String hs = '0', String as = '0'}) =>
+Map<String, Object?> espnEvent(
+  String id,
+  String date,
+  String home,
+  String away, {
+  String state = 'pre',
+  bool completed = false,
+  String detail = 'Scheduled',
+  String hs = '0',
+  String as = '0',
+  List<double>? odds,
+}) => {
+  'id': id,
+  'date': date,
+  'name': '$away at $home',
+  'status': {
+    'type': {'state': state, 'completed': completed, 'shortDetail': detail, 'detail': detail},
+  },
+  'competitions': [
     {
-      'id': id,
-      'date': date,
-      'name': '$away at $home',
-      'status': {
-        'type': {'state': state, 'completed': completed, 'shortDetail': detail, 'detail': detail}
-      },
-      'competitions': [
+      'venue': {'fullName': '$home Stadium'},
+      'odds': odds == null
+          ? [null]
+          : [
+              {
+                'provider': {'id': '2000', 'name': 'Bet 365', 'displayName': 'Bet 365'},
+                'homeTeamOdds': {'summary': '', 'value': odds[0]},
+                'drawOdds': {'summary': '', 'value': odds[1]},
+                'awayTeamOdds': {'summary': '', 'value': odds[2]},
+              },
+            ],
+      'competitors': [
         {
-          'venue': {'fullName': '$home Stadium'},
-          'competitors': [
-            {'homeAway': 'home', 'score': hs, 'team': {'displayName': home, 'shortDisplayName': home, 'logo': 'https://x/$id-h.png'}},
-            {'homeAway': 'away', 'score': as, 'team': {'displayName': away, 'shortDisplayName': away, 'logo': 'https://x/$id-a.png'}},
-          ],
-        }
+          'homeAway': 'home',
+          'score': hs,
+          'team': {'displayName': home, 'shortDisplayName': home, 'logo': 'https://x/$id-h.png'},
+        },
+        {
+          'homeAway': 'away',
+          'score': as,
+          'team': {'displayName': away, 'shortDisplayName': away, 'logo': 'https://x/$id-a.png'},
+        },
       ],
-    };
+    },
+  ],
+};
 
 String board(List<Map<String, Object?>> events) => jsonEncode({'leagues': [], 'events': events});
 
@@ -33,13 +60,24 @@ void main() {
 
   test('parses teams, scores, state and venue', () {
     final list = parseScoreboard(
-        board([
-          espnEvent('1', '2026-10-18T13:00Z', 'AFC Bournemouth', 'Sunderland'),
-          espnEvent('2', '2026-10-18T15:30Z', 'Arsenal', 'Chelsea', state: 'in', detail: "67'", hs: '2', as: '1'),
-          espnEvent('3', '2026-10-18T11:00Z', 'Leeds', 'Everton', state: 'post', completed: true, detail: 'FT', hs: '0', as: '3'),
-          {'id': 'broken'},
-        ]),
-        pl);
+      board([
+        espnEvent('1', '2026-10-18T13:00Z', 'AFC Bournemouth', 'Sunderland'),
+        espnEvent('2', '2026-10-18T15:30Z', 'Arsenal', 'Chelsea', state: 'in', detail: "67'", hs: '2', as: '1'),
+        espnEvent(
+          '3',
+          '2026-10-18T11:00Z',
+          'Leeds',
+          'Everton',
+          state: 'post',
+          completed: true,
+          detail: 'FT',
+          hs: '0',
+          as: '3',
+        ),
+        {'id': 'broken'},
+      ]),
+      pl,
+    );
     expect(list, hasLength(3));
     expect(list[0].home.name, 'AFC Bournemouth');
     expect(list[0].away.name, 'Sunderland');
@@ -53,6 +91,42 @@ void main() {
     final bet = list[2].toBetTemplate();
     expect(bet.event, 'Leeds vs Everton');
     expect(bet.sport, 'Soccer');
+    expect(list[0].odds, isNull); // ESPN sends [null] when it has no prices
+  });
+
+  test('reads 1X2 odds, decimal or American moneyline', () {
+    final list = parseScoreboard(
+      board([
+        espnEvent('1', '2026-10-17T19:00Z', 'Everton', 'Chelsea', odds: [3.1, 3.5, 2.15]),
+        {
+          ...espnEvent('2', '2026-10-17T23:00Z', 'Austin FC', 'LA Galaxy'),
+          'competitions': [
+            {
+              ...(espnEvent('2', '2026-10-17T23:00Z', 'Austin FC', 'LA Galaxy')['competitions'] as List).first
+                  as Map<String, Object?>,
+              'odds': [
+                {
+                  'provider': {'name': 'DraftKings'},
+                  'homeTeamOdds': {'moneyLine': 150},
+                  'awayTeamOdds': {'moneyLine': -200},
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+      pl,
+    );
+    final o = list[0].odds!;
+    expect([o.home, o.draw, o.away], [3.1, 3.5, 2.15]);
+    expect(o.provider, 'Bet 365');
+    final us = list[1].odds!;
+    expect(us.home, closeTo(2.5, 1e-9));
+    expect(us.draw, isNull);
+    expect(us.away, closeTo(1.5, 1e-9));
+    final bet = list[0].toBetTemplate(selection: 'Everton to win', odds: o.home!);
+    expect(bet.selection, 'Everton to win');
+    expect(bet.odds, 3.1);
   });
 
   test('fetches every league for the day either side, keeps the local day, dedupes and sorts', () async {
@@ -61,20 +135,22 @@ void main() {
       urls.add(req.url.toString());
       if (req.url.path.contains('eng.1') && req.url.queryParameters['dates'] == '20261018') {
         return http.Response(
-            board([
-              espnEvent('a', '2026-10-18T16:00Z', 'Arsenal', 'Chelsea'),
-              espnEvent('b', '2026-10-18T12:00Z', 'Leeds', 'Everton'),
-            ]),
-            200);
+          board([
+            espnEvent('a', '2026-10-18T16:00Z', 'Arsenal', 'Chelsea'),
+            espnEvent('b', '2026-10-18T12:00Z', 'Leeds', 'Everton'),
+          ]),
+          200,
+        );
       }
       if (req.url.path.contains('eng.1') && req.url.queryParameters['dates'] == '20261019') {
         // Same match listed again, plus one on the next day.
         return http.Response(
-            board([
-              espnEvent('a', '2026-10-18T16:00Z', 'Arsenal', 'Chelsea'),
-              espnEvent('c', '2026-10-20T19:00Z', 'Spurs', 'Fulham'),
-            ]),
-            200);
+          board([
+            espnEvent('a', '2026-10-18T16:00Z', 'Arsenal', 'Chelsea'),
+            espnEvent('c', '2026-10-20T19:00Z', 'Spurs', 'Fulham'),
+          ]),
+          200,
+        );
       }
       if (req.url.path.contains('eng.fa')) return http.Response('not found', 404);
       return http.Response(board([]), 200);

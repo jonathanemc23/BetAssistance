@@ -36,27 +36,27 @@ class BankTrackApp extends StatelessWidget {
   final Stream<Uri>? links;
 
   ThemeData _theme(Brightness b) => ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: BankColors.accent, brightness: b),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: BankColors.accent, width: 1.5),
-          ),
-        ),
-        cardTheme: const CardThemeData(elevation: 0),
-      );
+    colorScheme: ColorScheme.fromSeed(seedColor: BankColors.accent, brightness: b),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: BankColors.accent, width: 1.5),
+      ),
+    ),
+    cardTheme: const CardThemeData(elevation: 0),
+  );
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Bank Track',
-        debugShowCheckedModeBanner: false,
-        theme: _theme(Brightness.light),
-        darkTheme: _theme(Brightness.dark),
-        home: HomeShell(store: store, links: links, fixtures: fixtures ?? FixturesApi(), today: today),
-      );
+    title: 'Bank Track',
+    debugShowCheckedModeBanner: false,
+    theme: _theme(Brightness.light),
+    darkTheme: _theme(Brightness.dark),
+    home: HomeShell(store: store, links: links, fixtures: fixtures ?? FixturesApi(), today: today),
+  );
 }
 
 class HomeShell extends StatefulWidget {
@@ -89,7 +89,11 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   void _openLink(Uri uri) {
-    final bet = BetLink.decode(uri.toString(), today: isoDate(DateTime.now()), created: DateTime.now().toIso8601String());
+    final bet = BetLink.decode(
+      uri.toString(),
+      today: isoDate(DateTime.now()),
+      created: DateTime.now().toIso8601String(),
+    );
     if (!mounted) return;
     if (bet == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't read that bet link")));
@@ -109,8 +113,12 @@ class _HomeShellState extends State<HomeShell> {
       listenable: store,
       builder: (context, _) => Scaffold(
         appBar: AppBar(
-          title: Text(switch (_tab) { 1 => 'Bet register', 2 => 'Matches', 3 => 'Charts', _ => 'Bank Track' },
-              style: const TextStyle(fontWeight: FontWeight.w700)),
+          title: Text(switch (_tab) {
+            1 => 'Bet register',
+            2 => 'Matches',
+            3 => 'Charts',
+            _ => 'Bank Track',
+          }, style: const TextStyle(fontWeight: FontWeight.w700)),
           actions: [
             if (_tab == 1)
               IconButton(tooltip: 'Open a bet link', icon: const Icon(Icons.add_link), onPressed: _pasteLink),
@@ -119,7 +127,9 @@ class _HomeShellState extends State<HomeShell> {
               icon: const Icon(Icons.tune),
               onPressed: () async {
                 final msg = await Navigator.push<String>(
-                    context, MaterialPageRoute(builder: (_) => SettingsPage(store: store)));
+                  context,
+                  MaterialPageRoute(builder: (_) => SettingsPage(store: store)),
+                );
                 if (msg != null && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
                 }
@@ -127,16 +137,22 @@ class _HomeShellState extends State<HomeShell> {
             ),
           ],
         ),
-        body: IndexedStack(index: _tab, children: [
-          SummaryScreen(
-            store: store,
-            onLogBet: () => openBetForm(context, store),
-            onOpenBets: () => setState(() => _visited.add(_tab = 1)),
-          ),
-          BetsScreen(store: store),
-          if (_visited.contains(2)) MatchesScreen(store: store, api: widget.fixtures, today: widget.today) else const SizedBox(),
-          ChartsScreen(store: store),
-        ]),
+        body: IndexedStack(
+          index: _tab,
+          children: [
+            SummaryScreen(
+              store: store,
+              onLogBet: () => openBetForm(context, store),
+              onOpenBets: () => setState(() => _visited.add(_tab = 1)),
+            ),
+            BetsScreen(store: store),
+            if (_visited.contains(2))
+              MatchesScreen(store: store, api: widget.fixtures, today: widget.today)
+            else
+              const SizedBox(),
+            ChartsScreen(store: store),
+          ],
+        ),
         floatingActionButton: _tab == 1
             ? FloatingActionButton.extended(
                 onPressed: () => openBetForm(context, store),
@@ -148,10 +164,26 @@ class _HomeShellState extends State<HomeShell> {
           selectedIndex: _tab,
           onDestinationSelected: (i) => setState(() => _visited.add(_tab = i)),
           destinations: const [
-            NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Summary'),
-            NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Bets'),
-            NavigationDestination(icon: Icon(Icons.sports_soccer_outlined), selectedIcon: Icon(Icons.sports_soccer), label: 'Matches'),
-            NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Charts'),
+            NavigationDestination(
+              icon: Icon(Icons.dashboard_outlined),
+              selectedIcon: Icon(Icons.dashboard),
+              label: 'Summary',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.receipt_long_outlined),
+              selectedIcon: Icon(Icons.receipt_long),
+              label: 'Bets',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.sports_soccer_outlined),
+              selectedIcon: Icon(Icons.sports_soccer),
+              label: 'Matches',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.insights_outlined),
+              selectedIcon: Icon(Icons.insights),
+              label: 'Charts',
+            ),
           ],
         ),
       ),
