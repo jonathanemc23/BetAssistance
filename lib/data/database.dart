@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'board.dart';
 import 'models.dart';
+import 'parlay.dart';
 
 /// Schema migrations, applied in order. Entry N upgrades the schema from
 /// version N to N+1, so a phone on any older release is walked forward one
@@ -95,6 +96,37 @@ final List<Future<void> Function(DatabaseExecutor db)> migrations = [
         created TEXT NOT NULL
       )''');
     await db.execute('CREATE INDEX idx_board_notes_board ON board_notes(board_id)');
+  },
+  // 3 -> 4: Parlay builder. Legs keep the match they came from, if any.
+  (db) async {
+    await db.execute('''
+      CREATE TABLE parlays (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        stake REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending',
+        check_json TEXT,
+        created TEXT NOT NULL,
+        updated TEXT NOT NULL
+      )''');
+    await db.execute('''
+      CREATE TABLE parlay_legs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        parlay_id INTEGER NOT NULL,
+        position INTEGER NOT NULL,
+        selection TEXT NOT NULL,
+        event TEXT NOT NULL DEFAULT '',
+        sport TEXT NOT NULL DEFAULT 'Other',
+        odds REAL NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        match_id TEXT,
+        league_slug TEXT,
+        league_name TEXT,
+        home TEXT,
+        away TEXT,
+        kickoff TEXT
+      )''');
+    await db.execute('CREATE INDEX idx_parlay_legs_parlay ON parlay_legs(parlay_id)');
   },
 ];
 
@@ -245,4 +277,31 @@ class AppDatabase {
       db.update('board_notes', {'pinned': pinned ? 1 : 0}, where: 'id = ?', whereArgs: [id]);
 
   Future<void> deleteNote(int id) => db.delete('board_notes', where: 'id = ?', whereArgs: [id]);
+
+  // Parlay builder
+  Future<List<Parlay>> parlays() async {
+    final rows = await db.query('parlays', orderBy: 'updated DESC, id DESC');
+    final legs = <int, List<ParlayLeg>>{};
+    for (final r in await db.query('parlay_legs', orderBy: 'parlay_id, position')) {
+      legs.putIfAbsent(r['parlay_id'] as int, () => []).add(ParlayLeg.fromRow(r));
+    }
+    return [for (final r in rows) Parlay.fromRow(r, legs[r['id']] ?? const [])];
+  }
+
+  /// Inserts or updates a parlay and replaces its legs. Returns its id.
+  Future<int> saveParlay(Parlay p) => db.transaction((txn) async {
+        final row = p.toRow()..remove('id');
+        final id = p.id ?? await txn.insert('parlays', row);
+        if (p.id != null) await txn.update('parlays', row, where: 'id = ?', whereArgs: [id]);
+        await txn.delete('parlay_legs', where: 'parlay_id = ?', whereArgs: [id]);
+        for (var i = 0; i < p.legs.length; i++) {
+          await txn.insert('parlay_legs', p.legs[i].toRow(id, i));
+        }
+        return id;
+      });
+
+  Future<void> deleteParlay(int id) => db.transaction((txn) async {
+        await txn.delete('parlay_legs', where: 'parlay_id = ?', whereArgs: [id]);
+        await txn.delete('parlays', where: 'id = ?', whereArgs: [id]);
+      });
 }

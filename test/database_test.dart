@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:bank_track/data/board.dart';
 import 'package:bank_track/data/database.dart';
 import 'package:bank_track/data/models.dart';
+import 'package:bank_track/data/parlay.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -207,6 +208,80 @@ void main() {
     expect(await db.boards(), isEmpty);
     expect(await db.notes(b.id!), isEmpty);
     expect(await db.messages(b.id!), isEmpty);
+    await db.close();
+  });
+
+  test('upgrading from 0.6.0 (v3) keeps bets and boards and adds the parlay builder', () async {
+    final old = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 3, onCreate: (db, _) async {
+          for (var v = 0; v < 3; v++) {
+            await migrations[v](db);
+          }
+        }));
+    await old.insert('bets', {
+      'selection': 'Arsenal to win', 'sport': 'Soccer', 'date': '2026-10-01', 'stake': 10, 'odds': 2.0,
+      'status': 'won', 'created': '2026-10-01T10:00:00', 'bet_type': 'single',
+    });
+    await old.insert('boards', {
+      'match_id': '1', 'league_slug': 'eng.1', 'home': 'Everton', 'away': 'Chelsea',
+      'kickoff': '2026-10-18T19:00:00Z', 'created': 'x', 'updated': 'x',
+    });
+    await old.insert('settings', {'key': 'pref.app.theme', 'value': 'ember'});
+    await old.close();
+
+    final db = await AppDatabase.open(factory: factory, path: path);
+    expect(await db.db.getVersion(), schemaVersion);
+    expect((await db.bets()).single.status, BetStatus.won);
+    expect((await db.boards()).single.home, 'Everton');
+    expect(await db.pref('app.theme'), 'ember');
+    expect(await db.parlays(), isEmpty);
+    await db.close();
+  });
+
+  test('a parlay keeps its legs, linked match, check and result', () async {
+    var db = await AppDatabase.open(factory: factory, path: path);
+    final id = await db.saveParlay(Parlay(
+      name: 'Saturday',
+      stake: 10,
+      created: 'x',
+      updated: 'x',
+      legs: [
+        ParlayLeg(
+          selection: 'Chelsea to win', event: 'Everton vs Chelsea', odds: 2.2, matchId: '401878771',
+          leagueSlug: 'eng.1', leagueName: 'Premier League', home: 'Everton', away: 'Chelsea',
+          kickoff: DateTime.utc(2026, 10, 18, 19),
+        ),
+        const ParlayLeg(selection: 'Millonarios to win', event: 'Millonarios vs Nacional', odds: 2.0),
+      ],
+      check: const ParlayCheck(checked: '2026-10-17T10:00:00', risk: 'Medium', summary: ['ok'], legs: [
+        LegCheck(selection: 'Chelsea to win', verdict: 'Fair price', tone: LegTone.neutral, lines: ['a']),
+      ]),
+    ));
+    await db.close();
+
+    db = await AppDatabase.open(factory: factory, path: path);
+    var p = (await db.parlays()).single;
+    expect(p.id, id);
+    expect(p.odds, closeTo(4.4, 1e-9));
+    expect(p.potentialReturn, closeTo(44, 1e-9));
+    expect(p.legs.first.isLinked, isTrue);
+    expect(p.legs.first.toMatch()!.home.name, 'Everton');
+    expect(p.legs.last.isLinked, isFalse);
+    expect(p.check!.risk, 'Medium');
+    expect(p.check!.legs.single.tone, LegTone.neutral);
+
+    // Editing replaces the legs; the result is kept.
+    await db.saveParlay(p.copyWith(legs: [p.legs.first.copyWith(status: BetStatus.won)], status: BetStatus.won));
+    p = (await db.parlays()).single;
+    expect(p.legs.single.status, BetStatus.won);
+    expect(p.status, BetStatus.won);
+    final bet = p.toBet(date: '2026-10-17', created: 'x');
+    expect(bet.type, BetType.parlay);
+    expect(bet.legs.single.status, BetStatus.pending);
+
+    await db.deleteParlay(id);
+    expect(await db.parlays(), isEmpty);
+    expect(await db.db.query('parlay_legs'), isEmpty);
     await db.close();
   });
 }

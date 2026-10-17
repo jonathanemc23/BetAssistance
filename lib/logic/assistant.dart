@@ -161,6 +161,12 @@ class DataAssistant implements MatchAssistant {
 
   // ------------------------------------------------------------ Form and goals
 
+  /// Record and goals from a team's last games (also used by the parlay check).
+  static ({int w, int dr, int l, int gf, int ga, int over25, int btts, int games}) recentOf(TeamInfo t) => _recent(t);
+
+  /// Table position and points of a team, e.g. ('#5', '10').
+  static (String, String)? positionOf(MatchDetails d, TeamInfo t) => _position(d, t);
+
   static ({int w, int dr, int l, int gf, int ga, int over25, int btts, int games}) _recent(TeamInfo t) {
     var w = 0, dr = 0, l = 0, gf = 0, ga = 0, over = 0, btts = 0, games = 0;
     for (final g in t.lastGames) {
