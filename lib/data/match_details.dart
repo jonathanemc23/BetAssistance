@@ -19,6 +19,10 @@ class MatchDetails {
     this.h2h = const [],
     this.table = const [],
     this.tableTitle = '',
+    this.state = MatchState.other,
+    this.clock = '',
+    this.homeScore,
+    this.awayScore,
   });
 
   final List<MatchOdds> odds;
@@ -34,6 +38,12 @@ class MatchDetails {
   final List<PastGame> h2h;
   final List<TableRow> table;
   final String tableTitle;
+
+  /// Where the match is now, from the feed's header: state, clock ("67'",
+  /// "FT") and the score once it has started.
+  final MatchState state;
+  final String clock;
+  final int? homeScore, awayScore;
 }
 
 class NewsItem {
@@ -356,6 +366,15 @@ MatchDetails parseMatchDetails(String body) {
     h2h: h2h,
     table: table,
     tableTitle: '${group?['header'] ?? json['standings']?['header'] ?? ''}',
+    state: switch (safe(() => header!['status']['type']['state'] as String?)) {
+      'pre' => MatchState.scheduled,
+      'in' => MatchState.live,
+      'post' => MatchState.finished,
+      _ => MatchState.other,
+    },
+    clock: safe<String?>(() => header!['status']['type']['shortDetail'] as String?) ?? '',
+    homeScore: int.tryParse('${competitor('home')?['score'] ?? ''}'),
+    awayScore: int.tryParse('${competitor('away')?['score'] ?? ''}'),
   );
 }
 

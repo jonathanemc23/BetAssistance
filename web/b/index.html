@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shared bet · Bank Track</title>
+<title>Shared bet · BetPilot</title>
 <meta name="robots" content="noindex">
+<link rel="icon" href="icon.png">
 <style>
   :root { --bg:#eef1ee; --card:#fff; --ink:#142019; --muted:#5d6a62; --line:#d6ddd7; --accent:#1d6b45; --on:#fff; }
   @media (prefers-color-scheme: dark) {
@@ -14,7 +15,8 @@
   body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   main { max-width:480px; margin:0 auto; padding:24px 16px 48px; }
   h1 { font-size:22px; margin:0 0 4px; }
-  .brand { color:var(--accent); font-weight:700; letter-spacing:.04em; text-transform:uppercase; font-size:13px; }
+  .brand { display:flex; align-items:center; gap:8px; color:var(--accent); font-weight:700; letter-spacing:.04em; text-transform:uppercase; font-size:13px; }
+  .brand img { width:28px; height:28px; border-radius:7px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin:16px 0; }
   .leg { padding:10px 0; border-top:1px solid var(--line); display:flex; gap:12px; justify-content:space-between; }
   .leg:first-of-type { border-top:0; }
@@ -29,11 +31,11 @@
 </head>
 <body>
 <main>
-  <div class="brand">Bank Track</div>
+  <div class="brand"><img src="icon.png" alt="">BetPilot</div>
   <h1 id="title">Shared bet</h1>
-  <p class="muted">Someone shared this bet with you. Open it in Bank Track to log the same bet.</p>
+  <p class="muted">Someone shared this bet with you. Open it in BetPilot to log the same bet.</p>
   <div class="card" id="bet"><span class="muted">Loading…</span></div>
-  <a class="btn primary" id="open" href="#">Open in Bank Track</a>
+  <a class="btn primary" id="open" href="#">Open in BetPilot</a>
   <button class="btn secondary" id="copy" type="button">Copy link</button>
   <a class="btn secondary" href="https://github.com/jonathanemc23/BetAssistance/releases/latest">Get the Android app</a>
 </main>

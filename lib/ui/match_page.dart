@@ -8,6 +8,7 @@ import '../data/store.dart';
 import '../logic/stats.dart';
 import 'bet_form.dart';
 import 'format.dart';
+import 'market_sheet.dart';
 import 'matchboard_screen.dart';
 import 'matches_screen.dart';
 import 'parlay_screens.dart';
@@ -280,13 +281,29 @@ class _OddsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final books = details.odds.isNotEmpty ? details.odds : [if (match.odds != null) match.odds!];
-    if (books.isEmpty) {
-      return const _Empty(icon: Icons.percent, text: 'No bookmaker prices for this match yet.');
-    }
     final theme = Theme.of(context);
     final m = match;
+    final more = OutlinedButton.icon(
+      onPressed: () async {
+        final pick = await showMarketSheet(context, event: m.title, format: format, askOdds: true);
+        if (pick != null) onPick(pick.selection, pick.odds!);
+      },
+      icon: const Icon(Icons.list_alt),
+      label: const Text('More markets: handicap, corners, cards…'),
+    );
     return _list([
-      Text('Tap a price to log it as a bet or add it to a parlay.', style: theme.textTheme.bodySmall),
+      if (books.isEmpty) ...[
+        const SizedBox(height: 24),
+        Icon(Icons.percent, size: 40, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(height: 8),
+        Text('No bookmaker prices for this match yet. You can still add any market with your own odds.',
+            textAlign: TextAlign.center, style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 16),
+      ] else ...[
+        Text('Tap a price to log it as a bet or add it to a parlay.', style: theme.textTheme.bodySmall),
+        const SizedBox(height: 8),
+      ],
+      more,
       const SizedBox(height: 10),
       for (final o in books)
         _Section(

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/store.dart';
 import '../logic/stats.dart';
 import 'bet_form.dart';
+import 'bet_review_page.dart';
 import 'format.dart';
 import 'share_ui.dart';
 
@@ -11,8 +13,9 @@ enum BetFilter { all, open, won, lost, parlays }
 
 /// The bet register: every bet, filters, quick settling and sharing.
 class BetsScreen extends StatefulWidget {
-  const BetsScreen({super.key, required this.store});
+  const BetsScreen({super.key, required this.store, required this.api});
   final BankStore store;
+  final FixturesApi api;
   @override
   State<BetsScreen> createState() => BetsScreenState();
 }
@@ -111,6 +114,7 @@ class BetsScreenState extends State<BetsScreen> {
             onTap: () => openBetForm(context, store, bet: list[i]),
             onLongPress: () => _actions(list[i]),
             onSettle: (st) => store.settle(list[i], st),
+            onReview: () => openBetReview(context, store: store, api: widget.api, bet: list[i]),
           ),
         ),
       ),
@@ -119,8 +123,16 @@ class BetsScreenState extends State<BetsScreen> {
 }
 
 class _BetTile extends StatelessWidget {
-  const _BetTile({required this.bet, required this.fmt, required this.onTap, required this.onLongPress, required this.onSettle});
+  const _BetTile({
+    required this.bet,
+    required this.fmt,
+    required this.onTap,
+    required this.onLongPress,
+    required this.onSettle,
+    required this.onReview,
+  });
   final Bet bet;
+  final VoidCallback onReview;
   final Fmt fmt;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
@@ -162,6 +174,8 @@ class _BetTile extends StatelessWidget {
                     '${betMeta(bet, fmt)} · ${fmt.money(bet.stake)} @ ${formatOdds(bet.odds, fmt.settings.oddsFormat)}',
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
+                  const SizedBox(height: 6),
+                  _ReviewButton(onTap: onReview),
                 ]),
               ),
             ),
@@ -248,4 +262,30 @@ class _EmptyState extends StatelessWidget {
           ]),
         ),
       );
+}
+
+class _ReviewButton extends StatelessWidget {
+  const _ReviewButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Material(
+      color: cs.primary.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(99),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(99),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.fact_check_outlined, size: 15, color: cs.primary),
+            const SizedBox(width: 5),
+            Text('Review bet', style: TextStyle(color: cs.primary, fontSize: 12, fontWeight: FontWeight.w700)),
+          ]),
+        ),
+      ),
+    );
+  }
 }

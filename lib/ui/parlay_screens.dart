@@ -10,6 +10,7 @@ import '../logic/parlay_check.dart';
 import '../logic/stats.dart';
 import 'bet_form.dart';
 import 'format.dart';
+import 'market_sheet.dart';
 import 'matches_screen.dart';
 import 'share_ui.dart';
 import 'themes.dart';
@@ -233,7 +234,7 @@ class _ParlayPageState extends State<ParlayPage> {
     final leg = await Navigator.of(context).push<ParlayLeg>(MaterialPageRoute(
       builder: (c) => Scaffold(
         appBar: AppBar(title: const Text('Pick a selection')),
-        body: MatchesScreen(
+        body: MatchesTabs(
           store: store,
           api: widget.api,
           onPick: (m, sel, odds) => Navigator.pop(c, ParlayLeg.fromMatch(m, sel, odds)),
@@ -311,7 +312,7 @@ class _ParlayPageState extends State<ParlayPage> {
           ListTile(
             leading: const Icon(Icons.link),
             title: const Text('Share as a link'),
-            subtitle: const Text('Opens in Bank Track ready to log'),
+            subtitle: const Text('Opens in BetPilot ready to log'),
             onTap: () => Navigator.pop(c, 'link'),
           ),
           ListTile(
@@ -340,7 +341,7 @@ class _ParlayPageState extends State<ParlayPage> {
         text.writeln('• $s');
       }
     }
-    text.write('\nBuilt with Bank Track');
+    text.write('\nBuilt with BetPilot');
     await SharePlus.instance.share(ShareParams(text: text.toString(), subject: p.name));
   }
 
@@ -758,7 +759,18 @@ class _ExternalLegSheetState extends State<_ExternalLegSheet> {
           TextFormField(
             controller: _selection,
             textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(labelText: 'Selection', hintText: 'e.g. Millonarios to win'),
+            decoration: InputDecoration(
+              labelText: 'Selection',
+              hintText: 'e.g. Millonarios to win',
+              suffixIcon: IconButton(
+                tooltip: 'Choose a market',
+                icon: const Icon(Icons.list_alt),
+                onPressed: () async {
+                  final pick = await showMarketSheet(context, event: _event.text, format: widget.format);
+                  if (pick != null) _selection.text = pick.selection;
+                },
+              ),
+            ),
             validator: (v) => (v ?? '').trim().isEmpty ? 'Enter the pick' : null,
           ),
           const SizedBox(height: 10),

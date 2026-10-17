@@ -1,4 +1,4 @@
-/// Data model shared with the Bank Track web version: bets, bankroll
+/// Data model shared with the BetPilot web version: bets, bankroll
 /// transactions (deposits and withdrawals) and user settings.
 library;
 
@@ -121,6 +121,13 @@ class Bet {
   final String created; // ISO timestamp
   final List<BetLeg> legs; // parlay legs, empty for other types
 
+  /// Market id from markets.dart ('result', 'handicap', 'corners'...).
+  final String market;
+
+  /// The match a bet was picked from, so Review bet can load its data.
+  final String? matchId, leagueSlug, leagueName;
+  final DateTime? kickoff; // UTC
+
   const Bet({
     this.id,
     this.type = BetType.single,
@@ -136,6 +143,11 @@ class Bet {
     this.notes = '',
     required this.created,
     this.legs = const [],
+    this.market = '',
+    this.matchId,
+    this.leagueSlug,
+    this.leagueName,
+    this.kickoff,
   });
 
   bool get isSettled => status != BetStatus.pending;
@@ -156,6 +168,7 @@ class Bet {
         id: id ?? this.id, type: type, selection: selection, event: event, sport: sport, date: date ?? this.date,
         stake: stake ?? this.stake, odds: odds, book: book, status: status ?? this.status,
         cashout: cashout ?? this.cashout, notes: notes, created: created ?? this.created, legs: legs,
+        market: market, matchId: matchId, leagueSlug: leagueSlug, leagueName: leagueName, kickoff: kickoff,
       );
 
   /// Same bet without an id or result, ready to be logged again.
@@ -163,6 +176,7 @@ class Bet {
         type: type, selection: selection, event: event, sport: sport, date: date, stake: stake, odds: odds,
         book: book, created: created,
         legs: [for (final l in legs) l.copyWith(status: BetStatus.pending)],
+        market: market, matchId: matchId, leagueSlug: leagueSlug, leagueName: leagueName, kickoff: kickoff,
       );
 
   Map<String, Object?> toRow() => {
@@ -179,6 +193,11 @@ class Bet {
         'cashout': cashout,
         'notes': notes,
         'created': created,
+        'market': market,
+        'match_id': matchId,
+        'league_slug': leagueSlug,
+        'league_name': leagueName,
+        'kickoff': kickoff?.toUtc().toIso8601String(),
       };
 
   factory Bet.fromRow(Map<String, Object?> r, [List<BetLeg> legs = const []]) => Bet(
@@ -196,6 +215,11 @@ class Bet {
         notes: (r['notes'] as String?) ?? '',
         created: (r['created'] as String?) ?? '',
         legs: legs,
+        market: (r['market'] as String?) ?? '',
+        matchId: r['match_id'] as String?,
+        leagueSlug: r['league_slug'] as String?,
+        leagueName: r['league_name'] as String?,
+        kickoff: DateTime.tryParse((r['kickoff'] as String?) ?? '')?.toUtc(),
       );
 }
 

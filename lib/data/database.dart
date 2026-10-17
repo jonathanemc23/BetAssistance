@@ -128,6 +128,14 @@ final List<Future<void> Function(DatabaseExecutor db)> migrations = [
       )''');
     await db.execute('CREATE INDEX idx_parlay_legs_parlay ON parlay_legs(parlay_id)');
   },
+  // 4 -> 5: a bet's market and the match it was picked from (for Review bet).
+  (db) async {
+    await db.execute("ALTER TABLE bets ADD COLUMN market TEXT NOT NULL DEFAULT ''");
+    await db.execute('ALTER TABLE bets ADD COLUMN match_id TEXT');
+    await db.execute('ALTER TABLE bets ADD COLUMN league_slug TEXT');
+    await db.execute('ALTER TABLE bets ADD COLUMN league_name TEXT');
+    await db.execute('ALTER TABLE bets ADD COLUMN kickoff TEXT');
+  },
 ];
 
 int get schemaVersion => migrations.length;

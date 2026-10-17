@@ -4,7 +4,7 @@ import '../data/models.dart';
 import 'stats.dart';
 
 /// Share links: the bet is encoded in the link itself (no server), so anyone
-/// with Bank Track can open it and get the same bet pre-filled.
+/// with BetPilot can open it and get the same bet pre-filled.
 ///
 /// Formats accepted when opening:
 ///   https://raw.githack.com/jonathanemc23/BetAssistance/main/web/b/index.html#<code>
@@ -54,7 +54,7 @@ class BetLink {
       ] else
         '${b.selection}${b.event.isEmpty ? '' : ' (${b.event})'} @ $odds',
       '',
-      'Open it in Bank Track: ${webLink(b)}',
+      'Open it in BetPilot: ${webLink(b)}',
     ];
     return lines.join('\n');
   }

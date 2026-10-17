@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -8,7 +10,129 @@ import '../logic/stats.dart';
 import 'match_page.dart';
 import 'parlay_screens.dart';
 
-/// Matches tab: football fixtures for a country on a chosen day.
+/// Matches page: fixtures by country and day, and everything live now.
+class MatchesTabs extends StatelessWidget {
+  const MatchesTabs({super.key, required this.store, required this.api, this.today, this.onPick});
+  final BankStore store;
+  final FixturesApi api;
+  final DateTime? today;
+  final void Function(Match match, String selection, double odds)? onPick;
+
+  @override
+  Widget build(BuildContext context) => DefaultTabController(
+        length: 2,
+        child: Column(children: [
+          const TabBar(tabs: [Tab(text: 'Matches'), Tab(text: 'Live')]),
+          Expanded(
+            child: TabBarView(children: [
+              MatchesScreen(store: store, api: api, today: today, onPick: onPick),
+              LiveMatches(store: store, api: api, onPick: onPick),
+            ]),
+          ),
+        ]),
+      );
+}
+
+/// Every live match, A to Z, refreshed every minute while it is on screen.
+class LiveMatches extends StatefulWidget {
+  const LiveMatches({super.key, required this.store, required this.api, this.onPick});
+  final BankStore store;
+  final FixturesApi api;
+  final void Function(Match match, String selection, double odds)? onPick;
+
+  @override
+  State<LiveMatches> createState() => _LiveMatchesState();
+}
+
+class _LiveMatchesState extends State<LiveMatches> {
+  List<Match>? _matches;
+  String? _error;
+  DateTime? _updated;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _timer = Timer.periodic(const Duration(seconds: 60), (_) => _load(refresh: true));
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool refresh = false}) async {
+    try {
+      final list = await widget.api.liveMatches(refresh: refresh);
+      if (mounted) {
+        setState(() {
+          _matches = list;
+          _error = null;
+          _updated = DateTime.now();
+        });
+      }
+    } on FixturesException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    }
+  }
+
+  void _openMatch(Match m) => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+            builder: (_) => MatchPage(match: m, store: widget.store, api: widget.api, onPick: widget.onPick)),
+      );
+
+  void _pick(Match m, String selection, double odds) => widget.onPick != null
+      ? widget.onPick!(m, selection, odds)
+      : pickSelection(context, store: widget.store, api: widget.api, match: m, selection: selection, odds: odds);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final list = _matches;
+    Widget message(IconData icon, String text) => ListView(children: [
+          const SizedBox(height: 80),
+          Icon(icon, size: 48, color: cs.onSurfaceVariant),
+          const SizedBox(height: 12),
+          Text(text, textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
+        ]);
+    return RefreshIndicator(
+      onRefresh: () => _load(refresh: true),
+      child: list == null
+          ? (_error != null ? message(Icons.cloud_off, _error!) : const Center(child: CircularProgressIndicator()))
+          : list.isEmpty
+              ? message(Icons.sports_soccer_outlined, 'No live matches right now. Pull down to refresh.')
+              : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
+                  Text(
+                    '${list.length} live now · updated ${DateFormat.Hm().format(_updated!)}',
+                    style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final m in list)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4, bottom: 4),
+                          child: Text(m.league.name.toUpperCase(),
+                              style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1, color: cs.primary)),
+                        ),
+                        _MatchCard(
+                          match: m,
+                          oddsFormat: widget.store.settings.oddsFormat,
+                          onTap: () => _openMatch(m),
+                          onPick: (sel, odds) => _pick(m, sel, odds),
+                        ),
+                      ]),
+                    ),
+                ]),
+    );
+  }
+}
+
+/// Fixtures for a country on a chosen day.
 class MatchesScreen extends StatefulWidget {
   const MatchesScreen({super.key, required this.store, required this.api, this.today, this.onPick});
   final BankStore store;
