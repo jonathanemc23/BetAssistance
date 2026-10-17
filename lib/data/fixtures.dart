@@ -2,7 +2,10 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'match_details.dart';
 import 'models.dart';
+
+export 'match_details.dart';
 
 /// Football fixtures from ESPN's public scoreboard feed
 /// (site.api.espn.com, free and keyless). One request per league and day.
@@ -181,13 +184,31 @@ class Team {
 
 /// 1X2 prices (decimal) from the bookmaker ESPN shows for the match.
 class MatchOdds {
-  const MatchOdds({required this.home, required this.draw, required this.away, this.provider = ''});
+  const MatchOdds({
+    required this.home,
+    required this.draw,
+    required this.away,
+    this.provider = '',
+    this.totalLine,
+    this.over,
+    this.under,
+    this.extras = const [],
+  });
   final double? home;
   final double? draw;
   final double? away;
   final String provider;
 
-  bool get isEmpty => home == null && draw == null && away == null;
+  /// Total goals line (2.5) with over / under prices, when offered.
+  final double? totalLine;
+  final double? over;
+  final double? under;
+
+  /// Other markets the provider prices, e.g. ('Double chance 1X', 1.36).
+  final List<(String, double)> extras;
+
+  bool get isEmpty => count == 0;
+  int get count => [home, draw, away].where((p) => p != null).length;
 }
 
 class Match {
@@ -271,32 +292,124 @@ List<Match> parseScoreboard(String body, League league) {
   return out;
 }
 
-/// First usable entry of ESPN's `odds` list (often `[null]` or missing).
-/// Reads decimal `value`, falling back to American `moneyLine`.
+/// Best entry of ESPN's `odds` list (often `[null]` or missing): the
+/// provider with the most of home / draw / away priced.
 MatchOdds? _odds(Object? raw) {
-  if (raw is! List) return null;
+  MatchOdds? best;
+  for (final o in parseOddsList(raw)) {
+    if (best == null || o.count > best.count) best = o;
+  }
+  return best;
+}
+
+/// Every provider in an ESPN `odds` / `pickcenter` list that prices at least
+/// one outcome. ESPN mixes several shapes, sometimes within one response:
+///   homeTeamOdds.value (decimal)            Bet 365 on the scoreboard
+///   homeTeamOdds.odds.value / .summary      Bet 365 on the match summary
+///   homeTeamOdds.moneyLine (American)       DraftKings
+///   moneyline.home.close.odds ("+130")      DraftKings, newer feeds
+List<MatchOdds> parseOddsList(Object? raw) {
+  if (raw is! List) return const [];
+  final out = <MatchOdds>[];
   for (final o in raw) {
     if (o is! Map<String, dynamic>) continue;
-    double? price(Object? side) {
-      if (side is! Map) return null;
-      final v = side['value'];
-      final d = v is num ? v.toDouble() : double.tryParse('${v ?? ''}');
-      if (d != null && d > 1) return d;
-      final ml = side['moneyLine'];
-      final a = ml is num ? ml.toDouble() : double.tryParse('${ml ?? ''}');
-      if (a == null || a.abs() < 100) return null;
-      return a > 0 ? 1 + a / 100 : 1 + 100 / -a;
+    double? price(String sideKey, String lineKey) {
+      final side = o[sideKey];
+      if (side is Map) {
+        final d = _decimal(side['value']) ??
+            _decimal(side['odds'] is Map ? side['odds']['value'] : null) ??
+            _fractional(side['summary']) ??
+            _fractional(side['odds'] is Map ? side['odds']['summary'] : null) ??
+            _american(side['moneyLine']);
+        if (d != null) return d;
+      }
+      final line = o['moneyline'] is Map ? o['moneyline'][lineKey] : null;
+      if (line is Map) {
+        for (final k in const ['current', 'close', 'open']) {
+          final v = line[k] is Map ? line[k]['odds'] : null;
+          final d = _american(v);
+          if (d != null) return d;
+        }
+      }
+      return null;
     }
 
+    double? total(String side) {
+      final v = o['total'] is Map ? o['total'][side] : null;
+      if (v is! Map) return null;
+      for (final k in const ['current', 'close', 'open']) {
+        final d = _american(v[k] is Map ? v[k]['odds'] : null);
+        if (d != null) return d;
+      }
+      return null;
+    }
+
+    double? totalLine() {
+      final n = o['overUnder'];
+      if (n is num && n > 0) return n.toDouble();
+      final v = o['total'] is Map && o['total']['over'] is Map ? o['total']['over'] : null;
+      for (final k in const ['current', 'close', 'open']) {
+        final l = v is Map && v[k] is Map ? v[k]['line'] : null;
+        final d = double.tryParse('${l ?? ''}'.replaceAll(RegExp(r'[^0-9.]'), ''));
+        if (d != null && d > 0) return d;
+      }
+      return null;
+    }
+
+    // Bet 365's extra markets on the match summary.
+    final team = o['bettingOdds'] is Map ? o['bettingOdds']['teamOdds'] : null;
+    double? market(String key) => team is Map && team[key] is Map ? _fractional(team[key]['value']) : null;
+    final goalLine = team is Map && team['preMatchOverUnderHandicap'] is Map
+        ? team['preMatchOverUnderHandicap']['value']?.toString()
+        : null;
+    final extras = <(String, double)>[
+      for (final (label, key) in const [
+        ('Double chance 1X', 'preMatchDoubleChanceHomeOrDraw'),
+        ('Double chance 12', 'preMatchDoubleChanceHomeOrAway'),
+        ('Double chance X2', 'preMatchDoubleChanceDrawOrAway'),
+      ])
+        if (market(key) case final p?) (label, p),
+      if (goalLine != null) ...[
+        if (market('preMatchGoalLineOver') case final p?) ('Over $goalLine goals', p),
+        if (market('preMatchGoalLineUnder') case final p?) ('Under $goalLine goals', p),
+      ],
+    ];
+
     final odds = MatchOdds(
-      home: price(o['homeTeamOdds']),
-      draw: price(o['drawOdds']),
-      away: price(o['awayTeamOdds']),
+      home: price('homeTeamOdds', 'home'),
+      draw: price('drawOdds', 'draw'),
+      away: price('awayTeamOdds', 'away'),
       provider: (o['provider']?['displayName'] ?? o['provider']?['name'] ?? '') as String,
+      totalLine: totalLine(),
+      over: _american(o['overOdds']) ?? total('over'),
+      under: _american(o['underOdds']) ?? total('under'),
+      extras: extras,
     );
-    if (!odds.isEmpty) return odds;
+    if (!odds.isEmpty) out.add(odds);
   }
-  return null;
+  return out;
+}
+
+double? _decimal(Object? v) {
+  final d = v is num ? v.toDouble() : double.tryParse('${v ?? ''}');
+  return d != null && d > 1 ? d : null;
+}
+
+/// "13/10" -> 2.3
+double? _fractional(Object? v) {
+  if (v is! String) return null;
+  final m = RegExp(r'^\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)\s*$').firstMatch(v);
+  if (m == null) return null;
+  final n = double.parse(m.group(1)!), d = double.parse(m.group(2)!);
+  return d == 0 ? null : 1 + n / d;
+}
+
+/// American moneyline (130, "-165", "+130", "EVEN") -> decimal.
+double? _american(Object? v) {
+  if (v is String && v.trim().toUpperCase() == 'EVEN') return 2;
+  final a = v is num ? v.toDouble() : double.tryParse('${v ?? ''}'.replaceAll('+', '').trim());
+  if (a == null || a.abs() < 100) return null;
+  return a > 0 ? 1 + a / 100 : 1 + 100 / -a;
 }
 
 String _ymd(DateTime d) =>
@@ -354,6 +467,27 @@ class FixturesApi {
         });
     _cache[key] = (DateTime.now(), list);
     return list;
+  }
+
+  final _details = <String, (DateTime, MatchDetails)>{};
+
+  /// The match page's data from ESPN's summary feed. Cached for a minute.
+  Future<MatchDetails> details(Match m, {bool refresh = false}) async {
+    final hit = _details[m.id];
+    if (!refresh && hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 1)) return hit.$2;
+    try {
+      final res = await _client
+          .get(Uri.parse('$_base/${m.league.slug}/summary?event=${m.id}'))
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) throw FixturesException('ESPN answered ${res.statusCode}');
+      final d = parseMatchDetails(utf8.decode(res.bodyBytes));
+      _details[m.id] = (DateTime.now(), d);
+      return d;
+    } on FixturesException {
+      rethrow;
+    } catch (_) {
+      throw const FixturesException("Couldn't load this match. Check your connection and try again.");
+    }
   }
 
   static bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;

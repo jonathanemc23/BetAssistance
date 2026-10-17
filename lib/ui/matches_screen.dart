@@ -6,6 +6,7 @@ import '../data/models.dart';
 import '../data/store.dart';
 import '../logic/stats.dart';
 import 'bet_form.dart';
+import 'match_page.dart';
 
 /// Matches tab: football fixtures for a country on a chosen day.
 class MatchesScreen extends StatefulWidget {
@@ -114,24 +115,9 @@ class _MatchesScreenState extends State<MatchesScreen> {
     if (d != null) _setDay(d);
   }
 
-  void _openMatch(Match m) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (c) => _MatchSheet(
-        match: m,
-        oddsFormat: widget.store.settings.oddsFormat,
-        onLogBet: () {
-          Navigator.pop(c);
-          openBetForm(context, widget.store, template: m.toBetTemplate());
-        },
-        onPick: (selection, odds) {
-          Navigator.pop(c);
-          _pick(m, selection, odds);
-        },
-      ),
-    );
-  }
+  void _openMatch(Match m) => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => MatchPage(match: m, store: widget.store, api: widget.api)),
+      );
 
   /// Tapping a price opens the form with that pick and price filled in.
   void _pick(Match m, String selection, double odds) => openBetForm(
@@ -335,7 +321,7 @@ class _MatchCard extends StatelessWidget {
 
     Widget row(Team t, bool bold) => Row(
       children: [
-        _Logo(url: t.logo, name: t.name),
+        TeamLogo(url: t.logo, name: t.name),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
@@ -403,7 +389,13 @@ class _MatchCard extends StatelessWidget {
                     row(m.away, awayWon),
                     if (m.odds != null && m.state != MatchState.finished) ...[
                       const SizedBox(height: 10),
-                      OddsRow(match: m, format: oddsFormat, onPick: onPick),
+                      OddsRow(
+                    odds: m.odds!,
+                    homeName: m.home.name,
+                    awayName: m.away.name,
+                    format: oddsFormat,
+                    onPick: onPick,
+                  ),
                     ],
                   ],
                 ),
@@ -416,8 +408,8 @@ class _MatchCard extends StatelessWidget {
   }
 }
 
-class _Logo extends StatelessWidget {
-  const _Logo({required this.url, required this.name, this.size = 24});
+class TeamLogo extends StatelessWidget {
+  const TeamLogo({super.key, required this.url, required this.name, this.size = 24});
   final String? url;
   final String name;
   final double size;
@@ -444,86 +436,20 @@ class _Logo extends StatelessWidget {
   }
 }
 
-class _MatchSheet extends StatelessWidget {
-  const _MatchSheet({required this.match, required this.oddsFormat, required this.onLogBet, required this.onPick});
-  final Match match;
-  final OddsFormat oddsFormat;
-  final VoidCallback onLogBet;
-  final void Function(String selection, double odds) onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final m = match;
-    Widget side(Team t) => Expanded(
-      child: Column(
-        children: [
-          _Logo(url: t.logo, name: t.name, size: 56),
-          const SizedBox(height: 8),
-          Text(t.name, textAlign: TextAlign.center, style: theme.textTheme.titleSmall),
-        ],
-      ),
-    );
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(m.league.name, style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
-            const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                side(m.home),
-                Padding(
-                  padding: const EdgeInsets.only(top: 14),
-                  child: Text(
-                    m.hasScore ? '${m.home.score ?? '-'}  –  ${m.away.score ?? '-'}' : 'vs',
-                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                ),
-                side(m.away),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              [
-                DateFormat.yMMMEd().add_Hm().format(m.kickoff.toLocal()),
-                if (m.state != MatchState.scheduled) m.detail,
-                if (m.venue != null) m.venue!,
-              ].join(' · '),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall,
-            ),
-            if (m.odds != null) ...[
-              const SizedBox(height: 20),
-              OddsRow(match: m, format: oddsFormat, onPick: onPick, large: true),
-              if (m.odds!.provider.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text('Odds by ${m.odds!.provider} · tap one to log it', style: theme.textTheme.bodySmall),
-              ],
-            ],
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onLogBet,
-                icon: const Icon(Icons.add),
-                label: const Text('Log a bet on this match'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// 1 / X / 2 price buttons. Missing prices are left out.
 class OddsRow extends StatelessWidget {
-  const OddsRow({super.key, required this.match, required this.format, required this.onPick, this.large = false});
-  final Match match;
+  const OddsRow({
+    super.key,
+    required this.odds,
+    required this.homeName,
+    required this.awayName,
+    required this.format,
+    required this.onPick,
+    this.large = false,
+  });
+  final MatchOdds odds;
+  final String homeName;
+  final String awayName;
   final OddsFormat format;
   final void Function(String selection, double odds) onPick;
   final bool large;
@@ -532,11 +458,11 @@ class OddsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final o = match.odds!;
+    final o = odds;
     final picks = [
-      if (o.home != null) ('1', '${match.home.name} to win', o.home!),
+      if (o.home != null) ('1', '$homeName to win', o.home!),
       if (o.draw != null) ('X', 'Draw', o.draw!),
-      if (o.away != null) ('2', '${match.away.name} to win', o.away!),
+      if (o.away != null) ('2', '$awayName to win', o.away!),
     ];
     return Row(
       children: [

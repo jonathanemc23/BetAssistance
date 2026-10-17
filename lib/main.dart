@@ -35,7 +35,7 @@ class BankTrackApp extends StatelessWidget {
   /// link opened while the app is running).
   final Stream<Uri>? links;
 
-  ThemeData _theme(Brightness b) => ThemeData(
+  static ThemeData theme(Brightness b) => ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: BankColors.accent, brightness: b),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
@@ -53,8 +53,8 @@ class BankTrackApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
         title: 'Bank Track',
         debugShowCheckedModeBanner: false,
-        theme: _theme(Brightness.light),
-        darkTheme: _theme(Brightness.dark),
+        theme: theme(Brightness.light),
+        darkTheme: theme(Brightness.dark),
         home: HomeShell(store: store, links: links, fixtures: fixtures ?? FixturesApi(), today: today),
       );
 }
