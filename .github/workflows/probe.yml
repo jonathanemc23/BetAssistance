@@ -1,0 +1,27 @@
+name: ESPN probe (temporary)
+on:
+  push:
+    branches: [tmp/espn-probe]
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -x
+          B=https://site.api.espn.com/apis/site/v2/sports/soccer
+          mkdir -p probe
+          curl -s "$B/eng.1/summary?event=401878771" > probe/summary_pre.json
+          FIN=$(curl -s "$B/eng.1/scoreboard?dates=20261004" | jq -r '.events[0].id')
+          curl -s "$B/eng.1/summary?event=$FIN" > probe/summary_post.json
+          CFIN=$(curl -s "$B/col.1/scoreboard?dates=20261005" | jq -r '.events[0].id')
+          curl -s "$B/col.1/summary?event=$CFIN" > probe/summary_col.json
+          curl -s "$B/eng.1/scoreboard?dates=20261017" > probe/scoreboard_eng.json
+          curl -s "$B/eng.1/news" > probe/news.json
+          curl -s "https://site.api.espn.com/apis/v2/sports/soccer/eng.1/standings" > probe/standings.json
+          curl -s "$B/eng.1/teams/368" > probe/team.json
+          ls -la probe
+          git config user.email noreply@anthropic.com; git config user.name Claude
+          git add probe && git commit -m "probe data" && git push
