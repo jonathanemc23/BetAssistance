@@ -122,6 +122,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // Load the brand icon so the header shows it in screenshots.
+    await tester.runAsync(() => precacheImage(const AssetImage('assets/brand/icon.png'), tester.element(find.byType(BrandTitle))));
+    await tester.pumpAndSettle();
 
     // Summary is the main page and holds no bet list.
     expect(find.text('BANKROLL'), findsOneWidget);
@@ -219,6 +222,31 @@ void main() {
     expect(find.text('Manchester City'), findsWidgets);
     await shot('match_table');
 
+    // Any market with your own odds: a handicap on Chelsea, logged as a bet.
+    await openTab(tester, 'Odds');
+    await tester.tap(find.text('More markets: handicap, corners, cards…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Chelsea'));
+    await tester.enterText(find.widgetWithText(TextField, 'Odds'), '1.95');
+    await tester.pumpAndSettle();
+    expect(find.text('Chelsea -0.5'), findsOneWidget);
+    await shot('markets');
+    await tester.ensureVisible(find.text('Use this pick'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use this pick'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Log as a single bet'));
+    await tester.pumpAndSettle();
+    expect(find.text('Market: Handicap'), findsOneWidget);
+    await tester.tap(find.text('Log bet').last);
+    await settle(tester);
+    final handicap = store.bets.firstWhere((b) => b.selection == 'Chelsea -0.5');
+    expect(handicap.market, 'handicap');
+    expect(handicap.matchId, '401878771');
+    expect(handicap.odds, closeTo(1.95, 1e-9));
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
     // Matchboard: open the match's workspace, ask, and the answer lands on the board.
     await tester.tap(find.byTooltip('Open in Matchboard'));
     await settle(tester);
@@ -274,6 +302,15 @@ void main() {
     await settle(tester);
     expect(store.parlays.single.legs.map((l) => l.selection), ['AFC Bournemouth to win', 'Chelsea to win']);
     await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    // The Live tab lists every live match, A to Z.
+    await tester.tap(find.widgetWithText(Tab, 'Live'));
+    await settle(tester);
+    expect(find.textContaining('2 live now'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('Arsenal')).dy, lessThan(tester.getTopLeft(find.text('Real Madrid')).dy));
+    await shot('live');
+    await tester.tap(find.widgetWithText(Tab, 'Matches'));
     await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -363,6 +400,20 @@ void main() {
     await tester.pumpAndSettle();
 
     // Charts.
+    // Review bet from the history: the handicap logged from the match page.
+    await tester.tap(find.text('Bets'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review bet').first);
+    await settle(tester);
+    expect(find.text('Since you placed it'), findsOneWidget);
+    expect(find.textContaining('Not started yet'), findsOneWidget);
+    await shot('bet_review');
+    await tester.scrollUntilVisible(find.text('Suggestions'), 300);
+    await tester.pumpAndSettle();
+    await shot('bet_review_more');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('Charts'));
     await tester.pumpAndSettle();
     expect(find.text('Bankroll over time'), findsOneWidget);
@@ -440,6 +491,18 @@ http.Response _summary(Uri url) => http.Response.bytes(
 
 http.Client _fixturesClient() => MockClient((req) async {
   if (req.url.pathSegments.last == 'summary') return _summary(req.url);
+  final slug = req.url.pathSegments[req.url.pathSegments.length - 2];
+  if (!req.url.queryParameters.containsKey('dates')) {
+    // Today's scoreboard, used by the Live tab.
+    return http.Response(
+      board(switch (slug) {
+        'eng.1' => [espnEvent('2', '2026-10-18T14:00:00Z', 'Arsenal', 'Tottenham Hotspur', state: 'in', detail: "67'", hs: '2', as: '1')],
+        'esp.1' => [espnEvent('9', '2026-10-18T14:00:00Z', 'Real Madrid', 'Getafe', state: 'in', detail: "12'", hs: '0', as: '0')],
+        _ => [],
+      }),
+      200,
+    );
+  }
   if (req.url.queryParameters['dates'] != '20261018') return http.Response(board([]), 200);
   return switch (req.url.pathSegments[req.url.pathSegments.length - 2]) {
     'eng.1' => http.Response(

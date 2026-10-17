@@ -21,7 +21,7 @@ Future<void> showShareBet(BuildContext context, BankStore store, Bet bet) {
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Text('Share this bet', style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
-            Text('Anyone with Bank Track who opens the link gets the same bet ready to log. '
+            Text('Anyone with BetPilot who opens the link gets the same bet ready to log. '
                 'Your result and notes are not included.',
                 style: theme.textTheme.bodySmall),
             const SizedBox(height: 12),
@@ -57,7 +57,7 @@ Future<void> showShareBet(BuildContext context, BankStore store, Bet bet) {
                     Navigator.pop(c);
                     SharePlus.instance.share(ShareParams(
                       text: BetLink.shareText(bet, store.settings),
-                      subject: 'Bet from Bank Track',
+                      subject: 'Bet from BetPilot',
                     ));
                   },
                 ),
@@ -95,7 +95,7 @@ Future<Bet?> showPasteLink(BuildContext context) async {
             onPressed: () {
               final b = decode();
               if (b == null) {
-                setState(() => error = "That doesn't look like a Bank Track bet link");
+                setState(() => error = "That doesn't look like a BetPilot bet link");
               } else {
                 Navigator.pop(c, b);
               }

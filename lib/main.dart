@@ -46,7 +46,7 @@ class BankTrackApp extends StatelessWidget {
         // Rebuilds only when the store notifies; the theme comes from it.
         listenable: store,
         builder: (context, child) => MaterialApp(
-          title: 'Bank Track',
+          title: 'BetPilot',
           debugShowCheckedModeBanner: false,
           theme: theme(store.themeId),
           home: child,
@@ -98,7 +98,7 @@ class _HomeShellState extends State<HomeShell> {
 
   void _openMatches() => _push((_) => Scaffold(
         appBar: AppBar(title: const Text('Matches')),
-        body: MatchesScreen(store: store, api: widget.fixtures, today: widget.today),
+        body: MatchesTabs(store: store, api: widget.fixtures, today: widget.today),
       ));
 
   Future<void> _openSettings() async {
@@ -107,7 +107,6 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Widget _drawer(BuildContext context) {
-    final theme = Theme.of(context);
     void go(VoidCallback f) {
       Navigator.pop(context);
       f();
@@ -127,7 +126,7 @@ class _HomeShellState extends State<HomeShell> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 20, 16, 12),
-          child: Text('Bank Track', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          child: const BrandTitle(size: 36),
         ),
         const NavigationDrawerDestination(
             icon: Icon(Icons.sports_soccer_outlined), label: Text('Matches')),
@@ -153,8 +152,10 @@ class _HomeShellState extends State<HomeShell> {
       builder: (context, _) => Scaffold(
         drawer: _drawer(context),
         appBar: AppBar(
-          title: Text(switch (_tab) { 1 => 'Bet register', 2 => 'Bet Tools', 3 => 'Charts', _ => 'Bank Track' },
-              style: const TextStyle(fontWeight: FontWeight.w700)),
+          title: _tab == 0
+              ? const BrandTitle()
+              : Text(switch (_tab) { 1 => 'Bet register', 2 => 'Bet Tools', _ => 'Charts' },
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
           actions: [
             if (_tab == 1)
               IconButton(tooltip: 'Open a bet link', icon: const Icon(Icons.add_link), onPressed: _pasteLink),
@@ -167,7 +168,7 @@ class _HomeShellState extends State<HomeShell> {
             onLogBet: () => openBetForm(context, store),
             onOpenBets: () => setState(() => _tab = 1),
           ),
-          BetsScreen(store: store),
+          BetsScreen(store: store, api: widget.fixtures),
           BetToolsScreen(store: store, api: widget.fixtures, onOpenMatches: _openMatches),
           ChartsScreen(store: store),
         ]),
@@ -192,4 +193,20 @@ class _HomeShellState extends State<HomeShell> {
       ),
     );
   }
+}
+
+/// The app's icon and name, as shown in the header and the side menu.
+class BrandTitle extends StatelessWidget {
+  const BrandTitle({super.key, this.size = 30});
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(size * 0.24),
+          child: Image.asset('assets/brand/icon.png', width: size, height: size),
+        ),
+        SizedBox(width: size * 0.35),
+        Text('BetPilot', style: TextStyle(fontWeight: FontWeight.w800, fontSize: size * 0.72, letterSpacing: 0.2)),
+      ]);
 }

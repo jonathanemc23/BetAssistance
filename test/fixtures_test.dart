@@ -175,4 +175,28 @@ void main() {
     expect(defaultCountry('ZZ').name, 'England');
     expect(defaultCountry(null).name, 'England');
   });
+
+  test('live matches come from every league, live only, A to Z', () async {
+    final api = FixturesApi(
+      client: MockClient((req) async {
+        final slug = req.url.pathSegments[req.url.pathSegments.length - 2];
+        if (req.url.queryParameters.containsKey('dates')) return http.Response(board([]), 200);
+        return switch (slug) {
+          'eng.1' => http.Response(
+              board([
+                espnEvent('1', '2026-10-18T14:00Z', 'Chelsea', 'Fulham', state: 'in', detail: "30'", hs: '0', as: '0'),
+                espnEvent('2', '2026-10-18T17:00Z', 'Arsenal', 'Spurs'),
+              ]),
+              200),
+          'esp.1' => http.Response(
+              board([espnEvent('3', '2026-10-18T14:00Z', 'Barcelona', 'Girona', state: 'in', detail: "10'", hs: '1', as: '0')]),
+              200),
+          _ => http.Response(board([]), 200),
+        };
+      }),
+    );
+    final live = await api.liveMatches();
+    expect(live.map((m) => m.title), ['Barcelona vs Girona', 'Chelsea vs Fulham']);
+    expect(live.first.league.slug, 'esp.1');
+  });
 }

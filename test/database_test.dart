@@ -151,11 +151,11 @@ void main() {
     final raw = await factory.openDatabase(path,
         options: OpenDatabaseOptions(version: 1, onCreate: (db, _) => migrations[0](db)));
     await raw.insert('settings', {'key': 'currency', 'value': 'GBP'});
-    await raw.setVersion(5);
+    await raw.setVersion(99);
     await raw.close();
     await expectLater(AppDatabase.open(factory: factory, path: path), throwsA(anything));
     final check = await factory.openDatabase(path);
-    expect(await check.getVersion(), 5);
+    expect(await check.getVersion(), 99);
     expect(await check.query('settings'), hasLength(1));
     await check.close();
   });
@@ -282,6 +282,42 @@ void main() {
     await db.deleteParlay(id);
     expect(await db.parlays(), isEmpty);
     expect(await db.db.query('parlay_legs'), isEmpty);
+    await db.close();
+  });
+
+  test('upgrading from 0.7.0 (v4) keeps bets and parlays and adds markets', () async {
+    final old = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 4, onCreate: (db, _) async {
+          for (var v = 0; v < 4; v++) {
+            await migrations[v](db);
+          }
+        }));
+    await old.insert('bets', {
+      'selection': 'Liverpool -1.5', 'sport': 'Soccer', 'date': '2026-10-01', 'stake': 10, 'odds': 2.0,
+      'status': 'won', 'created': '2026-10-01T10:00:00', 'bet_type': 'single',
+    });
+    await old.insert('parlays', {'name': 'Saturday', 'created': 'x', 'updated': 'x'});
+    await old.close();
+
+    final db = await AppDatabase.open(factory: factory, path: path);
+    expect(await db.db.getVersion(), schemaVersion);
+    final bet = (await db.bets()).single;
+    expect(bet.selection, 'Liverpool -1.5');
+    expect(bet.market, '');
+    expect(bet.matchId, isNull);
+    expect((await db.parlays()).single.name, 'Saturday');
+
+    // The new fields round-trip.
+    await db.saveBet(Bet(
+      selection: 'Chelsea -0.5', event: 'Everton vs Chelsea', sport: 'Soccer', date: '2026-10-18', stake: 10,
+      odds: 1.95, created: 'y', market: 'handicap', matchId: '401878771', leagueSlug: 'eng.1',
+      leagueName: 'Premier League', kickoff: DateTime.utc(2026, 10, 18, 19),
+    ));
+    final saved = (await db.bets()).firstWhere((b) => b.created == 'y');
+    expect(saved.market, 'handicap');
+    expect(saved.matchId, '401878771');
+    expect(saved.kickoff, DateTime.utc(2026, 10, 18, 19));
+    expect(saved.copyWith(status: BetStatus.won).leagueSlug, 'eng.1');
     await db.close();
   });
 }

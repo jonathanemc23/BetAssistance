@@ -2,7 +2,7 @@
     <!-- Matches tab loads fixtures from the internet. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="Bank Track"
+        android:label="BetPilot"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"

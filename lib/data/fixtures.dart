@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../logic/markets.dart';
 import 'match_details.dart';
 import 'models.dart';
 
@@ -238,7 +239,7 @@ class Match {
 
   /// A pending single bet on this match, for the bet form. Pass a pick
   /// (e.g. from the odds buttons) to pre-fill the selection and price.
-  Bet toBetTemplate({String selection = '', double odds = 0}) => Bet(
+  Bet toBetTemplate({String selection = '', double odds = 0, String? market}) => Bet(
     selection: selection,
     event: title,
     sport: 'Soccer',
@@ -246,6 +247,11 @@ class Match {
     stake: 0,
     odds: odds,
     created: DateTime.now().toIso8601String(),
+    market: market ?? (selection.isEmpty ? '' : marketOf(selection)),
+    matchId: id,
+    leagueSlug: league.slug,
+    leagueName: league.name,
+    kickoff: kickoff,
   );
 }
 
@@ -466,6 +472,43 @@ class FixturesApi {
           return c != 0 ? c : a.home.name.compareTo(b.home.name);
         });
     _cache[key] = (DateTime.now(), list);
+    return list;
+  }
+
+  (DateTime, List<Match>)? _live;
+
+  /// Every match being played right now across all the leagues the app
+  /// knows, sorted alphabetically. Cached for 30 seconds.
+  Future<List<Match>> liveMatches({bool refresh = false}) async {
+    final hit = _live;
+    if (!refresh && hit != null && DateTime.now().difference(hit.$1) < const Duration(seconds: 30)) return hit.$2;
+    final leagues = {for (final c in countries) for (final l in c.leagues) l.slug: l}.values;
+    var failures = 0;
+    final results = await Future.wait([
+      for (final l in leagues)
+        () async {
+          try {
+            final res = await _client.get(Uri.parse('$_base/${l.slug}/scoreboard')).timeout(const Duration(seconds: 15));
+            if (res.statusCode != 200) {
+              failures++;
+              return const <Match>[];
+            }
+            return parseScoreboard(utf8.decode(res.bodyBytes), l);
+          } catch (_) {
+            failures++;
+            return const <Match>[];
+          }
+        }(),
+    ]);
+    if (leagues.isNotEmpty && failures == leagues.length) {
+      throw const FixturesException("Couldn't load live matches. Check your connection and try again.");
+    }
+    final seen = <String>{};
+    final list = [
+      for (final m in results.expand((r) => r))
+        if (m.state == MatchState.live && seen.add(m.id)) m,
+    ]..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    _live = (DateTime.now(), list);
     return list;
   }
 

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../data/store.dart';
+import '../logic/markets.dart';
 import '../logic/stats.dart';
 import 'format.dart';
+import 'market_sheet.dart';
 import 'themes.dart';
 import 'share_ui.dart';
 
@@ -52,6 +54,7 @@ class _BetFormPageState extends State<BetFormPage> {
   late String _sport, _date;
   late BetStatus _status;
   late BetType _type;
+  late String _market;
   final List<_Leg> _legs = [];
 
   Settings get _settings => widget.store.settings;
@@ -65,6 +68,7 @@ class _BetFormPageState extends State<BetFormPage> {
     final lastSport = widget.store.bets.isEmpty ? 'Soccer' : widget.store.bets.first.sport;
     final stake = b != null && b.stake > 0 ? b.stake : _settings.unit;
     _type = b?.type ?? BetType.single;
+    _market = b?.market ?? '';
     _selection = TextEditingController(text: b != null && !b.isParlay ? b.selection : '');
     _event = TextEditingController(text: b != null && !b.isParlay ? b.event : '');
     _stake = TextEditingController(text: stake > 0 ? _num(stake) : '');
@@ -185,7 +189,30 @@ class _BetFormPageState extends State<BetFormPage> {
       notes: _notes.text.trim(),
       created: widget.bet?.created ?? DateTime.now().toIso8601String(),
       legs: legs,
+      market: _parlay ? 'parlay' : (_market.isNotEmpty ? _market : marketOf(_selection.text)),
+      matchId: _parlay ? null : _source?.matchId,
+      leagueSlug: _parlay ? null : _source?.leagueSlug,
+      leagueName: _parlay ? null : _source?.leagueName,
+      kickoff: _parlay ? null : _source?.kickoff,
     );
+  }
+
+  /// Where the bet came from (the match it was picked from, if any).
+  Bet? get _source => widget.bet ?? widget.template;
+
+  Future<void> _chooseMarket() async {
+    final pick = await showMarketSheet(context,
+        event: _event.text, format: _settings.oddsFormat, initialMarket: _market.isEmpty ? null : _market);
+    if (pick == null) return;
+    setState(() {
+      _market = pick.market;
+      _selection.text = pick.selection;
+    });
+  }
+
+  Future<void> _chooseLegMarket(_Leg leg) async {
+    final pick = await showMarketSheet(context, event: leg.event.text, format: _settings.oddsFormat);
+    if (pick != null) setState(() => leg.selection.text = pick.selection);
   }
 
   Future<void> _save() async {
@@ -273,6 +300,19 @@ class _BetFormPageState extends State<BetFormPage> {
                   ),
                   validator: (v) => (v ?? '').trim().isEmpty ? 'Add what you bet on' : null,
                 ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ActionChip(
+                      avatar: const Icon(Icons.list_alt, size: 18),
+                      label: Text(_market.isEmpty || _market == 'other'
+                          ? 'Choose a market: handicap, overs, corners…'
+                          : 'Market: ${marketById(_market).label}'),
+                      onPressed: _chooseMarket,
+                    ),
+                  ),
+                ),
                 gap,
                 TextFormField(
                   controller: _event,
@@ -304,6 +344,7 @@ class _BetFormPageState extends State<BetFormPage> {
                     onRemove: _legs.length > 2 ? () => setState(() => _legs.removeAt(i).dispose()) : null,
                     onChanged: _refresh,
                     onStatus: _legStatusChanged,
+                    onMarket: () => _chooseLegMarket(_legs[i]),
                   ),
                 Padding(
                   padding: const EdgeInsets.only(left: 40),
@@ -662,6 +703,7 @@ class _LegCard extends StatelessWidget {
     required this.onRemove,
     required this.onChanged,
     required this.onStatus,
+    required this.onMarket,
   });
   final int index;
   final bool last;
@@ -673,6 +715,7 @@ class _LegCard extends StatelessWidget {
   final VoidCallback? onRemove;
   final VoidCallback onChanged;
   final VoidCallback onStatus;
+  final VoidCallback onMarket;
 
   @override
   Widget build(BuildContext context) {
@@ -709,6 +752,7 @@ class _LegCard extends StatelessWidget {
                     child: DropdownButton<String>(
                       value: sports.contains(leg.sport) ? leg.sport : 'Other',
                       isDense: true,
+                      isExpanded: true,
                       style: theme.textTheme.labelLarge,
                       items: [for (final sp in sports) DropdownMenuItem(value: sp, child: Text(sp))],
                       onChanged: (v) {
@@ -717,6 +761,12 @@ class _LegCard extends StatelessWidget {
                       },
                     ),
                   ),
+                ),
+                IconButton(
+                  tooltip: 'Choose a market',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.list_alt, size: 18),
+                  onPressed: onMarket,
                 ),
                 if (onRemove != null)
                   IconButton(
