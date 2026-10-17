@@ -8,6 +8,7 @@ import '../data/store.dart';
 import '../logic/stats.dart';
 import 'bet_form.dart';
 import 'format.dart';
+import 'matchboard_screen.dart';
 import 'matches_screen.dart';
 
 /// One match: score header, then tabs for odds, news, teams, line-ups, key
@@ -62,6 +63,14 @@ class _MatchPageState extends State<MatchPage> {
         appBar: AppBar(
           title: Text(m.league.name),
           actions: [
+            IconButton(
+              tooltip: 'Open in Matchboard',
+              icon: const Icon(Icons.space_dashboard_outlined),
+              onPressed: () async {
+                final board = await widget.store.openBoard(m);
+                if (context.mounted) await openBoard(context, store: widget.store, api: widget.api, board: board);
+              },
+            ),
             IconButton(
               tooltip: 'Refresh',
               onPressed: _loading ? null : () => _load(refresh: true),

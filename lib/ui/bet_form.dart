@@ -4,6 +4,7 @@ import '../data/models.dart';
 import '../data/store.dart';
 import '../logic/stats.dart';
 import 'format.dart';
+import 'themes.dart';
 import 'share_ui.dart';
 
 /// Opens the bet form: [bet] edits an existing bet, [template] pre-fills a
@@ -427,16 +428,14 @@ class _SlipHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
-    const fg = Colors.white;
+    final hero = HeroColors.of(context);
+    final fg = hero.onGradient;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: dark
-              ? const [Color(0xFF0E3B26), Color(0xFF1B5E3F)]
-              : const [Color(0xFF1D6B45), Color(0xFF2E9461)],
+          colors: hero.gradient,
         ),
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
       ),
@@ -446,7 +445,7 @@ class _SlipHeader extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              const BackButton(color: fg),
+              BackButton(color: fg),
               Expanded(
                 child: Text(title,
                     style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w700)),
@@ -459,7 +458,7 @@ class _SlipHeader extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
               child: Container(
                 padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(99)),
+                decoration: BoxDecoration(color: fg.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(99)),
                 child: Row(children: [
                   for (final t in BetType.values)
                     Expanded(
@@ -469,14 +468,14 @@ class _SlipHeader extends StatelessWidget {
                           duration: const Duration(milliseconds: 180),
                           padding: const EdgeInsets.symmetric(vertical: 9),
                           decoration: BoxDecoration(
-                            color: t == type ? Colors.white : Colors.transparent,
+                            color: t == type ? fg : Colors.transparent,
                             borderRadius: BorderRadius.circular(99),
                           ),
                           child: Text(t.label,
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontWeight: FontWeight.w700,
-                                color: t == type ? const Color(0xFF1D6B45) : fg,
+                                color: t == type ? hero.gradient.last : fg,
                               )),
                         ),
                       ),
@@ -499,8 +498,8 @@ class _SlipHeader extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(99)),
-                      child: Text(c, style: const TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w600)),
+                          color: fg.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(99)),
+                      child: Text(c, style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w600)),
                     ),
                 ]),
               ]),
@@ -580,6 +579,9 @@ class _Pill extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final c = color ?? cs.primary;
+    // Status colours are mid-tones that carry white; the theme's primary
+    // brings its own contrasting colour.
+    final on = color == null ? cs.onPrimary : Colors.white;
     return InkWell(
       borderRadius: BorderRadius.circular(99),
       onTap: onTap,
@@ -592,11 +594,11 @@ class _Pill extends StatelessWidget {
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           if (icon != null) ...[
-            Icon(icon, size: 15, color: selected ? Colors.white : cs.onSurfaceVariant),
+            Icon(icon, size: 15, color: selected ? on : cs.onSurfaceVariant),
             const SizedBox(width: 6),
           ],
           Text(label,
-              style: TextStyle(fontWeight: FontWeight.w600, color: selected ? Colors.white : cs.onSurfaceVariant)),
+              style: TextStyle(fontWeight: FontWeight.w600, color: selected ? on : cs.onSurfaceVariant)),
         ]),
       ),
     );
@@ -790,9 +792,10 @@ class _GradientButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF1D6B45), Color(0xFF2E9461)]),
+        gradient: LinearGradient(colors: [cs.primary, Color.lerp(cs.primary, cs.secondary, 0.6)!]),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Material(
@@ -803,17 +806,17 @@ class _GradientButton extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             child: Row(children: [
-              Text(label, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
+              Text(label, style: TextStyle(color: cs.onPrimary, fontSize: 17, fontWeight: FontWeight.w800)),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(sub ?? '',
                     textAlign: TextAlign.end,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w600)),
+                    style: TextStyle(color: cs.onPrimary.withValues(alpha: 0.9), fontWeight: FontWeight.w600)),
               ),
               const SizedBox(width: 6),
-              const Icon(Icons.arrow_forward, color: Colors.white),
+              Icon(Icons.arrow_forward, color: cs.onPrimary),
             ]),
           ),
         ),

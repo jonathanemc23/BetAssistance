@@ -1,6 +1,7 @@
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import 'board.dart';
 import 'models.dart';
 
 /// Schema migrations, applied in order. Entry N upgrades the schema from
@@ -56,6 +57,44 @@ final List<Future<void> Function(DatabaseExecutor db)> migrations = [
         status TEXT NOT NULL DEFAULT 'pending'
       )''');
     await db.execute('CREATE INDEX idx_bet_legs_bet ON bet_legs(bet_id)');
+  },
+  // 2 -> 3: Matchboard workspaces, their chat and their notes.
+  (db) async {
+    await db.execute('''
+      CREATE TABLE boards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        match_id TEXT NOT NULL UNIQUE,
+        league_slug TEXT NOT NULL,
+        league_name TEXT NOT NULL DEFAULT '',
+        home TEXT NOT NULL,
+        away TEXT NOT NULL,
+        home_logo TEXT,
+        away_logo TEXT,
+        kickoff TEXT NOT NULL,
+        created TEXT NOT NULL,
+        updated TEXT NOT NULL
+      )''');
+    await db.execute('''
+      CREATE TABLE board_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        board_id INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        text TEXT NOT NULL,
+        created TEXT NOT NULL
+      )''');
+    await db.execute('CREATE INDEX idx_board_messages_board ON board_messages(board_id)');
+    await db.execute('''
+      CREATE TABLE board_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        board_id INTEGER NOT NULL,
+        category TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'assistant',
+        pinned INTEGER NOT NULL DEFAULT 0,
+        created TEXT NOT NULL
+      )''');
+    await db.execute('CREATE INDEX idx_board_notes_board ON board_notes(board_id)');
   },
 ];
 
@@ -162,4 +201,48 @@ class AppDatabase {
               conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
+
+  // Matchboard
+  Future<List<Board>> boards() async => (await db.rawQuery('''
+        SELECT b.*,
+          (SELECT COUNT(*) FROM board_notes n WHERE n.board_id = b.id) AS note_count,
+          (SELECT n.title FROM board_notes n WHERE n.board_id = b.id ORDER BY n.id DESC LIMIT 1) AS last_note
+        FROM boards b ORDER BY b.updated DESC''')).map(Board.fromRow).toList();
+
+  /// The board for a match, created on first use.
+  Future<Board> boardFor(Board draft) async {
+    final rows = await db.query('boards', where: 'match_id = ?', whereArgs: [draft.matchId]);
+    if (rows.isNotEmpty) return Board.fromRow(rows.first);
+    final id = await db.insert('boards', draft.toRow());
+    return Board.fromRow({...draft.toRow(), 'id': id});
+  }
+
+  Future<void> touchBoard(int id, String now) =>
+      db.update('boards', {'updated': now}, where: 'id = ?', whereArgs: [id]);
+
+  /// Deletes a board the user chose to remove, with its chat and notes.
+  Future<void> deleteBoard(int id) => db.transaction((txn) async {
+        await txn.delete('board_messages', where: 'board_id = ?', whereArgs: [id]);
+        await txn.delete('board_notes', where: 'board_id = ?', whereArgs: [id]);
+        await txn.delete('boards', where: 'id = ?', whereArgs: [id]);
+      });
+
+  Future<List<BoardMessage>> messages(int boardId) async =>
+      (await db.query('board_messages', where: 'board_id = ?', whereArgs: [boardId], orderBy: 'id'))
+          .map(BoardMessage.fromRow)
+          .toList();
+
+  Future<int> addMessage(BoardMessage m) => db.insert('board_messages', m.toRow());
+
+  Future<List<BoardNote>> notes(int boardId) async => (await db.query('board_notes',
+          where: 'board_id = ?', whereArgs: [boardId], orderBy: 'pinned DESC, id DESC'))
+      .map(BoardNote.fromRow)
+      .toList();
+
+  Future<int> addNote(BoardNote n) => db.insert('board_notes', n.toRow());
+
+  Future<void> setNotePinned(int id, bool pinned) =>
+      db.update('board_notes', {'pinned': pinned ? 1 : 0}, where: 'id = ?', whereArgs: [id]);
+
+  Future<void> deleteNote(int id) => db.delete('board_notes', where: 'id = ?', whereArgs: [id]);
 }
