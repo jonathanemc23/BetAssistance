@@ -4,6 +4,7 @@ import 'package:bank_track/data/database.dart';
 import 'package:bank_track/data/models.dart';
 import 'package:bank_track/data/store.dart';
 import 'package:bank_track/main.dart';
+import 'package:bank_track/ui/match_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -183,7 +184,9 @@ void main() {
     expect(saved.legs.map((l) => l.selection), ['Arsenal to win', 'Lakers ML']);
     expect(saved.odds, closeTo(3.15, 1e-9));
 
-    // Matches.
+    // Matches. Let the "Bet logged" message time out first.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Matches'));
     for (var i = 0; i < 3; i++) {
       await tester.pump();
@@ -196,11 +199,25 @@ void main() {
     expect(find.text('LIVE'), findsOneWidget);
     await shot('matches');
 
-    await tester.tap(find.text('Arsenal'));
+    // A match opens its own page with tabs.
+    await tester.tap(find.text('Everton'));
+    await settle(tester);
+    expect(find.text('DraftKings'.toUpperCase()), findsOneWidget);
+    expect(find.text('BET 365'), findsOneWidget);
+    await shot('match_odds');
+    await openTab(tester, 'Teams');
+    expect(find.text('Form (latest first)'), findsWidgets);
+    await shot('match_teams');
+    await openTab(tester, 'News');
+    await shot('match_news');
+    await openTab(tester, 'Table');
+    expect(find.text('Manchester City'), findsWidgets);
+    await shot('match_table');
+    await tester.tap(find.text('Log a bet'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Log a bet on this match'));
+    expect(find.text('Everton vs Chelsea'), findsOneWidget);
+    await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Arsenal vs Chelsea'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
 
@@ -219,9 +236,78 @@ void main() {
     expect(find.text('Bankroll over time'), findsOneWidget);
     await shot('charts');
   });
+
+  testWidgets('finished match page: line-ups, key events and stats', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    if (shots) await tester.runAsync(loadFonts);
+    Future<void> shot(String name) async {
+      if (shots) await expectLater(find.byType(MatchPage), matchesGoldenFile('screenshots/$name.png'));
+    }
+
+    final store = (await tester.runAsync(seededStore))!;
+    final match = Match(
+      id: '401877960',
+      league: const League('col.1', 'Primera A'),
+      kickoff: DateTime.utc(2026, 10, 6),
+      home: const Team('Independiente Medellín', 'Medellín', null, '0'),
+      away: const Team('Independiente Santa Fe', 'Santa Fe', null, '1'),
+      state: MatchState.finished,
+      detail: 'FT',
+      venue: 'Metropolitano Ciudad de Itagüí',
+    );
+    await tester.pumpWidget(MaterialApp(
+      theme: BankTrackApp.theme(Brightness.light),
+      home: MatchPage(match: match, store: store, api: FixturesApi(client: _fixturesClient())),
+    ));
+    await settle(tester);
+    await openTab(tester, 'Line-ups');
+    expect(find.text('4-2-3-1'), findsOneWidget);
+    await shot('match_lineups');
+    await openTab(tester, 'Events');
+    expect(find.text('First Half begins.'), findsOneWidget);
+    await shot('match_events');
+    await openTab(tester, 'Stats');
+    expect(find.text('Possession'), findsOneWidget);
+    expect(find.text('59.9%'), findsOneWidget);
+    await shot('match_stats');
+    await openTab(tester, 'H2H');
+    await openTab(tester, 'Odds');
+    expect(find.text('DRAFTKINGS'), findsOneWidget);
+  });
 }
 
+/// Lets network futures complete, then settles the frame.
+Future<void> settle(WidgetTester tester) async {
+  for (var i = 0; i < 3; i++) {
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+  }
+  await tester.pumpAndSettle();
+}
+
+Future<void> openTab(WidgetTester tester, String name) async {
+  final tab = find.widgetWithText(Tab, name);
+  await tester.ensureVisible(tab);
+  await tester.pumpAndSettle();
+  await tester.tap(tab);
+  await tester.pumpAndSettle();
+}
+
+/// Match summaries: Everton vs Chelsea before kick-off, anything else a
+/// finished Colombian match with line-ups and key events.
+http.Response _summary(Uri url) => http.Response.bytes(
+      File(url.queryParameters['event'] == '401878771'
+              ? 'test/data/espn_summary_pre.json'
+              : 'test/data/espn_summary_col.json')
+          .readAsBytesSync(),
+      200,
+      headers: {'content-type': 'application/json; charset=utf-8'},
+    );
+
 http.Client _fixturesClient() => MockClient((req) async {
+  if (req.url.pathSegments.last == 'summary') return _summary(req.url);
   if (req.url.queryParameters['dates'] != '20261018') return http.Response(board([]), 200);
   return switch (req.url.pathSegments[req.url.pathSegments.length - 2]) {
     'eng.1' => http.Response(
@@ -230,16 +316,16 @@ http.Client _fixturesClient() => MockClient((req) async {
           '1',
           '2026-10-18T11:30:00Z',
           'Leeds United',
-          'Everton',
+          'Fulham',
           state: 'post',
           completed: true,
           detail: 'FT',
           hs: '0',
           as: '3',
         ),
-        espnEvent('2', '2026-10-18T14:00:00Z', 'Arsenal', 'Chelsea', state: 'in', detail: "67'", hs: '2', as: '1'),
+        espnEvent('2', '2026-10-18T14:00:00Z', 'Arsenal', 'Tottenham Hotspur', state: 'in', detail: "67'", hs: '2', as: '1'),
         espnEvent('3', '2026-10-18T16:30:00Z', 'AFC Bournemouth', 'Sunderland', odds: [2.1, 3.4, 3.6]),
-        espnEvent('4', '2026-10-18T19:00:00Z', 'Manchester City', 'Liverpool'),
+        espnEvent('401878771', '2026-10-18T19:00:00Z', 'Everton', 'Chelsea', odds: [3.0, 3.8, 2.2]),
       ]),
       200,
     ),
