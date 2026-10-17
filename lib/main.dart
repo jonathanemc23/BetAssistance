@@ -12,8 +12,9 @@ import 'ui/bank_screens.dart';
 import 'ui/bet_form.dart';
 import 'ui/bets_screen.dart';
 import 'ui/charts_screen.dart';
-import 'ui/format.dart';
+import 'ui/matchboard_screen.dart';
 import 'ui/matches_screen.dart';
+import 'ui/themes.dart';
 import 'ui/share_ui.dart';
 import 'ui/summary_screen.dart';
 
@@ -35,27 +36,20 @@ class BankTrackApp extends StatelessWidget {
   /// link opened while the app is running).
   final Stream<Uri>? links;
 
-  static ThemeData theme(Brightness b) => ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: BankColors.accent, brightness: b),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: BankColors.accent, width: 1.5),
-          ),
-        ),
-        cardTheme: const CardThemeData(elevation: 0),
-      );
+  /// The theme for a [appThemes] id, as the app builds it.
+  static ThemeData theme(String id) => themeById(id).data();
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'Bank Track',
-        debugShowCheckedModeBanner: false,
-        theme: theme(Brightness.light),
-        darkTheme: theme(Brightness.dark),
-        home: HomeShell(store: store, links: links, fixtures: fixtures ?? FixturesApi(), today: today),
+  Widget build(BuildContext context) => ListenableBuilder(
+        // Rebuilds only when the store notifies; the theme comes from it.
+        listenable: store,
+        builder: (context, child) => MaterialApp(
+          title: 'Bank Track',
+          debugShowCheckedModeBanner: false,
+          theme: theme(store.themeId),
+          home: child,
+        ),
+        child: HomeShell(store: store, links: links, fixtures: fixtures ?? FixturesApi(), today: today),
       );
 }
 
@@ -109,13 +103,13 @@ class _HomeShellState extends State<HomeShell> {
       listenable: store,
       builder: (context, _) => Scaffold(
         appBar: AppBar(
-          title: Text(switch (_tab) { 1 => 'Bet register', 2 => 'Matches', 3 => 'Charts', _ => 'Bank Track' },
+          title: Text(switch (_tab) { 1 => 'Bet register', 2 => 'Matches', 3 => 'Matchboard', 4 => 'Charts', _ => 'Bank Track' },
               style: const TextStyle(fontWeight: FontWeight.w700)),
           actions: [
             if (_tab == 1)
               IconButton(tooltip: 'Open a bet link', icon: const Icon(Icons.add_link), onPressed: _pasteLink),
             IconButton(
-              tooltip: 'Bankroll settings',
+              tooltip: 'Settings',
               icon: const Icon(Icons.tune),
               onPressed: () async {
                 final msg = await Navigator.push<String>(
@@ -135,6 +129,11 @@ class _HomeShellState extends State<HomeShell> {
           ),
           BetsScreen(store: store),
           if (_visited.contains(2)) MatchesScreen(store: store, api: widget.fixtures, today: widget.today) else const SizedBox(),
+          MatchboardScreen(
+            store: store,
+            api: widget.fixtures,
+            onBrowseMatches: () => setState(() => _visited.add(_tab = 2)),
+          ),
           ChartsScreen(store: store),
         ]),
         floatingActionButton: _tab == 1
@@ -151,6 +150,8 @@ class _HomeShellState extends State<HomeShell> {
             NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Summary'),
             NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Bets'),
             NavigationDestination(icon: Icon(Icons.sports_soccer_outlined), selectedIcon: Icon(Icons.sports_soccer), label: 'Matches'),
+            NavigationDestination(
+                icon: Icon(Icons.space_dashboard_outlined), selectedIcon: Icon(Icons.space_dashboard), label: 'Matchboard'),
             NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Charts'),
           ],
         ),

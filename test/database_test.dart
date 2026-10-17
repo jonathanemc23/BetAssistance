@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:bank_track/data/board.dart';
 import 'package:bank_track/data/database.dart';
 import 'package:bank_track/data/models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -156,5 +157,56 @@ void main() {
     expect(await check.getVersion(), 5);
     expect(await check.query('settings'), hasLength(1));
     await check.close();
+  });
+
+  test('upgrading from 0.5.0 (v2) keeps bets and settings and adds Matchboard', () async {
+    final old = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 2, onCreate: (db, _) async {
+          await migrations[0](db);
+          await migrations[1](db);
+        }));
+    await old.insert('bets', {
+      'selection': '2-leg parlay', 'sport': 'Soccer', 'date': '2026-10-01', 'stake': 10, 'odds': 3.0,
+      'status': 'pending', 'created': '2026-10-01T10:00:00', 'bet_type': 'parlay',
+    });
+    await old.insert('settings', {'key': 'pref.matches.country', 'value': 'col'});
+    await old.close();
+
+    final db = await AppDatabase.open(factory: factory, path: path);
+    expect(await db.db.getVersion(), schemaVersion);
+    expect((await db.bets()).single.type, BetType.parlay);
+    expect(await db.pref('matches.country'), 'col');
+    expect(await db.boards(), isEmpty);
+    await db.close();
+  });
+
+  test('a board keeps its chat and notes, one board per match', () async {
+    final db = await AppDatabase.open(factory: factory, path: path);
+    final draft = Board(
+      matchId: '401878771', leagueSlug: 'eng.1', leagueName: 'Premier League', home: 'Everton', away: 'Chelsea',
+      kickoff: DateTime.utc(2026, 10, 18, 19), created: '2026-10-17T10:00:00', updated: '2026-10-17T10:00:00',
+    );
+    final b = await db.boardFor(draft);
+    expect((await db.boardFor(draft)).id, b.id); // opening it again reuses it
+    await db.addMessage(BoardMessage(boardId: b.id!, role: ChatRole.user, text: 'Who wins?', created: 'x'));
+    await db.addMessage(BoardMessage(boardId: b.id!, role: ChatRole.assistant, text: 'Chelsea', created: 'x'));
+    final first = await db.addNote(BoardNote(boardId: b.id!, category: 'Summary', title: 'Match summary', body: 'Chelsea', created: '2026-10-17T10:01:00'));
+    await db.addNote(BoardNote(boardId: b.id!, category: 'My notes', title: 'Keeper back', body: 'Keeper back', source: 'user', created: '2026-10-17T10:02:00'));
+    await db.setNotePinned(first, true);
+
+    final notes = await db.notes(b.id!);
+    expect(notes.first.title, 'Match summary'); // pinned first
+    expect(notes.first.pinned, isTrue);
+    expect((await db.messages(b.id!)).map((m) => m.role), [ChatRole.user, ChatRole.assistant]);
+    final listed = (await db.boards()).single;
+    expect(listed.noteCount, 2);
+    expect(listed.lastNote, 'Keeper back');
+    expect(listed.kickoff, DateTime.utc(2026, 10, 18, 19));
+
+    await db.deleteBoard(b.id!);
+    expect(await db.boards(), isEmpty);
+    expect(await db.notes(b.id!), isEmpty);
+    expect(await db.messages(b.id!), isEmpty);
+    await db.close();
   });
 }

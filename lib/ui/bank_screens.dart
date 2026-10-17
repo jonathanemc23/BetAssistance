@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../data/store.dart';
 import 'format.dart';
+import 'themes.dart';
 
 /// Bottom sheet to record a deposit or withdrawal.
 Future<String?> showTxSheet(BuildContext context, BankStore store, TxKind kind) {
@@ -210,8 +211,20 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     const gap = SizedBox(height: 14);
     return Scaffold(
-      appBar: AppBar(title: const Text('Bankroll settings')),
+      appBar: AppBar(title: const Text('Settings')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
+        Text('Theme', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 10),
+        ListenableBuilder(
+          listenable: widget.store,
+          builder: (context, _) => ThemePicker(
+            selected: widget.store.themeId,
+            onSelected: widget.store.setTheme,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text('Bankroll', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 10),
         TextField(
           controller: _start,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -259,6 +272,87 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 24),
         FilledButton(onPressed: _save, child: const Text('Save settings')),
       ]),
+    );
+  }
+}
+
+/// Two-by-two grid of theme cards; the choice applies straight away.
+class ThemePicker extends StatelessWidget {
+  const ThemePicker({super.key, required this.selected, required this.onSelected});
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 10,
+      crossAxisSpacing: 10,
+      childAspectRatio: 1.25,
+      children: [for (final t in appThemes) _ThemeCard(theme: t, selected: t.id == selected, onTap: () => onSelected(t.id))],
+    );
+  }
+}
+
+class _ThemeCard extends StatelessWidget {
+  const _ThemeCard({required this.theme, required this.selected, required this.onTap});
+  final AppTheme theme;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    final ring = Theme.of(context).colorScheme.primary;
+    return Material(
+      color: t.background,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: selected ? ring : t.outlineVariant, width: selected ? 2.5 : 1),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              height: 34,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: t.hero),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              alignment: Alignment.centerLeft,
+              child: Row(children: [
+                for (final c in [t.primary, t.secondary, t.tertiary])
+                  Container(
+                    width: 14,
+                    height: 14,
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+                  ),
+              ]),
+            ),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: Text(t.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: t.onSurface, fontWeight: FontWeight.w800, fontSize: 15)),
+              ),
+              if (selected) Icon(Icons.check_circle, color: t.primary, size: 20),
+            ]),
+            Text(t.description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: t.onSurfaceVariant, fontSize: 11.5)),
+          ]),
+        ),
+      ),
     );
   }
 }

@@ -213,6 +213,29 @@ void main() {
     await openTab(tester, 'Table');
     expect(find.text('Manchester City'), findsWidgets);
     await shot('match_table');
+
+    // Matchboard: open the match's workspace, ask, and the answer lands on the board.
+    await tester.tap(find.byTooltip('Open in Matchboard'));
+    await settle(tester);
+    expect(find.text('Ask about Everton vs Chelsea'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'How are both teams in form?');
+    await tester.tap(find.byTooltip('Send'));
+    await settle(tester);
+    await tester.pump(const Duration(seconds: 5)); // let the "Saved to the board" message go
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Who is the favourite?'));
+    await settle(tester);
+    expect(find.textContaining('Market favourite: Chelsea'), findsWidgets);
+    await shot('matchboard_chat');
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Board (2)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Match summary'), findsOneWidget);
+    expect(find.text('Recent form'), findsOneWidget);
+    await shot('matchboard_board');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Log a bet'));
     await tester.pumpAndSettle();
     expect(find.text('Everton vs Chelsea'), findsOneWidget);
@@ -227,6 +250,34 @@ void main() {
     expect(find.text('AFC Bournemouth vs Sunderland'), findsOneWidget);
     expect(find.text('AFC Bournemouth to win'), findsOneWidget);
     expect(find.text('2.10'), findsWidgets);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // The Matchboard tab lists the workspace.
+    await tester.tap(find.text('Matchboard'));
+    await settle(tester);
+    expect(find.text('Everton vs Chelsea'), findsOneWidget);
+    expect(find.text('2'), findsWidgets);
+    await shot('matchboard');
+
+    // Settings: pick a theme; it applies straight away and is saved.
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Olive & Gold'), findsOneWidget);
+    await shot('settings_themes');
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Ocean'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(store.themeId, 'ocean');
+    expect(await tester.runAsync(() => store.pref('app.theme')), 'ocean');
+    await shot('settings_ocean');
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Olive & Gold'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
 
@@ -258,7 +309,7 @@ void main() {
       venue: 'Metropolitano Ciudad de Itagüí',
     );
     await tester.pumpWidget(MaterialApp(
-      theme: BankTrackApp.theme(Brightness.light),
+      theme: BankTrackApp.theme('olive'),
       home: MatchPage(match: match, store: store, api: FixturesApi(client: _fixturesClient())),
     ));
     await settle(tester);
@@ -280,7 +331,7 @@ void main() {
 
 /// Lets network futures complete, then settles the frame.
 Future<void> settle(WidgetTester tester) async {
-  for (var i = 0; i < 3; i++) {
+  for (var i = 0; i < 8; i++) {
     await tester.pump();
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
   }
