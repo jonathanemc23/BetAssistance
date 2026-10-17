@@ -10,14 +10,18 @@ import 'bet_form.dart';
 import 'format.dart';
 import 'matchboard_screen.dart';
 import 'matches_screen.dart';
+import 'parlay_screens.dart';
 
 /// One match: score header, then tabs for odds, news, teams, line-ups, key
 /// events, stats, head-to-head and the league table (ESPN summary feed).
 class MatchPage extends StatefulWidget {
-  const MatchPage({super.key, required this.match, required this.store, required this.api});
+  const MatchPage({super.key, required this.match, required this.store, required this.api, this.onPick});
   final Match match;
   final BankStore store;
   final FixturesApi api;
+
+  /// Set when picking for a parlay: a tapped price closes the page and goes here.
+  final void Function(Match match, String selection, double odds)? onPick;
 
   @override
   State<MatchPage> createState() => _MatchPageState();
@@ -51,8 +55,15 @@ class _MatchPageState extends State<MatchPage> {
     }
   }
 
-  void _pick(String selection, double odds) => openBetForm(context, widget.store,
-      template: widget.match.toBetTemplate(selection: selection, odds: odds));
+  void _pick(String selection, double odds) {
+    final m = widget.match;
+    if (widget.onPick != null) {
+      Navigator.pop(context);
+      widget.onPick!(m, selection, odds);
+      return;
+    }
+    pickSelection(context, store: widget.store, api: widget.api, match: m, selection: selection, odds: odds);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -275,7 +286,7 @@ class _OddsTab extends StatelessWidget {
     final theme = Theme.of(context);
     final m = match;
     return _list([
-      Text('Tap a price to log the bet with it filled in.', style: theme.textTheme.bodySmall),
+      Text('Tap a price to log it as a bet or add it to a parlay.', style: theme.textTheme.bodySmall),
       const SizedBox(height: 10),
       for (final o in books)
         _Section(

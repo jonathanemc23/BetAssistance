@@ -5,6 +5,7 @@ import 'board.dart';
 import 'database.dart';
 import 'fixtures.dart';
 import 'models.dart';
+import 'parlay.dart';
 
 /// In-memory view of the database that the screens listen to. Every change
 /// is written to SQLite first, then the lists are reloaded from it.
@@ -16,6 +17,7 @@ class BankStore extends ChangeNotifier {
   List<BankTx> txs = [];
   Settings settings = Settings.defaults();
   List<Board> boards = [];
+  List<Parlay> parlays = [];
 
   /// Selected look, one of [appThemes] ids. Saved as a preference.
   String themeId = 'olive';
@@ -28,6 +30,7 @@ class BankStore extends ChangeNotifier {
     bets = await _db.bets();
     txs = await _db.transactions();
     boards = await _db.boards();
+    parlays = await _db.parlays();
     themeId = await _db.pref('app.theme') ?? 'olive';
     loaded = true;
     notifyListeners();
@@ -108,6 +111,53 @@ class BankStore extends ChangeNotifier {
   Future<void> _boardChanged(Board b) async {
     await _db.touchBoard(b.id!, _now());
     boards = await _db.boards();
+    notifyListeners();
+  }
+
+  // Parlay builder
+  Parlay? parlayById(int? id) => parlays.where((p) => p.id == id).firstOrNull;
+
+  /// The open parlay worked on most recently, where new picks go by default.
+  Parlay? get currentParlay => parlays.where((p) => p.isOpen).firstOrNull;
+
+  Future<Parlay> newParlay({List<ParlayLeg> legs = const []}) async {
+    var n = parlays.length + 1;
+    while (parlays.any((p) => p.name == 'Parlay $n')) {
+      n++;
+    }
+    final now = _now();
+    return saveParlay(Parlay(name: 'Parlay $n', legs: legs, created: now, updated: now));
+  }
+
+  Future<Parlay> saveParlay(Parlay p) async {
+    final id = await _db.saveParlay(p.copyWith(updated: _now()));
+    parlays = await _db.parlays();
+    notifyListeners();
+    return parlayById(id)!;
+  }
+
+  Future<Parlay> addLeg(Parlay p, ParlayLeg leg) => saveParlay(p.copyWith(legs: [...p.legs, leg]));
+
+  Future<Parlay> removeLeg(Parlay p, int index) =>
+      saveParlay(p.copyWith(legs: [...p.legs]..removeAt(index), status: BetStatus.pending));
+
+  /// Sets one leg's result; the parlay's result follows from its legs.
+  Future<Parlay> setLegStatus(Parlay p, int index, BetStatus status) {
+    final legs = [...p.legs]..[index] = p.legs[index].copyWith(status: status);
+    return saveParlay(p.copyWith(legs: legs, status: parlayStatus([for (final l in legs) l.asBetLeg()])));
+  }
+
+  /// Sets the whole parlay's result. Won marks open legs won as well.
+  Future<Parlay> setParlayStatus(Parlay p, BetStatus status) => saveParlay(p.copyWith(
+        status: status,
+        legs: status == BetStatus.won
+            ? [for (final l in p.legs) l.status == BetStatus.pending ? l.copyWith(status: BetStatus.won) : l]
+            : null,
+      ));
+
+  Future<void> deleteParlay(Parlay p) async {
+    if (p.id != null) await _db.deleteParlay(p.id!);
+    parlays = await _db.parlays();
     notifyListeners();
   }
 }

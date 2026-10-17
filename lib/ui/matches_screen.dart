@@ -5,14 +5,18 @@ import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/store.dart';
 import '../logic/stats.dart';
-import 'bet_form.dart';
 import 'match_page.dart';
+import 'parlay_screens.dart';
 
 /// Matches tab: football fixtures for a country on a chosen day.
 class MatchesScreen extends StatefulWidget {
-  const MatchesScreen({super.key, required this.store, required this.api, this.today});
+  const MatchesScreen({super.key, required this.store, required this.api, this.today, this.onPick});
   final BankStore store;
   final FixturesApi api;
+
+  /// Set when picking a selection for a parlay: tapping a price returns it
+  /// here instead of offering to log it.
+  final void Function(Match match, String selection, double odds)? onPick;
 
   /// Overrides "today" in tests.
   final DateTime? today;
@@ -116,15 +120,14 @@ class _MatchesScreenState extends State<MatchesScreen> {
   }
 
   void _openMatch(Match m) => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => MatchPage(match: m, store: widget.store, api: widget.api)),
+        MaterialPageRoute<void>(
+            builder: (_) => MatchPage(match: m, store: widget.store, api: widget.api, onPick: widget.onPick)),
       );
 
-  /// Tapping a price opens the form with that pick and price filled in.
-  void _pick(Match m, String selection, double odds) => openBetForm(
-    context,
-    widget.store,
-    template: m.toBetTemplate(selection: selection, odds: odds),
-  );
+  /// Tapping a price logs it as a bet or adds it to a parlay.
+  void _pick(Match m, String selection, double odds) => widget.onPick != null
+      ? widget.onPick!(m, selection, odds)
+      : pickSelection(context, store: widget.store, api: widget.api, match: m, selection: selection, odds: odds);
 
   @override
   Widget build(BuildContext context) {

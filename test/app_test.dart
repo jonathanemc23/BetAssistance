@@ -187,6 +187,11 @@ void main() {
     // Matches. Let the "Bet logged" message time out first.
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
+    // Matches lives in the side menu; the bottom bar keeps four tabs.
+    expect(find.byType(NavigationDestination), findsNWidgets(4));
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    await shot('drawer');
     await tester.tap(find.text('Matches'));
     for (var i = 0; i < 3; i++) {
       await tester.pump();
@@ -244,8 +249,10 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    // Tapping a price pre-fills the pick and the odds.
+    // Tapping a price offers a single bet or a parlay; the single pre-fills the form.
     await tester.tap(find.text('2.10'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Log as a single bet'));
     await tester.pumpAndSettle();
     expect(find.text('AFC Bournemouth vs Sunderland'), findsOneWidget);
     expect(find.text('AFC Bournemouth to win'), findsOneWidget);
@@ -253,12 +260,86 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    // The Matchboard tab lists the workspace.
+    // Two picks go into a new parlay.
+    await tester.tap(find.text('2.10'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start a new parlay'));
+    await settle(tester);
+    expect(find.text('Added to Parlay 1 · 1 pick'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2.20'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add to Parlay 1'));
+    await settle(tester);
+    expect(store.parlays.single.legs.map((l) => l.selection), ['AFC Bournemouth to win', 'Chelsea to win']);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Bet Tools: Matchboard and the parlay builder.
+    await tester.tap(find.text('Bet Tools'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 open'), findsOneWidget);
+    await shot('bet_tools');
     await tester.tap(find.text('Matchboard'));
     await settle(tester);
     expect(find.text('Everton vs Chelsea'), findsOneWidget);
-    expect(find.text('2'), findsWidgets);
     await shot('matchboard');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Parlay builder'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Parlay 1'));
+    await tester.pumpAndSettle();
+    // A match that isn't listed, typed in.
+    await tester.tap(find.text('Other match'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Match'), 'Millonarios vs Nacional');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Selection'), 'Millonarios to win');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Odds'), '2.00');
+    await tester.tap(find.text('Add pick'));
+    await settle(tester);
+    await tester.runAsync(() async {
+      await tester.enterText(find.widgetWithText(TextField, 'Stake'), '10');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    final parlay = store.parlays.single;
+    expect(parlay.legs.length, 3);
+    expect(parlay.odds, closeTo(2.1 * 2.2 * 2.0, 1e-9));
+    expect(find.text('\$92.40'), findsOneWidget);
+    await shot('parlay');
+
+    final check = find.text('Check parlay');
+    await tester.ensureVisible(check);
+    await tester.pumpAndSettle();
+    await tester.tap(check);
+    await settle(tester);
+    expect(store.parlays.single.check, isNotNull);
+    expect(find.text('Price only'), findsWidgets);
+    expect(find.textContaining('Weakest leg'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Check again'), 200, scrollable: find.descendant(of: find.byKey(const Key('parlay-page')), matching: find.byType(Scrollable)).first);
+    await tester.pumpAndSettle();
+    await shot('parlay_check');
+
+    final result = find.text('Won');
+    await tester.scrollUntilVisible(result, 200, scrollable: find.descendant(of: find.byKey(const Key('parlay-page')), matching: find.byType(Scrollable)).first);
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(result);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(store.parlays.single.status, BetStatus.won);
+    expect(store.parlays.single.legs.every((l) => l.status == BetStatus.won), isTrue);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await shot('parlays');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     // Settings: pick a theme; it applies straight away and is saved.
     await tester.tap(find.byTooltip('Settings'));

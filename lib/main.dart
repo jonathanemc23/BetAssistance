@@ -14,9 +14,11 @@ import 'ui/bets_screen.dart';
 import 'ui/charts_screen.dart';
 import 'ui/matchboard_screen.dart';
 import 'ui/matches_screen.dart';
+import 'ui/parlay_screens.dart';
 import 'ui/themes.dart';
 import 'ui/share_ui.dart';
 import 'ui/summary_screen.dart';
+import 'ui/tools_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,7 +67,6 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
-  final _visited = <int>{0}; // tabs are built on first visit (Matches loads from the network)
   StreamSubscription<Uri>? _linkSub;
 
   BankStore get store => widget.store;
@@ -92,6 +93,54 @@ class _HomeShellState extends State<HomeShell> {
     openBetForm(context, store, template: bet);
   }
 
+  void _push(Widget Function(BuildContext) page) =>
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: page));
+
+  void _openMatches() => _push((_) => Scaffold(
+        appBar: AppBar(title: const Text('Matches')),
+        body: MatchesScreen(store: store, api: widget.fixtures, today: widget.today),
+      ));
+
+  Future<void> _openSettings() async {
+    final msg = await Navigator.push<String>(context, MaterialPageRoute(builder: (_) => SettingsPage(store: store)));
+    if (msg != null && mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Widget _drawer(BuildContext context) {
+    final theme = Theme.of(context);
+    void go(VoidCallback f) {
+      Navigator.pop(context);
+      f();
+    }
+
+    return NavigationDrawer(
+      selectedIndex: null,
+      onDestinationSelected: (i) => go(switch (i) {
+        0 => _openMatches,
+        1 => () => _push((_) => Scaffold(
+              appBar: AppBar(title: const Text('Matchboard')),
+              body: MatchboardScreen(store: store, api: widget.fixtures, onBrowseMatches: _openMatches),
+            )),
+        2 => () => _push((_) => ParlaysPage(store: store, api: widget.fixtures)),
+        _ => _openSettings,
+      }),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 20, 16, 12),
+          child: Text('Bank Track', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+        ),
+        const NavigationDrawerDestination(
+            icon: Icon(Icons.sports_soccer_outlined), label: Text('Matches')),
+        const NavigationDrawerDestination(
+            icon: Icon(Icons.space_dashboard_outlined), label: Text('Matchboard')),
+        const NavigationDrawerDestination(
+            icon: Icon(Icons.account_tree_outlined), label: Text('Parlay builder')),
+        const Padding(padding: EdgeInsets.symmetric(horizontal: 28, vertical: 8), child: Divider()),
+        const NavigationDrawerDestination(icon: Icon(Icons.tune), label: Text('Settings')),
+      ],
+    );
+  }
+
   Future<void> _pasteLink() async {
     final bet = await showPasteLink(context);
     if (bet != null && mounted) await openBetForm(context, store, template: bet);
@@ -102,38 +151,24 @@ class _HomeShellState extends State<HomeShell> {
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) => Scaffold(
+        drawer: _drawer(context),
         appBar: AppBar(
-          title: Text(switch (_tab) { 1 => 'Bet register', 2 => 'Matches', 3 => 'Matchboard', 4 => 'Charts', _ => 'Bank Track' },
+          title: Text(switch (_tab) { 1 => 'Bet register', 2 => 'Bet Tools', 3 => 'Charts', _ => 'Bank Track' },
               style: const TextStyle(fontWeight: FontWeight.w700)),
           actions: [
             if (_tab == 1)
               IconButton(tooltip: 'Open a bet link', icon: const Icon(Icons.add_link), onPressed: _pasteLink),
-            IconButton(
-              tooltip: 'Settings',
-              icon: const Icon(Icons.tune),
-              onPressed: () async {
-                final msg = await Navigator.push<String>(
-                    context, MaterialPageRoute(builder: (_) => SettingsPage(store: store)));
-                if (msg != null && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-                }
-              },
-            ),
+            IconButton(tooltip: 'Settings', icon: const Icon(Icons.tune), onPressed: _openSettings),
           ],
         ),
         body: IndexedStack(index: _tab, children: [
           SummaryScreen(
             store: store,
             onLogBet: () => openBetForm(context, store),
-            onOpenBets: () => setState(() => _visited.add(_tab = 1)),
+            onOpenBets: () => setState(() => _tab = 1),
           ),
           BetsScreen(store: store),
-          if (_visited.contains(2)) MatchesScreen(store: store, api: widget.fixtures, today: widget.today) else const SizedBox(),
-          MatchboardScreen(
-            store: store,
-            api: widget.fixtures,
-            onBrowseMatches: () => setState(() => _visited.add(_tab = 2)),
-          ),
+          BetToolsScreen(store: store, api: widget.fixtures, onOpenMatches: _openMatches),
           ChartsScreen(store: store),
         ]),
         floatingActionButton: _tab == 1
@@ -145,13 +180,12 @@ class _HomeShellState extends State<HomeShell> {
             : null,
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
-          onDestinationSelected: (i) => setState(() => _visited.add(_tab = i)),
+          onDestinationSelected: (i) => setState(() => _tab = i),
           destinations: const [
             NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Summary'),
             NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Bets'),
-            NavigationDestination(icon: Icon(Icons.sports_soccer_outlined), selectedIcon: Icon(Icons.sports_soccer), label: 'Matches'),
             NavigationDestination(
-                icon: Icon(Icons.space_dashboard_outlined), selectedIcon: Icon(Icons.space_dashboard), label: 'Matchboard'),
+                icon: Icon(Icons.handyman_outlined), selectedIcon: Icon(Icons.handyman), label: 'Bet Tools'),
             NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Charts'),
           ],
         ),
