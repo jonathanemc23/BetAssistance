@@ -11,7 +11,8 @@ import '../logic/stats.dart';
 import 'match_page.dart';
 
 /// Where the money is going on one match, read from how the prices moved.
-/// Bookmakers don't publish bet counts or stakes, so this never shows them.
+/// Bookmakers don't publish bet counts or stakes, so this never shows them;
+/// a shortening price is the visible trace of money coming in.
 class MoneyMovementView extends StatefulWidget {
   const MoneyMovementView({super.key, required this.match, required this.details, required this.store});
   final Match match;
@@ -57,26 +58,6 @@ class _MoneyMovementViewState extends State<MoneyMovementView> {
       key: const Key('money-movement'),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
       children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(16)),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline, color: cs.onSecondaryContainer),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  "Bookmakers don't publish how many people bet on each side or how much, and no free source shares "
-                  'those numbers, so this tool never shows them. What it shows is the price: when money comes in on a '
-                  'side, bookmakers shorten its odds and its chance goes up.',
-                  style: TextStyle(color: cs.onSecondaryContainer),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
         if (move == null)
           _Verdict(
             icon: Icons.hourglass_empty,

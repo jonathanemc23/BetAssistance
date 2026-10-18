@@ -71,7 +71,7 @@ class DataParlayChecker implements ParlayChecker {
     if (leg.odds >= 3) lines.add('Long shot: this leg carries most of the risk.');
     final match = leg.toMatch();
     if (match == null) {
-      lines.add('Added by hand, so only the price is checked.');
+      lines.add("This match isn't in the fixtures the app follows, so only the price is checked.");
       return (LegCheck(selection: leg.selection, verdict: 'Price only', tone: LegTone.neutral, lines: lines), null);
     }
     if (leg.kickoff != null && leg.kickoff!.isBefore(now.toUtc())) {

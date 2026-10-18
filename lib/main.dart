@@ -67,6 +67,9 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
+
+  /// Matches loads the first time its tab is opened, then stays loaded.
+  bool _matchesShown = false;
   StreamSubscription<Uri>? _linkSub;
 
   BankStore get store => widget.store;
@@ -96,9 +99,16 @@ class _HomeShellState extends State<HomeShell> {
   void _push(Widget Function(BuildContext) page) =>
       Navigator.of(context).push(MaterialPageRoute<void>(builder: page));
 
-  void _openMatches() => _push((_) => Scaffold(
-        appBar: AppBar(title: const Text('Matches')),
-        body: MatchesTabs(store: store, api: widget.fixtures, today: widget.today),
+  /// Matches is a bottom tab; pages opened on top close to show it.
+  void _openMatches() {
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    setState(() => _tab = 2);
+    _matchesShown = true;
+  }
+
+  void _openTools() => _push((_) => Scaffold(
+        appBar: AppBar(title: const Text('Bet Tools')),
+        body: BetToolsScreen(store: store, api: widget.fixtures, onOpenMatches: _openMatches),
       ));
 
   Future<void> _openSettings() async {
@@ -115,7 +125,7 @@ class _HomeShellState extends State<HomeShell> {
     return NavigationDrawer(
       selectedIndex: null,
       onDestinationSelected: (i) => go(switch (i) {
-        0 => _openMatches,
+        0 => _openTools,
         1 => () => _push((_) => Scaffold(
               appBar: AppBar(title: const Text('Matchboard')),
               body: MatchboardScreen(store: store, api: widget.fixtures, onBrowseMatches: _openMatches),
@@ -128,8 +138,7 @@ class _HomeShellState extends State<HomeShell> {
           padding: const EdgeInsets.fromLTRB(28, 20, 16, 12),
           child: const BrandTitle(size: 36),
         ),
-        const NavigationDrawerDestination(
-            icon: Icon(Icons.sports_soccer_outlined), label: Text('Matches')),
+        const NavigationDrawerDestination(icon: Icon(Icons.handyman_outlined), label: Text('Bet Tools')),
         const NavigationDrawerDestination(
             icon: Icon(Icons.space_dashboard_outlined), label: Text('Matchboard')),
         const NavigationDrawerDestination(
@@ -154,7 +163,7 @@ class _HomeShellState extends State<HomeShell> {
         appBar: AppBar(
           title: _tab == 0
               ? const BrandTitle()
-              : Text(switch (_tab) { 1 => 'Bet register', 2 => 'Bet Tools', _ => 'Charts' },
+              : Text(switch (_tab) { 1 => 'Bet register', 2 => 'Matches', _ => 'Charts' },
                   style: const TextStyle(fontWeight: FontWeight.w700)),
           actions: [
             if (_tab == 1)
@@ -169,7 +178,10 @@ class _HomeShellState extends State<HomeShell> {
             onOpenBets: () => setState(() => _tab = 1),
           ),
           BetsScreen(store: store, api: widget.fixtures),
-          BetToolsScreen(store: store, api: widget.fixtures, onOpenMatches: _openMatches),
+          if (_tab == 2 || _matchesShown)
+            MatchesTabs(store: store, api: widget.fixtures, today: widget.today)
+          else
+            const SizedBox.shrink(),
           ChartsScreen(store: store),
         ]),
         floatingActionButton: _tab == 1
@@ -181,12 +193,15 @@ class _HomeShellState extends State<HomeShell> {
             : null,
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
-          onDestinationSelected: (i) => setState(() => _tab = i),
+          onDestinationSelected: (i) => setState(() {
+            _tab = i;
+            if (i == 2) _matchesShown = true;
+          }),
           destinations: const [
             NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Summary'),
             NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Bets'),
             NavigationDestination(
-                icon: Icon(Icons.handyman_outlined), selectedIcon: Icon(Icons.handyman), label: 'Bet Tools'),
+                icon: Icon(Icons.sports_soccer_outlined), selectedIcon: Icon(Icons.sports_soccer), label: 'Matches'),
             NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Charts'),
           ],
         ),

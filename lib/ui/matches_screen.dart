@@ -66,7 +66,10 @@ class _LiveMatchesState extends State<LiveMatches> {
   void initState() {
     super.initState();
     _load();
-    _timer = Timer.periodic(const Duration(seconds: 60), (_) => _load(refresh: true));
+    // Refresh while on screen; a hidden bottom tab has tickers off.
+    _timer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (mounted && TickerMode.valuesOf(context).enabled) _load(refresh: true);
+    });
   }
 
   @override
@@ -675,7 +678,10 @@ class _FavoriteMatchesState extends State<FavoriteMatches> {
     super.initState();
     widget.store.addListener(_storeChanged);
     _load();
-    _timer = Timer.periodic(const Duration(seconds: 60), (_) => _load(refresh: true));
+    // Refresh while on screen; a hidden bottom tab has tickers off.
+    _timer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (mounted && TickerMode.valuesOf(context).enabled) _load(refresh: true);
+    });
   }
 
   @override
@@ -908,6 +914,23 @@ class _CountryPicker extends StatefulWidget {
 class _CountryPickerState extends State<_CountryPicker> {
   String _q = '';
 
+  /// Where the list was when a country was last picked, so it reopens there.
+  static double? _lastOffset;
+  static const _rowHeight = 72.0;
+  late final ScrollController _scroll = ScrollController(
+    initialScrollOffset:
+        _lastOffset ??
+        // First time: open with the selected country in view.
+        (countries.indexWhere((c) => c.code == widget.selected?.code) * _rowHeight - _rowHeight * 2).clamp(0, 1e9),
+  );
+
+  @override
+  void dispose() {
+    if (_q.isEmpty && _scroll.hasClients) _lastOffset = _scroll.offset;
+    _scroll.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final list = countries.where((c) => c.name.toLowerCase().contains(_q.toLowerCase())).toList();
@@ -919,11 +942,22 @@ class _CountryPickerState extends State<_CountryPicker> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: TextField(
               decoration: const InputDecoration(hintText: 'Search country', prefixIcon: Icon(Icons.search)),
-              onChanged: (v) => setState(() => _q = v),
+              onChanged: (v) {
+                if (_q.isEmpty && _scroll.hasClients) _lastOffset = _scroll.offset;
+                setState(() => _q = v);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!_scroll.hasClients) return;
+                  final to = v.isEmpty ? (_lastOffset ?? 0) : 0.0;
+                  _scroll.jumpTo(to.clamp(0, _scroll.position.maxScrollExtent));
+                });
+              },
             ),
           ),
           Expanded(
             child: ListView.builder(
+              key: const Key('country-list'),
+              controller: _scroll,
+              itemExtent: _rowHeight,
               itemCount: list.length,
               itemBuilder: (_, i) {
                 final c = list[i];

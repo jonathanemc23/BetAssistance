@@ -6,6 +6,7 @@ import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/parlay.dart';
 import '../data/store.dart';
+import '../logic/leg_linker.dart';
 import '../logic/parlay_check.dart';
 import '../logic/stats.dart';
 import 'bet_form.dart';
@@ -264,14 +265,19 @@ class _ParlayPageState extends State<ParlayPage> {
       showDragHandle: true,
       builder: (_) => _ExternalLegSheet(format: store.settings.oddsFormat),
     );
-    if (leg != null) await store.addLeg(_parlay ?? p, leg);
+    if (leg == null) return;
+    final linked = (await linkLegs(widget.api, [leg])).single;
+    await store.addLeg(_parlay ?? p, linked);
   }
 
   Future<void> _check(Parlay p) async {
     setState(() => _checking = true);
     try {
+      // Picks typed in or read from a slip are matched to real fixtures first.
+      final legs = await linkLegs(widget.api, p.legs);
+      if (!identical(legs, p.legs)) p = p.copyWith(legs: legs);
       final c = await _checker.check(p);
-      await store.saveParlay((_parlay ?? p).copyWith(check: c));
+      await store.saveParlay((_parlay ?? p).copyWith(legs: legs, check: c));
     } finally {
       if (mounted) setState(() => _checking = false);
     }
