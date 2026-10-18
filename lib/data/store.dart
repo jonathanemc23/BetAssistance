@@ -100,16 +100,8 @@ class BankStore extends ChangeNotifier {
     await _boardChanged(b);
   }
 
-  Future<void> addNote(
-    Board b, {
-    required String category,
-    required String title,
-    required String body,
-    String source = 'assistant',
-  }) async {
-    await _db.addNote(
-      BoardNote(boardId: b.id!, category: category, title: title, body: body, source: source, created: _now()),
-    );
+  Future<void> addNote(Board b, {required String category, required String title, required String body, String source = 'assistant'}) async {
+    await _db.addNote(BoardNote(boardId: b.id!, category: category, title: title, body: body, source: source, created: _now()));
     await _boardChanged(b);
   }
 
@@ -160,14 +152,12 @@ class BankStore extends ChangeNotifier {
   }
 
   /// Sets the whole parlay's result. Won marks open legs won as well.
-  Future<Parlay> setParlayStatus(Parlay p, BetStatus status) => saveParlay(
-    p.copyWith(
-      status: status,
-      legs: status == BetStatus.won
-          ? [for (final l in p.legs) l.status == BetStatus.pending ? l.copyWith(status: BetStatus.won) : l]
-          : null,
-    ),
-  );
+  Future<Parlay> setParlayStatus(Parlay p, BetStatus status) => saveParlay(p.copyWith(
+        status: status,
+        legs: status == BetStatus.won
+            ? [for (final l in p.legs) l.status == BetStatus.pending ? l.copyWith(status: BetStatus.won) : l]
+            : null,
+      ));
 
   Future<void> deleteParlay(Parlay p) async {
     if (p.id != null) await _db.deleteParlay(p.id!);

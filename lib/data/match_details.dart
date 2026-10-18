@@ -213,8 +213,7 @@ MatchDetails parseMatchDetails(String body) {
       return '';
     }
 
-    final last =
-        safe(() {
+    final last = safe(() {
           for (final g in (json['lastFiveGames'] as List)) {
             if ('${g['team']?['id']}' == id) {
               return [
@@ -234,8 +233,7 @@ MatchDetails parseMatchDetails(String body) {
         }) ??
         const [];
 
-    final leaders =
-        safe(() {
+    final leaders = safe(() {
           for (final l in (json['leaders'] as List)) {
             if ('${l['team']?['id']}' != id) continue;
             return [
@@ -283,29 +281,20 @@ MatchDetails parseMatchDetails(String body) {
       lastGames: last,
       leaders: leaders,
       formation: roster?['formation'] as String?,
-      starters: [
-        for (final p in players)
-          if (p.$1) p.$2,
-      ],
-      subs: [
-        for (final p in players)
-          if (!p.$1) p.$2,
-      ],
+      starters: [for (final p in players) if (p.$1) p.$2],
+      subs: [for (final p in players) if (!p.$1) p.$2],
     );
   }
 
-  final events =
-      safe(
-        () => [
-          for (final e in (json['keyEvents'] as List))
-            KeyEvent(
-              clock: '${e['clock']?['displayValue'] ?? ''}',
-              kind: _kind('${e['type']?['type'] ?? ''}', e['scoringPlay'] == true),
-              text: '${e['text'] ?? e['shortText'] ?? e['type']?['text'] ?? ''}',
-              side: sideOf(e['team']?['id']),
-            ),
-        ],
-      ) ??
+  final events = safe(() => [
+            for (final e in (json['keyEvents'] as List))
+              KeyEvent(
+                clock: '${e['clock']?['displayValue'] ?? ''}',
+                kind: _kind('${e['type']?['type'] ?? ''}', e['scoringPlay'] == true),
+                text: '${e['text'] ?? e['shortText'] ?? e['type']?['text'] ?? ''}',
+                side: sideOf(e['team']?['id']),
+              ),
+          ]) ??
       const <KeyEvent>[];
 
   final box = safe(() => (json['boxscore']['teams'] as List).cast<Map<String, dynamic>>()) ?? const [];
@@ -331,68 +320,59 @@ MatchDetails parseMatchDetails(String body) {
 
   final series = safe(() => (json['seasonseries'] as List).cast<Map<String, dynamic>>()) ?? const [];
   final h2hSeries = series.where((s) => s['type'] == 'head-to-head').firstOrNull ?? series.firstOrNull;
-  final h2h =
-      safe(
-        () => [
-          for (final e in (h2hSeries!['events'] as List))
-            () {
-              final cs = (e['competitors'] as List).cast<Map<String, dynamic>>();
-              final h = cs.firstWhere((c) => c['homeAway'] == 'home', orElse: () => cs.first);
-              final a = cs.firstWhere((c) => c['homeAway'] == 'away', orElse: () => cs.last);
-              return PastGame(
-                date: DateTime.tryParse('${e['date']}'),
-                home: '${h['team']?['displayName'] ?? ''}',
-                away: '${a['team']?['displayName'] ?? ''}',
-                score: '${h['score'] ?? '-'}-${a['score'] ?? '-'}',
-              );
-            }(),
-        ]..sort((x, y) => (y.date ?? DateTime(0)).compareTo(x.date ?? DateTime(0))),
-      ) ??
+  final h2h = safe(() => [
+            for (final e in (h2hSeries!['events'] as List))
+              () {
+                final cs = (e['competitors'] as List).cast<Map<String, dynamic>>();
+                final h = cs.firstWhere((c) => c['homeAway'] == 'home', orElse: () => cs.first);
+                final a = cs.firstWhere((c) => c['homeAway'] == 'away', orElse: () => cs.last);
+                return PastGame(
+                  date: DateTime.tryParse('${e['date']}'),
+                  home: '${h['team']?['displayName'] ?? ''}',
+                  away: '${a['team']?['displayName'] ?? ''}',
+                  score: '${h['score'] ?? '-'}-${a['score'] ?? '-'}',
+                );
+              }(),
+          ]..sort((x, y) => (y.date ?? DateTime(0)).compareTo(x.date ?? DateTime(0)))) ??
       const <PastGame>[];
 
   final group = safe(() => (json['standings']['groups'] as List).first as Map<String, dynamic>);
-  final table =
-      safe(
-        () => [
-          for (final e in (group!['standings']['entries'] as List))
-            () {
-              String st(String n) {
-                for (final s in (e['stats'] as List)) {
-                  if (s['name'] == n) return '${s['displayValue'] ?? s['value'] ?? ''}';
+  final table = safe(() => [
+            for (final e in (group!['standings']['entries'] as List))
+              () {
+                String st(String n) {
+                  for (final s in (e['stats'] as List)) {
+                    if (s['name'] == n) return '${s['displayValue'] ?? s['value'] ?? ''}';
+                  }
+                  return '';
                 }
-                return '';
-              }
 
-              return TableRow(
-                rank: int.tryParse(st('rank')) ?? 0,
-                team: '${e['team'] is Map ? e['team']['displayName'] : e['team']}',
-                teamId: '${e['id'] ?? (e['team'] is Map ? e['team']['id'] : '')}',
-                played: st('gamesPlayed'),
-                won: st('wins'),
-                drawn: st('ties'),
-                lost: st('losses'),
-                goalDiff: st('pointDifferential'),
-                points: st('points'),
-              );
-            }(),
-        ]..sort((a, b) => a.rank.compareTo(b.rank)),
-      ) ??
+                return TableRow(
+                  rank: int.tryParse(st('rank')) ?? 0,
+                  team: '${e['team'] is Map ? e['team']['displayName'] : e['team']}',
+                  teamId: '${e['id'] ?? (e['team'] is Map ? e['team']['id'] : '')}',
+                  played: st('gamesPlayed'),
+                  won: st('wins'),
+                  drawn: st('ties'),
+                  lost: st('losses'),
+                  goalDiff: st('pointDifferential'),
+                  points: st('points'),
+                );
+              }(),
+          ]..sort((a, b) => a.rank.compareTo(b.rank))) ??
       const <TableRow>[];
 
-  final news =
-      safe(
-        () => [
-          for (final a in (json['news']['articles'] as List))
-            if (a is Map && a['headline'] != null)
-              NewsItem(
-                headline: '${a['headline']}',
-                description: '${a['description'] ?? ''}',
-                published: DateTime.tryParse('${a['published']}'),
-                image: safe<String?>(() => (a['images'] as List).first['url'] as String?),
-                url: safe<String?>(() => a['links']['web']['href'] as String?),
-              ),
-        ],
-      ) ??
+  final news = safe(() => [
+            for (final a in (json['news']['articles'] as List))
+              if (a is Map && a['headline'] != null)
+                NewsItem(
+                  headline: '${a['headline']}',
+                  description: '${a['description'] ?? ''}',
+                  published: DateTime.tryParse('${a['published']}'),
+                  image: safe<String?>(() => (a['images'] as List).first['url'] as String?),
+                  url: safe<String?>(() => a['links']['web']['href'] as String?),
+                ),
+          ]) ??
       const <NewsItem>[];
 
   final odds = parseOddsList(json['odds']);

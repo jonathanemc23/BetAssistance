@@ -20,12 +20,13 @@ Future<MarketPick?> showMarketSheet(
   required OddsFormat format,
   bool askOdds = false,
   String? initialMarket,
-}) => showModalBottomSheet<MarketPick>(
-  context: context,
-  isScrollControlled: true,
-  showDragHandle: true,
-  builder: (_) => _MarketSheet(event: event, format: format, askOdds: askOdds, initialMarket: initialMarket),
-);
+}) =>
+    showModalBottomSheet<MarketPick>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _MarketSheet(event: event, format: format, askOdds: askOdds, initialMarket: initialMarket),
+    );
 
 class _MarketSheet extends StatefulWidget {
   const _MarketSheet({required this.event, required this.format, required this.askOdds, this.initialMarket});
@@ -95,119 +96,92 @@ class _MarketSheetState extends State<_MarketSheet> {
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
       child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Choose a market', style: theme.textTheme.titleLarge),
-            if (widget.event.isNotEmpty) Text(widget.event, style: theme.textTheme.bodySmall),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final m in markets)
-                  ChoiceChip(
-                    label: Text(m.label),
-                    selected: m.id == _market.id,
-                    onSelected: (_) => setState(() => _select(m)),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (sides.isNotEmpty) ...[
-              Text('Pick', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final s in sides)
-                    ChoiceChip(label: Text(s), selected: s == _side, onSelected: (_) => setState(() => _side = s)),
-                ],
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Choose a market', style: theme.textTheme.titleLarge),
+          if (widget.event.isNotEmpty) Text(widget.event, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 12),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final m in markets)
+              ChoiceChip(
+                label: Text(m.label),
+                selected: m.id == _market.id,
+                onSelected: (_) => setState(() => _select(m)),
               ),
-              const SizedBox(height: 14),
-            ],
-            if (_market.hasLine) ...[
-              Text(_market.id == 'handicap' ? 'Handicap line' : 'Line', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  IconButton.filledTonal(
-                    tooltip: 'Lower line',
-                    onPressed: () => _stepLine(-1),
-                    icon: const Icon(Icons.remove),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _line,
-                      textAlign: TextAlign.center,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filledTonal(
-                    tooltip: 'Raise line',
-                    onPressed: () => _stepLine(1),
-                    icon: const Icon(Icons.add),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-            ],
-            if (_market.hasText) ...[
-              TextField(
-                controller: _text,
-                textCapitalization: TextCapitalization.words,
-                decoration: InputDecoration(hintText: _market.input),
-              ),
-              const SizedBox(height: 14),
-            ],
-            if (widget.askOdds) ...[
-              TextField(
-                controller: _odds,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                decoration: InputDecoration(
-                  labelText: 'Odds',
-                  hintText: widget.format == OddsFormat.american ? '+150' : '1.90',
+          ]),
+          const SizedBox(height: 16),
+          if (sides.isNotEmpty) ...[
+            Text('Pick', style: theme.textTheme.labelLarge),
+            const SizedBox(height: 6),
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              for (final s in sides)
+                ChoiceChip(label: Text(s), selected: s == _side, onSelected: (_) => setState(() => _side = s)),
+            ]),
+            const SizedBox(height: 14),
+          ],
+          if (_market.hasLine) ...[
+            Text(_market.id == 'handicap' ? 'Handicap line' : 'Line', style: theme.textTheme.labelLarge),
+            const SizedBox(height: 6),
+            Row(children: [
+              IconButton.filledTonal(
+                  tooltip: 'Lower line', onPressed: () => _stepLine(-1), icon: const Icon(Icons.remove)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _line,
+                  textAlign: TextAlign.center,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
-              const SizedBox(height: 14),
-            ],
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: cs.surfaceContainerHigh, borderRadius: BorderRadius.circular(12)),
-              child: Row(
-                children: [
-                  Icon(Icons.check_circle_outline, size: 18, color: cs.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _valid || !_market.hasText ? _preview : 'Type your pick',
-                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ],
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                  tooltip: 'Raise line', onPressed: () => _stepLine(1), icon: const Icon(Icons.add)),
+            ]),
+            const SizedBox(height: 14),
+          ],
+          if (_market.hasText) ...[
+            TextField(
+              controller: _text,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(hintText: _market.input),
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (widget.askOdds) ...[
+            TextField(
+              controller: _odds,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              decoration: InputDecoration(
+                labelText: 'Odds',
+                hintText: widget.format == OddsFormat.american ? '+150' : '1.90',
               ),
             ),
             const SizedBox(height: 14),
-            FilledButton(
-              onPressed: !_valid
-                  ? null
-                  : () => Navigator.pop(
-                      context,
-                      MarketPick(
-                        _market.id,
-                        _preview,
-                        odds: widget.askOdds ? parseOdds(_odds.text, widget.format) : null,
-                      ),
-                    ),
-              child: const Text('Use this pick'),
-            ),
           ],
-        ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: cs.surfaceContainerHigh, borderRadius: BorderRadius.circular(12)),
+            child: Row(children: [
+              Icon(Icons.check_circle_outline, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(_valid || !_market.hasText ? _preview : 'Type your pick',
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 14),
+          FilledButton(
+            onPressed: !_valid
+                ? null
+                : () => Navigator.pop(
+                      context,
+                      MarketPick(_market.id, _preview,
+                          odds: widget.askOdds ? parseOdds(_odds.text, widget.format) : null),
+                    ),
+            child: const Text('Use this pick'),
+          ),
+        ]),
       ),
     );
   }

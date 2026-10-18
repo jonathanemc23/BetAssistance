@@ -43,12 +43,16 @@ class BankTrackApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    // Rebuilds only when the store notifies; the theme comes from it.
-    listenable: store,
-    builder: (context, child) =>
-        MaterialApp(title: 'BetPilot', debugShowCheckedModeBanner: false, theme: theme(store.themeId), home: child),
-    child: HomeShell(store: store, links: links, fixtures: fixtures ?? FixturesApi(), today: today),
-  );
+        // Rebuilds only when the store notifies; the theme comes from it.
+        listenable: store,
+        builder: (context, child) => MaterialApp(
+          title: 'BetPilot',
+          debugShowCheckedModeBanner: false,
+          theme: theme(store.themeId),
+          home: child,
+        ),
+        child: HomeShell(store: store, links: links, fixtures: fixtures ?? FixturesApi(), today: today),
+      );
 }
 
 class HomeShell extends StatefulWidget {
@@ -80,11 +84,7 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   void _openLink(Uri uri) {
-    final bet = BetLink.decode(
-      uri.toString(),
-      today: isoDate(DateTime.now()),
-      created: DateTime.now().toIso8601String(),
-    );
+    final bet = BetLink.decode(uri.toString(), today: isoDate(DateTime.now()), created: DateTime.now().toIso8601String());
     if (!mounted) return;
     if (bet == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't read that bet link")));
@@ -93,14 +93,13 @@ class _HomeShellState extends State<HomeShell> {
     openBetForm(context, store, template: bet);
   }
 
-  void _push(Widget Function(BuildContext) page) => Navigator.of(context).push(MaterialPageRoute<void>(builder: page));
+  void _push(Widget Function(BuildContext) page) =>
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: page));
 
-  void _openMatches() => _push(
-    (_) => Scaffold(
-      appBar: AppBar(title: const Text('Matches')),
-      body: MatchesTabs(store: store, api: widget.fixtures, today: widget.today),
-    ),
-  );
+  void _openMatches() => _push((_) => Scaffold(
+        appBar: AppBar(title: const Text('Matches')),
+        body: MatchesTabs(store: store, api: widget.fixtures, today: widget.today),
+      ));
 
   Future<void> _openSettings() async {
     final msg = await Navigator.push<String>(context, MaterialPageRoute(builder: (_) => SettingsPage(store: store)));
@@ -117,20 +116,24 @@ class _HomeShellState extends State<HomeShell> {
       selectedIndex: null,
       onDestinationSelected: (i) => go(switch (i) {
         0 => _openMatches,
-        1 => () => _push(
-          (_) => Scaffold(
-            appBar: AppBar(title: const Text('Matchboard')),
-            body: MatchboardScreen(store: store, api: widget.fixtures, onBrowseMatches: _openMatches),
-          ),
-        ),
+        1 => () => _push((_) => Scaffold(
+              appBar: AppBar(title: const Text('Matchboard')),
+              body: MatchboardScreen(store: store, api: widget.fixtures, onBrowseMatches: _openMatches),
+            )),
         2 => () => _push((_) => ParlaysPage(store: store, api: widget.fixtures)),
         _ => _openSettings,
       }),
       children: [
-        Padding(padding: const EdgeInsets.fromLTRB(28, 20, 16, 12), child: const BrandTitle(size: 36)),
-        const NavigationDrawerDestination(icon: Icon(Icons.sports_soccer_outlined), label: Text('Matches')),
-        const NavigationDrawerDestination(icon: Icon(Icons.space_dashboard_outlined), label: Text('Matchboard')),
-        const NavigationDrawerDestination(icon: Icon(Icons.account_tree_outlined), label: Text('Parlay builder')),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 20, 16, 12),
+          child: const BrandTitle(size: 36),
+        ),
+        const NavigationDrawerDestination(
+            icon: Icon(Icons.sports_soccer_outlined), label: Text('Matches')),
+        const NavigationDrawerDestination(
+            icon: Icon(Icons.space_dashboard_outlined), label: Text('Matchboard')),
+        const NavigationDrawerDestination(
+            icon: Icon(Icons.account_tree_outlined), label: Text('Parlay builder')),
         const Padding(padding: EdgeInsets.symmetric(horizontal: 28, vertical: 8), child: Divider()),
         const NavigationDrawerDestination(icon: Icon(Icons.tune), label: Text('Settings')),
       ],
@@ -151,30 +154,24 @@ class _HomeShellState extends State<HomeShell> {
         appBar: AppBar(
           title: _tab == 0
               ? const BrandTitle()
-              : Text(switch (_tab) {
-                  1 => 'Bet register',
-                  2 => 'Bet Tools',
-                  _ => 'Charts',
-                }, style: const TextStyle(fontWeight: FontWeight.w700)),
+              : Text(switch (_tab) { 1 => 'Bet register', 2 => 'Bet Tools', _ => 'Charts' },
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
           actions: [
             if (_tab == 1)
               IconButton(tooltip: 'Open a bet link', icon: const Icon(Icons.add_link), onPressed: _pasteLink),
             IconButton(tooltip: 'Settings', icon: const Icon(Icons.tune), onPressed: _openSettings),
           ],
         ),
-        body: IndexedStack(
-          index: _tab,
-          children: [
-            SummaryScreen(
-              store: store,
-              onLogBet: () => openBetForm(context, store),
-              onOpenBets: () => setState(() => _tab = 1),
-            ),
-            BetsScreen(store: store, api: widget.fixtures),
-            BetToolsScreen(store: store, api: widget.fixtures, onOpenMatches: _openMatches),
-            ChartsScreen(store: store),
-          ],
-        ),
+        body: IndexedStack(index: _tab, children: [
+          SummaryScreen(
+            store: store,
+            onLogBet: () => openBetForm(context, store),
+            onOpenBets: () => setState(() => _tab = 1),
+          ),
+          BetsScreen(store: store, api: widget.fixtures),
+          BetToolsScreen(store: store, api: widget.fixtures, onOpenMatches: _openMatches),
+          ChartsScreen(store: store),
+        ]),
         floatingActionButton: _tab == 1
             ? FloatingActionButton.extended(
                 onPressed: () => openBetForm(context, store),
@@ -186,26 +183,11 @@ class _HomeShellState extends State<HomeShell> {
           selectedIndex: _tab,
           onDestinationSelected: (i) => setState(() => _tab = i),
           destinations: const [
+            NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Summary'),
+            NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Bets'),
             NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              selectedIcon: Icon(Icons.dashboard),
-              label: 'Summary',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.receipt_long_outlined),
-              selectedIcon: Icon(Icons.receipt_long),
-              label: 'Bets',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.handyman_outlined),
-              selectedIcon: Icon(Icons.handyman),
-              label: 'Bet Tools',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.insights_outlined),
-              selectedIcon: Icon(Icons.insights),
-              label: 'Charts',
-            ),
+                icon: Icon(Icons.handyman_outlined), selectedIcon: Icon(Icons.handyman), label: 'Bet Tools'),
+            NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Charts'),
           ],
         ),
       ),
@@ -219,18 +201,12 @@ class BrandTitle extends StatelessWidget {
   final double size;
 
   @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      ClipRRect(
-        borderRadius: BorderRadius.circular(size * 0.24),
-        child: Image.asset('assets/brand/icon.png', width: size, height: size),
-      ),
-      SizedBox(width: size * 0.35),
-      Text(
-        'BetPilot',
-        style: TextStyle(fontWeight: FontWeight.w800, fontSize: size * 0.72, letterSpacing: 0.2),
-      ),
-    ],
-  );
+  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(size * 0.24),
+          child: Image.asset('assets/brand/icon.png', width: size, height: size),
+        ),
+        SizedBox(width: size * 0.35),
+        Text('BetPilot', style: TextStyle(fontWeight: FontWeight.w800, fontSize: size * 0.72, letterSpacing: 0.2)),
+      ]);
 }

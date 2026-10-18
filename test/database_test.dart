@@ -24,17 +24,8 @@ void main() {
   tearDown(() => dir.deleteSync(recursive: true));
 
   Bet sample() => Bet(
-    selection: 'Arsenal to win',
-    event: 'Arsenal vs Chelsea',
-    sport: 'Soccer',
-    date: '2026-10-01',
-    stake: 20,
-    odds: 2.1,
-    book: 'Book',
-    status: BetStatus.won,
-    notes: 'n',
-    created: '2026-10-01T10:00:00',
-  );
+      selection: 'Arsenal to win', event: 'Arsenal vs Chelsea', sport: 'Soccer', date: '2026-10-01',
+      stake: 20, odds: 2.1, book: 'Book', status: BetStatus.won, notes: 'n', created: '2026-10-01T10:00:00');
 
   test('data written by one app launch is there on the next', () async {
     var db = await AppDatabase.open(factory: factory, path: path);
@@ -107,18 +98,11 @@ void main() {
 
   test('upgrading from the first release (v1) keeps bets and makes them singles', () async {
     // Build a database exactly as release 0.1.0 left it.
-    final old = await factory.openDatabase(
-      path,
-      options: OpenDatabaseOptions(version: 1, onCreate: (db, _) => migrations[0](db)),
-    );
+    final old = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 1, onCreate: (db, _) => migrations[0](db)));
     await old.insert('bets', {
-      'selection': 'Arsenal to win',
-      'sport': 'Soccer',
-      'date': '2026-10-01',
-      'stake': 20,
-      'odds': 2.1,
-      'status': 'won',
-      'created': '2026-10-01T10:00:00',
+      'selection': 'Arsenal to win', 'sport': 'Soccer', 'date': '2026-10-01', 'stake': 20, 'odds': 2.1,
+      'status': 'won', 'created': '2026-10-01T10:00:00',
     });
     await old.insert('transactions', {'kind': 'deposit', 'amount': 50, 'date': '2026-10-02'});
     await old.insert('settings', {'key': 'currency', 'value': 'EUR'});
@@ -139,16 +123,8 @@ void main() {
   test('parlay legs are saved, replaced on edit and removed with the bet', () async {
     final db = await AppDatabase.open(factory: factory, path: path);
     final parlay = Bet(
-      type: BetType.parlay,
-      selection: '2-leg parlay',
-      date: '2026-10-01',
-      stake: 10,
-      odds: 3,
-      created: 'x',
-      legs: const [
-        BetLeg(selection: 'A', odds: 1.5),
-        BetLeg(selection: 'B', odds: 2, sport: 'Tennis'),
-      ],
+      type: BetType.parlay, selection: '2-leg parlay', date: '2026-10-01', stake: 10, odds: 3, created: 'x',
+      legs: const [BetLeg(selection: 'A', odds: 1.5), BetLeg(selection: 'B', odds: 2, sport: 'Tennis')],
     );
     final id = await db.saveBet(parlay);
     var saved = (await db.bets()).single;
@@ -156,22 +132,14 @@ void main() {
     expect(saved.legs.map((l) => l.selection), ['A', 'B']);
     expect(saved.legs.last.sport, 'Tennis');
 
-    await db.saveBet(
-      Bet(
-        id: id,
-        type: BetType.parlay,
-        selection: '3-leg parlay',
-        date: '2026-10-01',
-        stake: 10,
-        odds: 6,
-        created: 'x',
-        legs: const [
-          BetLeg(selection: 'A', odds: 1.5, status: BetStatus.won),
-          BetLeg(selection: 'B', odds: 2),
-          BetLeg(selection: 'C', odds: 2),
-        ],
-      ),
-    );
+    await db.saveBet(Bet(
+      id: id, type: BetType.parlay, selection: '3-leg parlay', date: '2026-10-01', stake: 10, odds: 6, created: 'x',
+      legs: const [
+        BetLeg(selection: 'A', odds: 1.5, status: BetStatus.won),
+        BetLeg(selection: 'B', odds: 2),
+        BetLeg(selection: 'C', odds: 2),
+      ],
+    ));
     saved = (await db.bets()).single;
     expect(saved.legs, hasLength(3));
     expect(saved.legs.first.status, BetStatus.won);
@@ -183,10 +151,8 @@ void main() {
   });
 
   test('an older app refuses a newer database instead of wiping it', () async {
-    final raw = await factory.openDatabase(
-      path,
-      options: OpenDatabaseOptions(version: 1, onCreate: (db, _) => migrations[0](db)),
-    );
+    final raw = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 1, onCreate: (db, _) => migrations[0](db)));
     await raw.insert('settings', {'key': 'currency', 'value': 'GBP'});
     await raw.setVersion(99);
     await raw.close();
@@ -198,25 +164,14 @@ void main() {
   });
 
   test('upgrading from 0.5.0 (v2) keeps bets and settings and adds Matchboard', () async {
-    final old = await factory.openDatabase(
-      path,
-      options: OpenDatabaseOptions(
-        version: 2,
-        onCreate: (db, _) async {
+    final old = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 2, onCreate: (db, _) async {
           await migrations[0](db);
           await migrations[1](db);
-        },
-      ),
-    );
+        }));
     await old.insert('bets', {
-      'selection': '2-leg parlay',
-      'sport': 'Soccer',
-      'date': '2026-10-01',
-      'stake': 10,
-      'odds': 3.0,
-      'status': 'pending',
-      'created': '2026-10-01T10:00:00',
-      'bet_type': 'parlay',
+      'selection': '2-leg parlay', 'sport': 'Soccer', 'date': '2026-10-01', 'stake': 10, 'odds': 3.0,
+      'status': 'pending', 'created': '2026-10-01T10:00:00', 'bet_type': 'parlay',
     });
     await old.insert('settings', {'key': 'pref.matches.country', 'value': 'col'});
     await old.close();
@@ -232,38 +187,15 @@ void main() {
   test('a board keeps its chat and notes, one board per match', () async {
     final db = await AppDatabase.open(factory: factory, path: path);
     final draft = Board(
-      matchId: '401878771',
-      leagueSlug: 'eng.1',
-      leagueName: 'Premier League',
-      home: 'Everton',
-      away: 'Chelsea',
-      kickoff: DateTime.utc(2026, 10, 18, 19),
-      created: '2026-10-17T10:00:00',
-      updated: '2026-10-17T10:00:00',
+      matchId: '401878771', leagueSlug: 'eng.1', leagueName: 'Premier League', home: 'Everton', away: 'Chelsea',
+      kickoff: DateTime.utc(2026, 10, 18, 19), created: '2026-10-17T10:00:00', updated: '2026-10-17T10:00:00',
     );
     final b = await db.boardFor(draft);
     expect((await db.boardFor(draft)).id, b.id); // opening it again reuses it
     await db.addMessage(BoardMessage(boardId: b.id!, role: ChatRole.user, text: 'Who wins?', created: 'x'));
     await db.addMessage(BoardMessage(boardId: b.id!, role: ChatRole.assistant, text: 'Chelsea', created: 'x'));
-    final first = await db.addNote(
-      BoardNote(
-        boardId: b.id!,
-        category: 'Summary',
-        title: 'Match summary',
-        body: 'Chelsea',
-        created: '2026-10-17T10:01:00',
-      ),
-    );
-    await db.addNote(
-      BoardNote(
-        boardId: b.id!,
-        category: 'My notes',
-        title: 'Keeper back',
-        body: 'Keeper back',
-        source: 'user',
-        created: '2026-10-17T10:02:00',
-      ),
-    );
+    final first = await db.addNote(BoardNote(boardId: b.id!, category: 'Summary', title: 'Match summary', body: 'Chelsea', created: '2026-10-17T10:01:00'));
+    await db.addNote(BoardNote(boardId: b.id!, category: 'My notes', title: 'Keeper back', body: 'Keeper back', source: 'user', created: '2026-10-17T10:02:00'));
     await db.setNotePinned(first, true);
 
     final notes = await db.notes(b.id!);
@@ -283,35 +215,19 @@ void main() {
   });
 
   test('upgrading from 0.6.0 (v3) keeps bets and boards and adds the parlay builder', () async {
-    final old = await factory.openDatabase(
-      path,
-      options: OpenDatabaseOptions(
-        version: 3,
-        onCreate: (db, _) async {
+    final old = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 3, onCreate: (db, _) async {
           for (var v = 0; v < 3; v++) {
             await migrations[v](db);
           }
-        },
-      ),
-    );
+        }));
     await old.insert('bets', {
-      'selection': 'Arsenal to win',
-      'sport': 'Soccer',
-      'date': '2026-10-01',
-      'stake': 10,
-      'odds': 2.0,
-      'status': 'won',
-      'created': '2026-10-01T10:00:00',
-      'bet_type': 'single',
+      'selection': 'Arsenal to win', 'sport': 'Soccer', 'date': '2026-10-01', 'stake': 10, 'odds': 2.0,
+      'status': 'won', 'created': '2026-10-01T10:00:00', 'bet_type': 'single',
     });
     await old.insert('boards', {
-      'match_id': '1',
-      'league_slug': 'eng.1',
-      'home': 'Everton',
-      'away': 'Chelsea',
-      'kickoff': '2026-10-18T19:00:00Z',
-      'created': 'x',
-      'updated': 'x',
+      'match_id': '1', 'league_slug': 'eng.1', 'home': 'Everton', 'away': 'Chelsea',
+      'kickoff': '2026-10-18T19:00:00Z', 'created': 'x', 'updated': 'x',
     });
     await old.insert('settings', {'key': 'pref.app.theme', 'value': 'ember'});
     await old.close();
@@ -327,36 +243,23 @@ void main() {
 
   test('a parlay keeps its legs, linked match, check and result', () async {
     var db = await AppDatabase.open(factory: factory, path: path);
-    final id = await db.saveParlay(
-      Parlay(
-        name: 'Saturday',
-        stake: 10,
-        created: 'x',
-        updated: 'x',
-        legs: [
-          ParlayLeg(
-            selection: 'Chelsea to win',
-            event: 'Everton vs Chelsea',
-            odds: 2.2,
-            matchId: '401878771',
-            leagueSlug: 'eng.1',
-            leagueName: 'Premier League',
-            home: 'Everton',
-            away: 'Chelsea',
-            kickoff: DateTime.utc(2026, 10, 18, 19),
-          ),
-          const ParlayLeg(selection: 'Millonarios to win', event: 'Millonarios vs Nacional', odds: 2.0),
-        ],
-        check: const ParlayCheck(
-          checked: '2026-10-17T10:00:00',
-          risk: 'Medium',
-          summary: ['ok'],
-          legs: [
-            LegCheck(selection: 'Chelsea to win', verdict: 'Fair price', tone: LegTone.neutral, lines: ['a']),
-          ],
+    final id = await db.saveParlay(Parlay(
+      name: 'Saturday',
+      stake: 10,
+      created: 'x',
+      updated: 'x',
+      legs: [
+        ParlayLeg(
+          selection: 'Chelsea to win', event: 'Everton vs Chelsea', odds: 2.2, matchId: '401878771',
+          leagueSlug: 'eng.1', leagueName: 'Premier League', home: 'Everton', away: 'Chelsea',
+          kickoff: DateTime.utc(2026, 10, 18, 19),
         ),
-      ),
-    );
+        const ParlayLeg(selection: 'Millonarios to win', event: 'Millonarios vs Nacional', odds: 2.0),
+      ],
+      check: const ParlayCheck(checked: '2026-10-17T10:00:00', risk: 'Medium', summary: ['ok'], legs: [
+        LegCheck(selection: 'Chelsea to win', verdict: 'Fair price', tone: LegTone.neutral, lines: ['a']),
+      ]),
+    ));
     await db.close();
 
     db = await AppDatabase.open(factory: factory, path: path);
@@ -371,12 +274,7 @@ void main() {
     expect(p.check!.legs.single.tone, LegTone.neutral);
 
     // Editing replaces the legs; the result is kept.
-    await db.saveParlay(
-      p.copyWith(
-        legs: [p.legs.first.copyWith(status: BetStatus.won)],
-        status: BetStatus.won,
-      ),
-    );
+    await db.saveParlay(p.copyWith(legs: [p.legs.first.copyWith(status: BetStatus.won)], status: BetStatus.won));
     p = (await db.parlays()).single;
     expect(p.legs.single.status, BetStatus.won);
     expect(p.status, BetStatus.won);
@@ -391,26 +289,15 @@ void main() {
   });
 
   test('upgrading from 0.7.0 (v4) keeps bets and parlays and adds markets', () async {
-    final old = await factory.openDatabase(
-      path,
-      options: OpenDatabaseOptions(
-        version: 4,
-        onCreate: (db, _) async {
+    final old = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 4, onCreate: (db, _) async {
           for (var v = 0; v < 4; v++) {
             await migrations[v](db);
           }
-        },
-      ),
-    );
+        }));
     await old.insert('bets', {
-      'selection': 'Liverpool -1.5',
-      'sport': 'Soccer',
-      'date': '2026-10-01',
-      'stake': 10,
-      'odds': 2.0,
-      'status': 'won',
-      'created': '2026-10-01T10:00:00',
-      'bet_type': 'single',
+      'selection': 'Liverpool -1.5', 'sport': 'Soccer', 'date': '2026-10-01', 'stake': 10, 'odds': 2.0,
+      'status': 'won', 'created': '2026-10-01T10:00:00', 'bet_type': 'single',
     });
     await old.insert('parlays', {'name': 'Saturday', 'created': 'x', 'updated': 'x'});
     await old.close();
@@ -424,22 +311,11 @@ void main() {
     expect((await db.parlays()).single.name, 'Saturday');
 
     // The new fields round-trip.
-    await db.saveBet(
-      Bet(
-        selection: 'Chelsea -0.5',
-        event: 'Everton vs Chelsea',
-        sport: 'Soccer',
-        date: '2026-10-18',
-        stake: 10,
-        odds: 1.95,
-        created: 'y',
-        market: 'handicap',
-        matchId: '401878771',
-        leagueSlug: 'eng.1',
-        leagueName: 'Premier League',
-        kickoff: DateTime.utc(2026, 10, 18, 19),
-      ),
-    );
+    await db.saveBet(Bet(
+      selection: 'Chelsea -0.5', event: 'Everton vs Chelsea', sport: 'Soccer', date: '2026-10-18', stake: 10,
+      odds: 1.95, created: 'y', market: 'handicap', matchId: '401878771', leagueSlug: 'eng.1',
+      leagueName: 'Premier League', kickoff: DateTime.utc(2026, 10, 18, 19),
+    ));
     final saved = (await db.bets()).firstWhere((b) => b.created == 'y');
     expect(saved.market, 'handicap');
     expect(saved.matchId, '401878771');
@@ -449,28 +325,15 @@ void main() {
   });
 
   test('upgrading from 0.8.0 (v5) keeps everything and adds favourites', () async {
-    final old = await factory.openDatabase(
-      path,
-      options: OpenDatabaseOptions(
-        version: 5,
-        onCreate: (db, _) async {
+    final old = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 5, onCreate: (db, _) async {
           for (var v = 0; v < 5; v++) {
             await migrations[v](db);
           }
-        },
-      ),
-    );
+        }));
     await old.insert('bets', {
-      'selection': 'Chelsea -0.5',
-      'sport': 'Soccer',
-      'date': '2026-10-18',
-      'stake': 10,
-      'odds': 1.95,
-      'status': 'pending',
-      'created': 'z',
-      'bet_type': 'single',
-      'market': 'handicap',
-      'match_id': '401878771',
+      'selection': 'Chelsea -0.5', 'sport': 'Soccer', 'date': '2026-10-18', 'stake': 10, 'odds': 1.95,
+      'status': 'pending', 'created': 'z', 'bet_type': 'single', 'market': 'handicap', 'match_id': '401878771',
     });
     await old.insert('parlays', {'name': 'Sunday', 'created': 'x', 'updated': 'x'});
     await old.close();
@@ -493,10 +356,7 @@ void main() {
     await db.saveFavorite(FavoriteMatch.fromMatch(m, 'now'));
     await db.saveFavorite(FavoriteMatch.fromMatch(m, 'again')); // starring twice keeps one
     final f = (await db.favorites()).single;
-    expect(
-      (f.matchId, f.home, f.awayLogo, f.kickoff, f.added),
-      ('tsdb:7', 'Beerschot', 'https://x/a.png', m.kickoff, 'again'),
-    );
+    expect((f.matchId, f.home, f.awayLogo, f.kickoff, f.added), ('tsdb:7', 'Beerschot', 'https://x/a.png', m.kickoff, 'again'));
     expect(f.toMatch().league.tsdb, 5831);
     await db.deleteFavorite('tsdb:7');
     expect(await db.favorites(), isEmpty);

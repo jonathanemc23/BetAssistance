@@ -21,12 +21,8 @@ class NoteDraft {
 /// chat so far, oldest first, as (from the user, text).
 abstract class MatchAssistant {
   String get name;
-  Future<AssistantReply> ask(
-    String question,
-    Match match,
-    MatchDetails details, {
-    List<(bool, String)> history = const [],
-  });
+  Future<AssistantReply> ask(String question, Match match, MatchDetails details,
+      {List<(bool, String)> history = const []});
 }
 
 /// Ready-made questions shown as chips in the chat.
@@ -52,125 +48,23 @@ class DataAssistant implements MatchAssistant {
   /// Checked in order; the first topic with a matching word wins. Words
   /// match whole tokens, or token prefixes when they end in '*'.
   static const _topics = <(String, List<String>)>[
-    (
-      'summary',
-      [
-        'favourite',
-        'favorite',
-        'who wins',
-        'who will win',
-        'predict*',
-        'pick',
-        'tip',
-        'summary',
-        'overview',
-        'value',
-        'should i bet',
-        'favorito',
-        'quién gana',
-        'quien gana',
-        'pronóstico',
-        'pronostico',
-        'predicción',
-        'prediccion',
-        'resumen',
-        'valor',
-        'apuesta',
-      ],
-    ),
-    (
-      'odds',
-      [
-        'odds',
-        'price',
-        'prices',
-        'implied',
-        'bookmaker*',
-        'bookie*',
-        'margin',
-        'cuota*',
-        'momio*',
-        'probabilidad*',
-        'probabilit*',
-        'chance*',
-      ],
-    ),
-    (
-      'h2h',
-      [
-        'head to head',
-        'h2h',
-        'meetings',
-        'history',
-        'previous',
-        'last time',
-        'historial',
-        'enfrentamiento*',
-        'cara a cara',
-        'antecedentes',
-      ],
-    ),
-    (
-      'lineups',
-      [
-        'lineup*',
-        'line up*',
-        'starting',
-        'xi',
-        'formation*',
-        'player*',
-        'scorer*',
-        'injur*',
-        'alineaci*',
-        'titulares',
-        'jugador*',
-        'goleador*',
-        'formaci*',
-        'lesion*',
-      ],
-    ),
-    (
-      'form',
-      ['form', 'streak', 'recent', 'last matches', 'last games', 'momentum', 'forma', 'racha', 'últimos', 'ultimos'],
-    ),
-    (
-      'goals',
-      ['goal*', 'over', 'under', 'btts', 'both teams', 'score', 'scoring', 'gol', 'goles', 'ambos marcan', 'marcan'],
-    ),
-    (
-      'table',
-      [
-        'table',
-        'standing*',
-        'position',
-        'rank*',
-        'points',
-        'league',
-        'tabla',
-        'posición',
-        'posicion',
-        'clasificaci*',
-        'puntos',
-      ],
-    ),
-    (
-      'stats',
-      [
-        'stats',
-        'statistic*',
-        'possession',
-        'shots',
-        'corners',
-        'cards',
-        'estadística*',
-        'estadistica*',
-        'posesión',
-        'posesion',
-        'tiros',
-        'córners',
-        'tarjetas',
-      ],
-    ),
+    ('summary', ['favourite', 'favorite', 'who wins', 'who will win', 'predict*', 'pick', 'tip', 'summary', 'overview',
+      'value', 'should i bet', 'favorito', 'quién gana', 'quien gana', 'pronóstico', 'pronostico', 'predicción',
+      'prediccion', 'resumen', 'valor', 'apuesta']),
+    ('odds', ['odds', 'price', 'prices', 'implied', 'bookmaker*', 'bookie*', 'margin', 'cuota*', 'momio*',
+      'probabilidad*', 'probabilit*', 'chance*']),
+    ('h2h', ['head to head', 'h2h', 'meetings', 'history', 'previous', 'last time', 'historial', 'enfrentamiento*',
+      'cara a cara', 'antecedentes']),
+    ('lineups', ['lineup*', 'line up*', 'starting', 'xi', 'formation*', 'player*', 'scorer*', 'injur*', 'alineaci*',
+      'titulares', 'jugador*', 'goleador*', 'formaci*', 'lesion*']),
+    ('form', ['form', 'streak', 'recent', 'last matches', 'last games', 'momentum', 'forma', 'racha', 'últimos',
+      'ultimos']),
+    ('goals', ['goal*', 'over', 'under', 'btts', 'both teams', 'score', 'scoring', 'gol', 'goles', 'ambos marcan',
+      'marcan']),
+    ('table', ['table', 'standing*', 'position', 'rank*', 'points', 'league', 'tabla', 'posición', 'posicion',
+      'clasificaci*', 'puntos']),
+    ('stats', ['stats', 'statistic*', 'possession', 'shots', 'corners', 'cards', 'estadística*', 'estadistica*',
+      'posesión', 'posesion', 'tiros', 'córners', 'tarjetas']),
     ('news', ['news', 'headline*', 'article*', 'noticia*']),
   ];
 
@@ -187,12 +81,8 @@ class DataAssistant implements MatchAssistant {
   }
 
   @override
-  Future<AssistantReply> ask(
-    String question,
-    Match match,
-    MatchDetails details, {
-    List<(bool, String)> history = const [],
-  }) async {
+  Future<AssistantReply> ask(String question, Match match, MatchDetails details,
+      {List<(bool, String)> history = const []}) async {
     final m = match, d = details;
     // A question naming one team gets that team's form and table position.
     final team = _teamIn(question, m);
@@ -208,21 +98,16 @@ class DataAssistant implements MatchAssistant {
       'stats' => _stats(m, d),
       'news' => _news(d),
       _ => const AssistantReply(
-        "I can answer from this match's data: favourite and odds, form, head to head, goals trends "
-        '(over/under, both teams to score), the table, line-ups, stats and news. Try one of the suggestions, '
-        'or add an AI key in Settings so I can answer anything with help from the web.',
-      ),
+          "I can answer from this match's data: favourite and odds, form, head to head, goals trends "
+          '(over/under, both teams to score), the table, line-ups, stats and news. Try one of the suggestions, '
+          'or add an AI key in Settings so I can answer anything with help from the web.'),
     };
   }
 
   static String? _teamIn(String question, Match m) {
     final q = question.toLowerCase();
     for (final t in [m.home, m.away]) {
-      final words = {
-        t.name.toLowerCase(),
-        t.shortName.toLowerCase(),
-        ...t.name.toLowerCase().split(' ').where((w) => w.length > 4),
-      };
+      final words = {t.name.toLowerCase(), t.shortName.toLowerCase(), ...t.name.toLowerCase().split(' ').where((w) => w.length > 4)};
       if (words.any(q.contains)) return t.name;
     }
     return null;
@@ -320,11 +205,9 @@ class DataAssistant implements MatchAssistant {
       final r = _recent(t);
       final form = t.form.isNotEmpty ? t.form : t.lastGames.reversed.map((g) => g.result).join();
       final pos = _position(d, t);
-      lines.add(
-        '$name: ${form.split('').join(' ')} (latest first)'
-        '${r.games > 0 ? ', ${r.w * 3 + r.dr} pts from last ${r.games}, goals ${r.gf}-${r.ga}' : ''}'
-        '${pos != null ? '; ${pos.$1} in the table on ${pos.$2} pts' : ''}.',
-      );
+      lines.add('$name: ${form.split('').join(' ')} (latest first)'
+          '${r.games > 0 ? ', ${r.w * 3 + r.dr} pts from last ${r.games}, goals ${r.gf}-${r.ga}' : ''}'
+          '${pos != null ? '; ${pos.$1} in the table on ${pos.$2} pts' : ''}.');
     }
     return _reply('Form', only == null ? 'Recent form' : '$only form', lines);
   }
@@ -332,14 +215,13 @@ class DataAssistant implements MatchAssistant {
   static AssistantReply _goals(Match m, MatchDetails d) {
     final h = _recent(d.home), a = _recent(d.away);
     if (h.games == 0 && a.games == 0 && d.h2h.isEmpty) return _none('goals data');
-    String team(String name, ({int w, int dr, int l, int gf, int ga, int over25, int btts, int games}) r) =>
-        r.games == 0
+    String team(String name, ({int w, int dr, int l, int gf, int ga, int over25, int btts, int games}) r) => r.games == 0
         ? ''
         : '$name: scores ${(r.gf / r.games).toStringAsFixed(1)} and concedes ${(r.ga / r.games).toStringAsFixed(1)} '
-              'a game; over 2.5 in ${r.over25}/${r.games}, both scored in ${r.btts}/${r.games}.';
+            'a game; over 2.5 in ${r.over25}/${r.games}, both scored in ${r.btts}/${r.games}.';
     final h2hGoals = [
       for (final g in d.h2h)
-        if (g.score.split('-').map((s) => int.tryParse(s.trim())).toList() case [final x?, final y?]) (x, y),
+        if (g.score.split('-').map((s) => int.tryParse(s.trim())).toList() case [final x?, final y?]) (x, y)
     ];
     return _reply('Goals', 'Goals trends', [
       'Last matches:',
@@ -376,9 +258,7 @@ class DataAssistant implements MatchAssistant {
     for (final (name, t) in [(m.home.name, d.home), (m.away.name, d.away)]) {
       final r = d.table.where((r) => (t.id.isNotEmpty && r.teamId == t.id) || r.team == t.name).firstOrNull;
       if (r == null) continue;
-      lines.add(
-        '$name: #${r.rank}, ${r.points} pts from ${r.played} (W${r.won} D${r.drawn} L${r.lost}), GD ${r.goalDiff}.',
-      );
+      lines.add('$name: #${r.rank}, ${r.points} pts from ${r.played} (W${r.won} D${r.drawn} L${r.lost}), GD ${r.goalDiff}.');
     }
     if (lines.isEmpty) return _none('table position for these teams');
     return _reply('Table', 'League table', [if (d.tableTitle.isNotEmpty) '${d.tableTitle}:', ...lines]);
@@ -424,22 +304,16 @@ class DataAssistant implements MatchAssistant {
       final total = 1 + b.margin;
       final ph = 1 / b.home! / total, pa = 1 / b.away! / total;
       final fav = ph >= pa ? m.home.name : m.away.name;
-      lines.add(
-        'Market favourite: $fav (${_pct(ph >= pa ? ph : pa)} implied, '
-        '${m.home.name} ${_price(b.home!)}${b.draw != null ? ' / draw ${_price(b.draw!)}' : ''} / ${m.away.name} ${_price(b.away!)}).',
-      );
+      lines.add('Market favourite: $fav (${_pct(ph >= pa ? ph : pa)} implied, '
+          '${m.home.name} ${_price(b.home!)}${b.draw != null ? ' / draw ${_price(b.draw!)}' : ''} / ${m.away.name} ${_price(b.away!)}).');
     }
     final h = _recent(d.home), a = _recent(d.away);
     if (h.games > 0 && a.games > 0) {
       final hp = h.w * 3 + h.dr, ap = a.w * 3 + a.dr;
-      lines.add(
-        'Form: ${m.home.name} $hp pts from ${h.games}, ${m.away.name} $ap pts from ${a.games}'
-        '${hp == ap ? ' (level).' : ' (edge ${hp > ap ? m.home.name : m.away.name}).'}',
-      );
+      lines.add('Form: ${m.home.name} $hp pts from ${h.games}, ${m.away.name} $ap pts from ${a.games}'
+          '${hp == ap ? ' (level).' : ' (edge ${hp > ap ? m.home.name : m.away.name}).'}');
       final games = h.games + a.games;
-      lines.add(
-        'Goals: over 2.5 in ${h.over25 + a.over25}/$games recent games, both scored in ${h.btts + a.btts}/$games.',
-      );
+      lines.add('Goals: over 2.5 in ${h.over25 + a.over25}/$games recent games, both scored in ${h.btts + a.btts}/$games.');
     }
     final hpos = _position(d, d.home), apos = _position(d, d.away);
     if (hpos != null && apos != null) lines.add('Table: ${m.home.name} ${hpos.$1}, ${m.away.name} ${apos.$1}.');

@@ -213,32 +213,31 @@ class AppDatabase {
     for (final r in await db.query('bet_legs', orderBy: 'bet_id, position')) {
       legs.putIfAbsent(r['bet_id'] as int, () => []).add(BetLeg.fromRow(r));
     }
-    return (await db.query(
-      'bets',
-      orderBy: 'date DESC, created DESC',
-    )).map((r) => Bet.fromRow(r, legs[r['id']] ?? const [])).toList();
+    return (await db.query('bets', orderBy: 'date DESC, created DESC'))
+        .map((r) => Bet.fromRow(r, legs[r['id']] ?? const []))
+        .toList();
   }
 
   /// Saves the bet and replaces its legs in one transaction.
   Future<int> saveBet(Bet b) => db.transaction((txn) async {
-    final int id;
-    if (b.id == null) {
-      id = await txn.insert('bets', b.toRow());
-    } else {
-      id = b.id!;
-      await txn.update('bets', b.toRow(), where: 'id = ?', whereArgs: [id]);
-      await txn.delete('bet_legs', where: 'bet_id = ?', whereArgs: [id]);
-    }
-    for (var i = 0; i < b.legs.length; i++) {
-      await txn.insert('bet_legs', b.legs[i].toRow(id, i));
-    }
-    return id;
-  });
+        final int id;
+        if (b.id == null) {
+          id = await txn.insert('bets', b.toRow());
+        } else {
+          id = b.id!;
+          await txn.update('bets', b.toRow(), where: 'id = ?', whereArgs: [id]);
+          await txn.delete('bet_legs', where: 'bet_id = ?', whereArgs: [id]);
+        }
+        for (var i = 0; i < b.legs.length; i++) {
+          await txn.insert('bet_legs', b.legs[i].toRow(id, i));
+        }
+        return id;
+      });
 
   Future<void> deleteBet(int id) => db.transaction((txn) async {
-    await txn.delete('bet_legs', where: 'bet_id = ?', whereArgs: [id]);
-    await txn.delete('bets', where: 'id = ?', whereArgs: [id]);
-  });
+        await txn.delete('bet_legs', where: 'bet_id = ?', whereArgs: [id]);
+        await txn.delete('bets', where: 'id = ?', whereArgs: [id]);
+      });
 
   // Deposits and withdrawals
   Future<List<BankTx>> transactions() async =>
@@ -258,8 +257,8 @@ class AppDatabase {
     return rows.isEmpty ? null : rows.first['value'] as String;
   }
 
-  Future<void> setPref(String key, String value) =>
-      db.insert('settings', {'key': 'pref.$key', 'value': value}, conflictAlgorithm: ConflictAlgorithm.replace);
+  Future<void> setPref(String key, String value) => db.insert('settings', {'key': 'pref.$key', 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace);
 
   // Settings
   Future<Settings> settings() async {
@@ -268,10 +267,11 @@ class AppDatabase {
   }
 
   Future<void> saveSettings(Settings s) => db.transaction((txn) async {
-    for (final e in s.toMap().entries) {
-      await txn.insert('settings', {'key': e.key, 'value': e.value}, conflictAlgorithm: ConflictAlgorithm.replace);
-    }
-  });
+        for (final e in s.toMap().entries) {
+          await txn.insert('settings', {'key': e.key, 'value': e.value},
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      });
 
   // Matchboard
   Future<List<Board>> boards() async => (await db.rawQuery('''
@@ -293,26 +293,22 @@ class AppDatabase {
 
   /// Deletes a board the user chose to remove, with its chat and notes.
   Future<void> deleteBoard(int id) => db.transaction((txn) async {
-    await txn.delete('board_messages', where: 'board_id = ?', whereArgs: [id]);
-    await txn.delete('board_notes', where: 'board_id = ?', whereArgs: [id]);
-    await txn.delete('boards', where: 'id = ?', whereArgs: [id]);
-  });
+        await txn.delete('board_messages', where: 'board_id = ?', whereArgs: [id]);
+        await txn.delete('board_notes', where: 'board_id = ?', whereArgs: [id]);
+        await txn.delete('boards', where: 'id = ?', whereArgs: [id]);
+      });
 
-  Future<List<BoardMessage>> messages(int boardId) async => (await db.query(
-    'board_messages',
-    where: 'board_id = ?',
-    whereArgs: [boardId],
-    orderBy: 'id',
-  )).map(BoardMessage.fromRow).toList();
+  Future<List<BoardMessage>> messages(int boardId) async =>
+      (await db.query('board_messages', where: 'board_id = ?', whereArgs: [boardId], orderBy: 'id'))
+          .map(BoardMessage.fromRow)
+          .toList();
 
   Future<int> addMessage(BoardMessage m) => db.insert('board_messages', m.toRow());
 
-  Future<List<BoardNote>> notes(int boardId) async => (await db.query(
-    'board_notes',
-    where: 'board_id = ?',
-    whereArgs: [boardId],
-    orderBy: 'pinned DESC, id DESC',
-  )).map(BoardNote.fromRow).toList();
+  Future<List<BoardNote>> notes(int boardId) async => (await db.query('board_notes',
+          where: 'board_id = ?', whereArgs: [boardId], orderBy: 'pinned DESC, id DESC'))
+      .map(BoardNote.fromRow)
+      .toList();
 
   Future<int> addNote(BoardNote n) => db.insert('board_notes', n.toRow());
 
@@ -333,24 +329,23 @@ class AppDatabase {
 
   /// Inserts or updates a parlay and replaces its legs. Returns its id.
   Future<int> saveParlay(Parlay p) => db.transaction((txn) async {
-    final row = p.toRow()..remove('id');
-    final id = p.id ?? await txn.insert('parlays', row);
-    if (p.id != null) await txn.update('parlays', row, where: 'id = ?', whereArgs: [id]);
-    await txn.delete('parlay_legs', where: 'parlay_id = ?', whereArgs: [id]);
-    for (var i = 0; i < p.legs.length; i++) {
-      await txn.insert('parlay_legs', p.legs[i].toRow(id, i));
-    }
-    return id;
-  });
+        final row = p.toRow()..remove('id');
+        final id = p.id ?? await txn.insert('parlays', row);
+        if (p.id != null) await txn.update('parlays', row, where: 'id = ?', whereArgs: [id]);
+        await txn.delete('parlay_legs', where: 'parlay_id = ?', whereArgs: [id]);
+        for (var i = 0; i < p.legs.length; i++) {
+          await txn.insert('parlay_legs', p.legs[i].toRow(id, i));
+        }
+        return id;
+      });
 
   Future<void> deleteParlay(int id) => db.transaction((txn) async {
-    await txn.delete('parlay_legs', where: 'parlay_id = ?', whereArgs: [id]);
-    await txn.delete('parlays', where: 'id = ?', whereArgs: [id]);
-  });
+        await txn.delete('parlay_legs', where: 'parlay_id = ?', whereArgs: [id]);
+        await txn.delete('parlays', where: 'id = ?', whereArgs: [id]);
+      });
 
-  Future<List<FavoriteMatch>> favorites() async => [
-    for (final r in await db.query('favorites', orderBy: 'kickoff')) FavoriteMatch.fromRow(r),
-  ];
+  Future<List<FavoriteMatch>> favorites() async =>
+      [for (final r in await db.query('favorites', orderBy: 'kickoff')) FavoriteMatch.fromRow(r)];
 
   Future<void> saveFavorite(FavoriteMatch f) =>
       db.insert('favorites', f.toRow(), conflictAlgorithm: ConflictAlgorithm.replace);
@@ -359,9 +354,9 @@ class AppDatabase {
 
   // Odds history
   Future<List<OddsSnapshot>> oddsHistory(String matchId) async => [
-    for (final r in await db.query('odds_history', where: 'match_id = ?', whereArgs: [matchId], orderBy: 'at'))
-      OddsSnapshot.fromRow(r),
-  ];
+        for (final r in await db.query('odds_history', where: 'match_id = ?', whereArgs: [matchId], orderBy: 'at'))
+          OddsSnapshot.fromRow(r),
+      ];
 
   Future<void> addOddsSnapshot(String matchId, OddsSnapshot s) =>
       db.insert('odds_history', {'match_id': matchId, ...s.toRow()});

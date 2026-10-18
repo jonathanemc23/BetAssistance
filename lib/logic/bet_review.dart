@@ -47,12 +47,7 @@ class DataBetReviewer implements BetReviewer {
   final DateTime Function() _now;
 
   @override
-  Future<BetReview> review(
-    Bet bet, {
-    required List<Bet> history,
-    required Stats stats,
-    required Settings settings,
-  }) async {
+  Future<BetReview> review(Bet bet, {required List<Bet> history, required Stats stats, required Settings settings}) async {
     final currency = NumberFormat.simpleCurrency(name: settings.currency);
     String money(double v) => currency.format(v);
     final market = bet.isParlay ? 'parlay' : (bet.market.isNotEmpty ? bet.market : marketOf(bet.selection));
@@ -62,15 +57,13 @@ class DataBetReviewer implements BetReviewer {
 
     // ---------------------------------------------------------- The bet
     final o = bet.odds;
-    sections.add(
-      ReviewSection('bet', 'Your bet', [
-        bet.isParlay
-            ? '${bet.legs.length}-leg parlay at combined odds ${_price(o)}.'
-            : '${bet.selection}${bet.event.isEmpty ? '' : ' in ${bet.event}'} at ${_price(o)}.',
-        'The price implies a ${_pct(1 / o)} chance. Stake ${money(bet.stake)} to return ${money(bet.stake * o)}.',
-        'Market: ${market == 'parlay' ? 'Parlay' : marketById(market).label}. Status: ${bet.status.label}.',
-      ]),
-    );
+    sections.add(ReviewSection('bet', 'Your bet', [
+      bet.isParlay
+          ? '${bet.legs.length}-leg parlay at combined odds ${_price(o)}.'
+          : '${bet.selection}${bet.event.isEmpty ? '' : ' in ${bet.event}'} at ${_price(o)}.',
+      'The price implies a ${_pct(1 / o)} chance. Stake ${money(bet.stake)} to return ${money(bet.stake * o)}.',
+      'Market: ${market == 'parlay' ? 'Parlay' : marketById(market).label}. Status: ${bet.status.label}.',
+    ]));
 
     // ---------------------------------------------------------- Match data
     Match? match;
@@ -106,22 +99,10 @@ class DataBetReviewer implements BetReviewer {
         final r = gradePick(market, bet.selection, home, away, hs, as);
         if (r != null) {
           if (state == MatchState.finished) {
-            updates.add(
-              'On this score the pick is ${r == BetStatus.won
-                  ? 'won'
-                  : r == BetStatus.lost
-                  ? 'lost'
-                  : 'a push (stake back)'}.',
-            );
+            updates.add('On this score the pick is ${r == BetStatus.won ? 'won' : r == BetStatus.lost ? 'lost' : 'a push (stake back)'}.');
             if (bet.status == BetStatus.pending) suggested = r;
           } else {
-            updates.add(
-              'On the current score the pick would be ${r == BetStatus.won
-                  ? 'winning'
-                  : r == BetStatus.lost
-                  ? 'losing'
-                  : 'level (stake back)'}.',
-            );
+            updates.add('On the current score the pick would be ${r == BetStatus.won ? 'winning' : r == BetStatus.lost ? 'losing' : 'level (stake back)'}.');
           }
         }
       }
@@ -134,9 +115,7 @@ class DataBetReviewer implements BetReviewer {
         updates.add('News: ${n.headline}');
       }
       if (d.home.starters.isNotEmpty || d.away.starters.isNotEmpty) {
-        updates.add(
-          'Line-ups are out: $home ${d.home.formation ?? ''}, $away ${d.away.formation ?? ''}.'.replaceAll(' ,', ','),
-        );
+        updates.add('Line-ups are out: $home ${d.home.formation ?? ''}, $away ${d.away.formation ?? ''}.'.replaceAll(' ,', ','));
       }
       sections.add(ReviewSection('updates', 'Since you placed it', updates));
 
@@ -144,21 +123,15 @@ class DataBetReviewer implements BetReviewer {
       final now = _currentPrice(market, bet.selection, m, d);
       if (now != null) {
         fair = now.fair;
-        final lines = <String>[
-          'Best price now ${_price(now.best)} (market chance ${_pct(now.fair)}, fair price ${_price(1 / now.fair)}).',
-        ];
+        final lines = <String>['Best price now ${_price(now.best)} (market chance ${_pct(now.fair)}, fair price ${_price(1 / now.fair)}).'];
         final edge = o * now.fair - 1;
         var tone = ReviewTone.neutral;
         if (o > now.best * 1.02) {
-          lines.add(
-            'You took ${_price(o)}, better than the price now: you beat the market by ${_pct(o / now.best - 1)}.',
-          );
+          lines.add('You took ${_price(o)}, better than the price now: you beat the market by ${_pct(o / now.best - 1)}.');
           tone = ReviewTone.good;
           good++;
         } else if (o < now.best * 0.98) {
-          lines.add(
-            'The price has drifted to ${_price(now.best)}: the same bet is worth more now, so the market rates it lower than when you placed it.',
-          );
+          lines.add('The price has drifted to ${_price(now.best)}: the same bet is worth more now, so the market rates it lower than when you placed it.');
           tone = ReviewTone.warning;
         }
         if (edge >= 0.03) {
@@ -166,9 +139,7 @@ class DataBetReviewer implements BetReviewer {
           tone = ReviewTone.good;
           good++;
         } else if (edge <= -0.05) {
-          lines.add(
-            'Your price is below fair value (${_signed(edge)} expected). Shopping around for a better price helps.',
-          );
+          lines.add('Your price is below fair value (${_signed(edge)} expected). Shopping around for a better price helps.');
           tone = ReviewTone.warning;
           warn++;
         }
@@ -181,50 +152,38 @@ class DataBetReviewer implements BetReviewer {
         final r = DataAssistant.recentOf(t);
         final pos = DataAssistant.positionOf(d, t);
         if (r.games == 0 && pos == null) continue;
-        ctx.add(
-          '$name: ${r.games > 0 ? '${t.form.isEmpty ? '' : '${t.form} · '}${r.w * 3 + r.dr} pts from last ${r.games}, goals ${r.gf}-${r.ga}' : ''}'
-          '${r.games > 0 && pos != null ? '; ' : ''}${pos != null ? '${pos.$1} in the table' : ''}.',
-        );
+        ctx.add('$name: ${r.games > 0 ? '${t.form.isEmpty ? '' : '${t.form} · '}${r.w * 3 + r.dr} pts from last ${r.games}, goals ${r.gf}-${r.ga}' : ''}'
+            '${r.games > 0 && pos != null ? '; ' : ''}${pos != null ? '${pos.$1} in the table' : ''}.');
       }
       if (const {'goals', 'btts', 'corners', 'cards'}.contains(market)) {
         final h = DataAssistant.recentOf(d.home), a = DataAssistant.recentOf(d.away);
         final games = h.games + a.games;
         if (games > 0) {
-          ctx.add(
-            'Recent games: over 2.5 goals in ${h.over25 + a.over25}/$games, both scored in ${h.btts + a.btts}/$games.',
-          );
+          ctx.add('Recent games: over 2.5 goals in ${h.over25 + a.over25}/$games, both scored in ${h.btts + a.btts}/$games.');
         }
       }
       if (d.h2hSummary.isNotEmpty) ctx.add('Head to head: ${d.h2hSummary}.');
       if (ctx.isNotEmpty) sections.add(ReviewSection('context', 'Form and context', ctx));
     } else if (!bet.isParlay && bet.sport == 'Soccer') {
-      sections.add(
-        const ReviewSection('updates', 'Since you placed it', [
-          "Couldn't match this bet to a listed match, so there's no live data. Bets picked from Matches are linked automatically.",
-        ]),
-      );
+      sections.add(const ReviewSection('updates', 'Since you placed it', [
+        "Couldn't match this bet to a listed match, so there's no live data. Bets picked from Matches are linked automatically.",
+      ]));
     }
 
     // ---------------------------------------------------------- Suggestions
     final unit = settings.unit;
     if (unit > 0 && bet.stake > unit * 2) {
-      suggestions.add(
-        'This stake is ${(bet.stake / unit).toStringAsFixed(1)} units, above your usual ${money(unit)}. Keep bigger stakes for picks with a clear edge.',
-      );
+      suggestions.add('This stake is ${(bet.stake / unit).toStringAsFixed(1)} units, above your usual ${money(unit)}. Keep bigger stakes for picks with a clear edge.');
       warn++;
     }
     final bank = stats.balance;
     if (bank > 0 && bet.stake / bank > 0.05) {
-      suggestions.add(
-        'This bet is ${_pct(bet.stake / bank)} of your bankroll. Most staking plans stay at 1-3% per bet.',
-      );
+      suggestions.add('This bet is ${_pct(bet.stake / bank)} of your bankroll. Most staking plans stay at 1-3% per bet.');
       warn++;
     }
     if (bet.isParlay) {
       if (bet.legs.length >= 4) {
-        suggestions.add(
-          '${bet.legs.length} legs: every extra leg adds the bookmaker margin again. Fewer, stronger legs usually pay off better.',
-        );
+        suggestions.add('${bet.legs.length} legs: every extra leg adds the bookmaker margin again. Fewer, stronger legs usually pay off better.');
         warn++;
       }
       final open = bet.legs.where((l) => l.status == BetStatus.pending).length;
@@ -232,32 +191,23 @@ class DataBetReviewer implements BetReviewer {
       if (lost > 0) {
         suggestions.add('$lost leg${lost == 1 ? '' : 's'} already lost, so the parlay is lost.');
       } else if (open > 0 && open < bet.legs.length) {
-        suggestions.add(
-          '${bet.legs.length - open} legs in, $open to go. If your bookmaker offers a cash out, compare it with the ${_pct(1 / bet.legs.where((l) => l.status == BetStatus.pending).fold(1.0, (a, l) => a * l.odds))} chance the rest come in.',
-        );
+        suggestions.add('${bet.legs.length - open} legs in, $open to go. If your bookmaker offers a cash out, compare it with the ${_pct(1 / bet.legs.where((l) => l.status == BetStatus.pending).fold(1.0, (a, l) => a * l.odds))} chance the rest come in.');
       }
     }
     if (o >= 3) suggestions.add('Long shot: expect to lose most bets like this. Keep stakes small on high odds.');
     if (o <= 1.3) suggestions.add('Short price: you risk a lot to win a little, so one loss wipes out several wins.');
     if (suggested != null) {
-      suggestions.add(
-        'The match is over. Mark the bet as ${suggested.label.toLowerCase()} to keep your bankroll right.',
-      );
-    } else if (bet.status == BetStatus.pending &&
-        match != null &&
-        match.kickoff.isAfter(_now().toUtc()) &&
-        d != null &&
-        d.home.starters.isEmpty) {
+      suggestions.add('The match is over. Mark the bet as ${suggested.label.toLowerCase()} to keep your bankroll right.');
+    } else if (bet.status == BetStatus.pending && match != null && match.kickoff.isAfter(_now().toUtc()) &&
+        d != null && d.home.starters.isEmpty) {
       suggestions.add('Line-ups are not out yet. Check them before kick-off in case a key player is missing.');
     }
     if (bet.status == BetStatus.lost && fair != null && o * fair < 1) {
       suggestions.add('The price was below fair value, so this bet was a long-term loser even before the result.');
     }
-    if (suggestions.isEmpty)
-      suggestions.add('Nothing stands out: the stake and the price look in line with your usual bets.');
-    sections.add(
-      ReviewSection('suggestions', 'Suggestions', suggestions, tone: warn > 0 ? ReviewTone.warning : ReviewTone.good),
-    );
+    if (suggestions.isEmpty) suggestions.add('Nothing stands out: the stake and the price look in line with your usual bets.');
+    sections.add(ReviewSection('suggestions', 'Suggestions', suggestions,
+        tone: warn > 0 ? ReviewTone.warning : ReviewTone.good));
 
     // ---------------------------------------------------------- Track record
     final record = <String>[];
@@ -272,20 +222,10 @@ class DataBetReviewer implements BetReviewer {
           '${staked > 0 ? 'ROI ${_signed(profit / staked)}' : 'no stake'}.';
     }
 
-    record.add(
-      line(
-        market == 'parlay' ? 'Parlays' : marketById(market).label,
-        history.where(
-          (b) => (b.isParlay ? 'parlay' : (b.market.isNotEmpty ? b.market : marketOf(b.selection))) == market,
-        ),
-      ),
-    );
+    record.add(line(market == 'parlay' ? 'Parlays' : marketById(market).label,
+        history.where((b) => (b.isParlay ? 'parlay' : (b.market.isNotEmpty ? b.market : marketOf(b.selection))) == market)));
     if (!bet.isParlay) record.add(line(bet.sport, history.where((b) => !b.isParlay && b.sport == bet.sport)));
-    final band = o < 1.7
-        ? (1.0, 1.7, 'under 1.70')
-        : o < 2.5
-        ? (1.7, 2.5, '1.70 to 2.50')
-        : (2.5, 1000.0, '2.50 and up');
+    final band = o < 1.7 ? (1.0, 1.7, 'under 1.70') : o < 2.5 ? (1.7, 2.5, '1.70 to 2.50') : (2.5, 1000.0, '2.50 and up');
     record.add(line('Odds ${band.$3}', history.where((b) => b.odds >= band.$1 && b.odds < band.$2)));
     record.removeWhere((l) => l.isEmpty);
     if (record.isNotEmpty) sections.add(ReviewSection('record', 'Your record on similar bets', record));
@@ -293,10 +233,10 @@ class DataBetReviewer implements BetReviewer {
     final headline = suggested != null
         ? 'Match over: this pick looks ${suggested.label.toLowerCase()}.'
         : warn > good
-        ? 'A few things to watch on this bet.'
-        : good > 0
-        ? 'Good price on this bet.'
-        : 'This bet looks in line with your usual play.';
+            ? 'A few things to watch on this bet.'
+            : good > 0
+                ? 'Good price on this bet.'
+                : 'This bet looks in line with your usual play.';
     return BetReview(headline: headline, sections: sections, suggestedResult: suggested, match: match);
   }
 
@@ -371,19 +311,11 @@ BetStatus? gradePick(String market, String selection, String home, String away, 
   final s = selection.toLowerCase().trim();
   final h = home.toLowerCase(), a = away.toLowerCase();
   BetStatus win(bool w) => w ? BetStatus.won : BetStatus.lost;
-  String? team() => s.startsWith(h)
-      ? 'home'
-      : s.startsWith(a)
-      ? 'away'
-      : null;
+  String? team() => s.startsWith(h) ? 'home' : s.startsWith(a) ? 'away' : null;
   switch (market) {
     case 'result':
       if (s == 'draw') return win(hs == as);
-      return switch (team()) {
-        'home' => win(hs > as),
-        'away' => win(as > hs),
-        _ => null,
-      };
+      return switch (team()) { 'home' => win(hs > as), 'away' => win(as > hs), _ => null };
     case 'double_chance':
       final hasH = s.contains(h), hasA = s.contains(a), hasD = s.contains('draw');
       if (hasH && hasA) return win(hs != as);
@@ -392,11 +324,7 @@ BetStatus? gradePick(String market, String selection, String home, String away, 
       return null;
     case 'dnb':
       if (hs == as) return BetStatus.push;
-      return switch (team()) {
-        'home' => win(hs > as),
-        'away' => win(as > hs),
-        _ => null,
-      };
+      return switch (team()) { 'home' => win(hs > as), 'away' => win(as > hs), _ => null };
     case 'handicap':
       final side = team();
       final line = double.tryParse(RegExp(r'([+-]?\d+(?:\.\d+)?)\s*$').firstMatch(s)?.group(1) ?? '');

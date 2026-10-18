@@ -32,17 +32,13 @@ class DataParlayChecker implements ParlayChecker {
     final odds = parlay.odds;
     final chance = chances.fold(1.0, (a, c) => a * c);
     summary.add('${parlay.legs.length} selections at combined odds ${_price(odds)}.');
-    summary.add(
-      'Estimated chance that every leg wins: ${_pct(chance)} '
-      '(the price alone implies ${_pct(1 / odds)}).',
-    );
+    summary.add('Estimated chance that every leg wins: ${_pct(chance)} '
+        '(the price alone implies ${_pct(1 / odds)}).');
     final value = chance * odds - 1;
-    summary.add(
-      value >= 0
-          ? 'On these numbers the price is fair or better (${_signed(value)} expected per unit staked).'
-          : 'Expected return is ${_signed(value)} per unit staked, as usual for parlays; '
-                'each extra leg adds the bookmaker margin again.',
-    );
+    summary.add(value >= 0
+        ? 'On these numbers the price is fair or better (${_signed(value)} expected per unit staked).'
+        : 'Expected return is ${_signed(value)} per unit staked, as usual for parlays; '
+            'each extra leg adds the bookmaker margin again.');
     if (chances.isNotEmpty) {
       var weakest = 0;
       for (var i = 1; i < chances.length; i++) {
@@ -63,8 +59,8 @@ class DataParlayChecker implements ParlayChecker {
     final risk = parlay.legs.length >= 6 || odds > 10 || chance < 0.1
         ? 'High'
         : parlay.legs.length >= 4 || odds > 4 || chance < 0.25
-        ? 'Medium'
-        : 'Low';
+            ? 'Medium'
+            : 'Low';
     summary.add('This is a reading of the data, not a guarantee.');
     return ParlayCheck(checked: now.toIso8601String(), risk: risk, summary: summary, legs: legs);
   }
@@ -97,8 +93,8 @@ class DataParlayChecker implements ParlayChecker {
       (verdict, tone) = edge >= 0.03
           ? ('Good price', LegTone.good)
           : edge >= -0.03
-          ? ('Fair price', LegTone.neutral)
-          : ('Below market', LegTone.warning);
+              ? ('Fair price', LegTone.neutral)
+              : ('Below market', LegTone.warning);
     }
     lines.addAll(_context(leg, match, d));
     return (LegCheck(selection: leg.selection, verdict: verdict, tone: tone, lines: lines), fair);
@@ -148,10 +144,8 @@ class DataParlayChecker implements ParlayChecker {
       final h = DataAssistant.recentOf(d.home), a = DataAssistant.recentOf(d.away);
       final games = h.games + a.games;
       if (games > 0) {
-        out.add(
-          'Over 2.5 in ${h.over25 + a.over25}/$games recent games of both teams; '
-          '${((h.gf + h.ga + a.gf + a.ga) / games).toStringAsFixed(1)} goals a game.',
-        );
+        out.add('Over 2.5 in ${h.over25 + a.over25}/$games recent games of both teams; '
+            '${((h.gf + h.ga + a.gf + a.ga) / games).toStringAsFixed(1)} goals a game.');
       }
     } else {
       final home = s.contains(m.home.name.toLowerCase()), away = s.contains(m.away.name.toLowerCase());

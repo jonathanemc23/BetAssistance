@@ -9,13 +9,11 @@ import 'package:http/testing.dart';
 
 void main() {
   final api = FixturesApi(
-    client: MockClient(
-      (req) async => http.Response.bytes(
-        File('test/data/espn_summary_pre.json').readAsBytesSync(),
-        200,
-        headers: {'content-type': 'application/json; charset=utf-8'},
-      ),
-    ),
+    client: MockClient((req) async => http.Response.bytes(
+          File('test/data/espn_summary_pre.json').readAsBytesSync(),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        )),
   );
   final match = Match(
     id: '401878771',
@@ -30,12 +28,10 @@ void main() {
   Parlay parlay(List<ParlayLeg> legs) => Parlay(name: 'Test', legs: legs, created: 'x', updated: 'x');
 
   test('linked legs are priced against the market, typed ones by price only', () async {
-    final c = await checker.check(
-      parlay([
-        ParlayLeg.fromMatch(match, 'Chelsea to win', 3.0),
-        const ParlayLeg(selection: 'Millonarios to win', event: 'Millonarios vs Nacional', odds: 2.0),
-      ]),
-    );
+    final c = await checker.check(parlay([
+      ParlayLeg.fromMatch(match, 'Chelsea to win', 3.0),
+      const ParlayLeg(selection: 'Millonarios to win', event: 'Millonarios vs Nacional', odds: 2.0),
+    ]));
     expect(c.legs, hasLength(2));
     // 3.00 on Chelsea is well above the market, so it reads as a good price.
     expect(c.legs.first.verdict, 'Good price');
@@ -49,9 +45,10 @@ void main() {
   });
 
   test('a short price is below market, and same-match picks are flagged', () async {
-    final c = await checker.check(
-      parlay([ParlayLeg.fromMatch(match, 'Chelsea to win', 1.2), ParlayLeg.fromMatch(match, 'Draw', 3.0)]),
-    );
+    final c = await checker.check(parlay([
+      ParlayLeg.fromMatch(match, 'Chelsea to win', 1.2),
+      ParlayLeg.fromMatch(match, 'Draw', 3.0),
+    ]));
     expect(c.legs.first.verdict, 'Below market');
     expect(c.summary.any((s) => s.startsWith('Two picks from Everton vs Chelsea')), isTrue);
   });

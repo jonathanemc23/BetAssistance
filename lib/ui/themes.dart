@@ -71,11 +71,7 @@ class AppTheme {
     return ThemeData(
       colorScheme: scheme,
       scaffoldBackgroundColor: background,
-      appBarTheme: AppBarTheme(
-        backgroundColor: background,
-        foregroundColor: onSurface,
-        surfaceTintColor: Colors.transparent,
-      ),
+      appBarTheme: AppBarTheme(backgroundColor: background, foregroundColor: onSurface, surfaceTintColor: Colors.transparent),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: cardLowest,
         indicatorColor: secondaryContainer,

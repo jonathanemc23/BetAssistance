@@ -183,18 +183,14 @@ void main() {
         if (req.url.queryParameters.containsKey('dates')) return http.Response(board([]), 200);
         return switch (slug) {
           'eng.1' => http.Response(
-            board([
-              espnEvent('1', '2026-10-18T14:00Z', 'Chelsea', 'Fulham', state: 'in', detail: "30'", hs: '0', as: '0'),
-              espnEvent('2', '2026-10-18T17:00Z', 'Arsenal', 'Spurs'),
-            ]),
-            200,
-          ),
+              board([
+                espnEvent('1', '2026-10-18T14:00Z', 'Chelsea', 'Fulham', state: 'in', detail: "30'", hs: '0', as: '0'),
+                espnEvent('2', '2026-10-18T17:00Z', 'Arsenal', 'Spurs'),
+              ]),
+              200),
           'esp.1' => http.Response(
-            board([
-              espnEvent('3', '2026-10-18T14:00Z', 'Barcelona', 'Girona', state: 'in', detail: "10'", hs: '1', as: '0'),
-            ]),
-            200,
-          ),
+              board([espnEvent('3', '2026-10-18T14:00Z', 'Barcelona', 'Girona', state: 'in', detail: "10'", hs: '1', as: '0')]),
+              200),
           _ => http.Response(board([]), 200),
         };
       }),
@@ -204,28 +200,22 @@ void main() {
     expect(live.first.league.slug, 'esp.1');
   });
 
-  Map<String, Object?> tsdbEvent(
-    String id,
-    String ts,
-    String home,
-    String away, {
-    String status = 'NS',
-    String? hs,
-    String? as,
-  }) => {
-    'idEvent': id,
-    'strTimestamp': ts,
-    'dateEvent': ts.substring(0, 10),
-    'strTime': ts.substring(11),
-    'strHomeTeam': home,
-    'strAwayTeam': away,
-    'intHomeScore': hs,
-    'intAwayScore': as,
-    'strStatus': status,
-    'strHomeTeamBadge': 'https://r2/$id-h.png',
-    'strAwayTeamBadge': null,
-    'strVenue': '',
-  };
+  Map<String, Object?> tsdbEvent(String id, String ts, String home, String away,
+          {String status = 'NS', String? hs, String? as}) =>
+      {
+        'idEvent': id,
+        'strTimestamp': ts,
+        'dateEvent': ts.substring(0, 10),
+        'strTime': ts.substring(11),
+        'strHomeTeam': home,
+        'strAwayTeam': away,
+        'intHomeScore': hs,
+        'intAwayScore': as,
+        'strStatus': status,
+        'strHomeTeamBadge': 'https://r2/$id-h.png',
+        'strAwayTeamBadge': null,
+        'strVenue': '',
+      };
 
   test('reads TheSportsDB events as UTC with their status and score', () {
     const cup = League('tsdb.5831', 'Belgian Cup', tsdb: 5831);
@@ -242,10 +232,8 @@ void main() {
     );
     expect(list.map((m) => m.id), ['tsdb:1', 'tsdb:2', 'tsdb:3', 'tsdb:4']);
     expect(list[0].kickoff, DateTime.utc(2026, 10, 18, 11, 30));
-    expect(
-      (list[0].state, list[0].detail, list[0].home.score, list[0].away.score),
-      (MatchState.live, '2nd half', '5', '1'),
-    );
+    expect((list[0].state, list[0].detail, list[0].home.score, list[0].away.score),
+        (MatchState.live, '2nd half', '5', '1'));
     expect(list[0].home.logo, 'https://r2/1-h.png');
     expect(list[0].away.logo, isNull);
     expect(list[0].venue, isNull);
@@ -272,34 +260,20 @@ void main() {
         if (u.host.contains('espn') && u.path.contains('chi.1') && u.queryParameters['dates'] == '20261012') {
           // ESPN still shows the match as not started after it was played.
           return http.Response.bytes(
-            utf8.encode(
-              board([
+              utf8.encode(board([
                 espnEvent('401', '2026-10-12T20:00Z', 'Universidad de Chile', 'Ñublense', odds: [1.5, 4.0, 6.0]),
-              ]),
-            ),
-            200,
-          );
+              ])),
+              200);
         }
-        if (u.host.contains('thesportsdb') &&
-            u.queryParameters['l'] == '4627' &&
-            u.queryParameters['d'] == '2026-10-12') {
+        if (u.host.contains('thesportsdb') && u.queryParameters['l'] == '4627' && u.queryParameters['d'] == '2026-10-12') {
           return http.Response(
-            jsonEncode({
-              'events': [
-                tsdbEvent(
-                  '9',
-                  '2026-10-12T20:00:00',
-                  'Universidad de Chile',
-                  'Nublense',
-                  status: 'FT',
-                  hs: '6',
-                  as: '0',
-                ),
-                tsdbEvent('10', '2026-10-12T23:00:00', 'Palestino', 'Limache', status: 'FT', hs: '1', as: '1'),
-              ],
-            }),
-            200,
-          );
+              jsonEncode({
+                'events': [
+                  tsdbEvent('9', '2026-10-12T20:00:00', 'Universidad de Chile', 'Nublense', status: 'FT', hs: '6', as: '0'),
+                  tsdbEvent('10', '2026-10-12T23:00:00', 'Palestino', 'Limache', status: 'FT', hs: '1', as: '1'),
+                ],
+              }),
+              200);
         }
         return http.Response(board([]), 200);
       }),
@@ -326,12 +300,7 @@ void main() {
           return http.Response(board([]), 200);
         }
         if (u.queryParameters['l'] == '5831' && u.queryParameters['d'] == '2026-10-18') {
-          return http.Response(
-            jsonEncode({
-              'events': [tsdbEvent('7', '2026-10-18T16:00:00', 'Beerschot', 'Anderlecht')],
-            }),
-            200,
-          );
+          return http.Response(jsonEncode({'events': [tsdbEvent('7', '2026-10-18T16:00:00', 'Beerschot', 'Anderlecht')]}), 200);
         }
         return http.Response(jsonEncode({'events': null}), 200);
       }),
