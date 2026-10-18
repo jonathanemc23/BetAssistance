@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:bank_track/data/board.dart';
 import 'package:bank_track/data/database.dart';
+import 'package:bank_track/data/favorites.dart';
+import 'package:bank_track/data/fixtures.dart';
 import 'package:bank_track/data/models.dart';
 import 'package:bank_track/data/parlay.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -318,6 +320,45 @@ void main() {
     expect(saved.matchId, '401878771');
     expect(saved.kickoff, DateTime.utc(2026, 10, 18, 19));
     expect(saved.copyWith(status: BetStatus.won).leagueSlug, 'eng.1');
+    await db.close();
+  });
+
+  test('upgrading from 0.8.0 (v5) keeps everything and adds favourites', () async {
+    final old = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 5, onCreate: (db, _) async {
+          for (var v = 0; v < 5; v++) {
+            await migrations[v](db);
+          }
+        }));
+    await old.insert('bets', {
+      'selection': 'Chelsea -0.5', 'sport': 'Soccer', 'date': '2026-10-18', 'stake': 10, 'odds': 1.95,
+      'status': 'pending', 'created': 'z', 'bet_type': 'single', 'market': 'handicap', 'match_id': '401878771',
+    });
+    await old.insert('parlays', {'name': 'Sunday', 'created': 'x', 'updated': 'x'});
+    await old.close();
+
+    final db = await AppDatabase.open(factory: factory, path: path);
+    expect(await db.db.getVersion(), schemaVersion);
+    expect((await db.bets()).single.market, 'handicap');
+    expect((await db.parlays()).single.name, 'Sunday');
+    expect(await db.favorites(), isEmpty);
+
+    final m = Match(
+      id: 'tsdb:7',
+      league: leagueBySlug('tsdb.5831')!,
+      kickoff: DateTime.utc(2026, 10, 18, 16),
+      home: const Team('Beerschot', 'Beerschot', null, null),
+      away: const Team('Anderlecht', 'Anderlecht', 'https://x/a.png', null),
+      state: MatchState.scheduled,
+      detail: '',
+    );
+    await db.saveFavorite(FavoriteMatch.fromMatch(m, 'now'));
+    await db.saveFavorite(FavoriteMatch.fromMatch(m, 'again')); // starring twice keeps one
+    final f = (await db.favorites()).single;
+    expect((f.matchId, f.home, f.awayLogo, f.kickoff, f.added), ('tsdb:7', 'Beerschot', 'https://x/a.png', m.kickoff, 'again'));
+    expect(f.toMatch().league.tsdb, 5831);
+    await db.deleteFavorite('tsdb:7');
+    expect(await db.favorites(), isEmpty);
     await db.close();
   });
 }

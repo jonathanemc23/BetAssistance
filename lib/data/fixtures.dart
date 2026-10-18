@@ -10,10 +10,19 @@ export 'match_details.dart';
 
 /// Football fixtures from ESPN's public scoreboard feed
 /// (site.api.espn.com, free and keyless). One request per league and day.
+/// Leagues ESPN lacks or doesn't keep up to date also read TheSportsDB's free
+/// feed (thesportsdb.com), see [League.tsdb].
 class League {
-  const League(this.slug, this.name);
+  const League(this.slug, this.name, {this.tsdb});
   final String slug;
   final String name;
+
+  /// TheSportsDB league id. Its results fill in scores ESPN never updates
+  /// (Chile), and leagues with a `tsdb.` slug come only from there
+  /// (Belgian Cup).
+  final int? tsdb;
+
+  bool get onEspn => !slug.startsWith('tsdb.');
 }
 
 class Country {
@@ -42,7 +51,7 @@ const countries = <Country>[
   ]),
   Country('aus', 'Australia', '🇦🇺', [League('aus.1', 'A-League')]),
   Country('aut', 'Austria', '🇦🇹', [League('aut.1', 'Bundesliga')]),
-  Country('bel', 'Belgium', '🇧🇪', [League('bel.1', 'Pro League')]),
+  Country('bel', 'Belgium', '🇧🇪', [League('bel.1', 'Pro League'), League('tsdb.5831', 'Belgian Cup', tsdb: 5831)]),
   Country('bol', 'Bolivia', '🇧🇴', [League('bol.1', 'División Profesional')]),
   Country('bra', 'Brazil', '🇧🇷', [
     League('bra.1', 'Série A'),
@@ -50,7 +59,10 @@ const countries = <Country>[
     League('bra.3', 'Série C'),
     League('bra.copa_do_brazil', 'Copa do Brasil'),
   ]),
-  Country('chi', 'Chile', '🇨🇱', [League('chi.1', 'Primera División'), League('chi.copa_chi', 'Copa Chile')]),
+  Country('chi', 'Chile', '🇨🇱', [
+    League('chi.1', 'Primera División', tsdb: 4627),
+    League('chi.copa_chi', 'Copa Chile', tsdb: 5378),
+  ]),
   Country('chn', 'China', '🇨🇳', [League('chn.1', 'Super League')]),
   // ESPN's Primera B feed (col.2) has had no fixtures since 2025; it stays
   // listed so matches show up again if ESPN resumes it.
@@ -124,6 +136,15 @@ const countries = <Country>[
   Country('uru', 'Uruguay', '🇺🇾', [League('uru.1', 'Primera División')]),
   Country('ven', 'Venezuela', '🇻🇪', [League('ven.1', 'Liga FUTVE')]),
 ];
+
+League? leagueBySlug(String slug) {
+  for (final c in countries) {
+    for (final l in c.leagues) {
+      if (l.slug == slug) return l;
+    }
+  }
+  return null;
+}
 
 Country? countryByCode(String? code) {
   for (final c in countries) {
@@ -235,6 +256,19 @@ class Match {
   final MatchOdds? odds;
 
   String get title => '${home.name} vs ${away.name}';
+
+  /// The same match with a newer status and score from another feed.
+  Match withStatus(MatchState state, String detail, String? homeScore, String? awayScore) => Match(
+    id: id,
+    league: league,
+    kickoff: kickoff,
+    home: Team(home.name, home.shortName, home.logo, homeScore ?? home.score),
+    away: Team(away.name, away.shortName, away.logo, awayScore ?? away.score),
+    state: state,
+    detail: detail,
+    venue: venue,
+    odds: odds,
+  );
   bool get hasScore => state == MatchState.live || state == MatchState.finished;
 
   /// A pending single bet on this match, for the bet form. Pass a pick
@@ -296,6 +330,106 @@ List<Match> parseScoreboard(String body, League league) {
     }
   }
   return out;
+}
+
+/// Parses one TheSportsDB `eventsday` / `eventsnextleague` response.
+/// Their times are UTC; scores come as strings or null.
+List<Match> parseSportsDb(String body, League league) {
+  final json = jsonDecode(body);
+  final events = json is Map<String, dynamic> ? json['events'] : null;
+  if (events is! List) return const [];
+  final out = <Match>[];
+  for (final e in events) {
+    try {
+      if (e is! Map<String, dynamic>) continue;
+      final ts = e['strTimestamp'] as String? ?? '${e['dateEvent']}T${e['strTime'] ?? '00:00:00'}';
+      final kickoff = DateTime.parse(RegExp(r'(Z|[+-]\d\d:?\d\d)$').hasMatch(ts) ? ts : '${ts}Z').toUtc();
+      final hs = e['intHomeScore']?.toString(), as = e['intAwayScore']?.toString();
+      final (state, detail) = sportsDbStatus((e['strStatus'] ?? '') as String, hasScore: hs != null && as != null);
+      Team team(String name, Object? badge, String? score) =>
+          Team(name, name, badge is String && badge.isNotEmpty ? badge : null, state == MatchState.scheduled ? null : score);
+      out.add(
+        Match(
+          id: 'tsdb:${e['idEvent']}',
+          league: league,
+          kickoff: kickoff,
+          home: team(e['strHomeTeam'] as String, e['strHomeTeamBadge'], hs),
+          away: team(e['strAwayTeam'] as String, e['strAwayTeamBadge'], as),
+          state: state,
+          detail: detail,
+          venue: (e['strVenue'] as String?)?.trim().isEmpty ?? true ? null : e['strVenue'] as String,
+        ),
+      );
+    } catch (_) {
+      // Skip events we can't read.
+    }
+  }
+  return out;
+}
+
+/// State and short detail for a TheSportsDB status code ("NS", "2H", "FT",
+/// "PST"...; older events spell them out, e.g. "Match Finished").
+(MatchState, String) sportsDbStatus(String raw, {bool hasScore = false}) {
+  final s = raw.trim().toUpperCase();
+  return switch (s) {
+    '' || 'NS' || 'TBD' || 'NOT STARTED' => hasScore ? (MatchState.finished, 'FT') : (MatchState.scheduled, ''),
+    '1H' || 'FIRST HALF' => (MatchState.live, '1st half'),
+    'HT' || 'HALFTIME' || 'HALF TIME' => (MatchState.live, 'HT'),
+    '2H' || 'SECOND HALF' => (MatchState.live, '2nd half'),
+    'ET' || 'BT' || 'EXTRA TIME' => (MatchState.live, 'Extra time'),
+    'P' || 'PEN_LIVE' || 'PENALTY IN PROGRESS' => (MatchState.live, 'Penalties'),
+    'LIVE' || 'INT' || 'IN PLAY' => (MatchState.live, 'Live'),
+    'FT' || 'MATCH FINISHED' || 'FINISHED' => (MatchState.finished, 'FT'),
+    'AET' => (MatchState.finished, 'AET'),
+    'PEN' || 'AP' => (MatchState.finished, 'FT (pens)'),
+    'AWD' || 'WO' => (MatchState.finished, 'Awarded'),
+    'PST' || 'POSTPONED' || 'MATCH POSTPONED' => (MatchState.other, 'Postponed'),
+    'CANC' || 'CANCELLED' => (MatchState.other, 'Cancelled'),
+    'ABD' || 'ABANDONED' => (MatchState.other, 'Abandoned'),
+    'SUSP' => (MatchState.other, 'Suspended'),
+    _ => hasScore ? (MatchState.finished, 'FT') : (MatchState.other, raw.trim()),
+  };
+}
+
+/// ESPN's matches with TheSportsDB's filled in: a TheSportsDB match that is
+/// already on ESPN (same teams, kick-off within a day) only updates its
+/// status and score, since ESPN stops updating some leagues; the rest are
+/// added as they are.
+List<Match> mergeSportsDb(List<Match> espn, List<Match> tsdb) {
+  final out = [...espn];
+  for (final t in tsdb) {
+    final i = out.indexWhere((e) =>
+        !e.id.startsWith('tsdb:') &&
+        e.kickoff.difference(t.kickoff).inHours.abs() <= 30 &&
+        sameTeam(e.home.name, t.home.name) &&
+        sameTeam(e.away.name, t.away.name));
+    if (i < 0) {
+      out.add(t);
+    } else if (t.state != MatchState.scheduled && out[i].state != t.state) {
+      out[i] = out[i].withStatus(t.state, t.detail, t.home.score, t.away.score);
+    }
+  }
+  return out;
+}
+
+const _accents = {'á': 'a', 'à': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+  'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i', 'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o', 'ú': 'u', 'ù': 'u',
+  'û': 'u', 'ü': 'u', 'ñ': 'n', 'ç': 'c'};
+const _filler = {'fc', 'cf', 'cd', 'sc', 'ac', 'afc', 'club', 'deportes', 'deportivo', 'de', 'del', 'la', 'el',
+  'the', 'kv', 'kvc', 'krc', 'kaa', 'rsc', 'royal', 'sk', 'ksv', 'and', 'y'};
+
+Set<String> _teamWords(String name) {
+  final plain = name.toLowerCase().split('').map((c) => _accents[c] ?? c).join();
+  return plain.split(RegExp(r'[^a-z0-9]+')).where((w) => w.length > 1 && !_filler.contains(w)).toSet();
+}
+
+/// Whether two feeds' names for a team are the same club, e.g.
+/// "Deportes Limache" and "Limache", or "Ñublense" and "Nublense".
+bool sameTeam(String a, String b) {
+  final wa = _teamWords(a), wb = _teamWords(b);
+  if (wa.isEmpty || wb.isEmpty) return a.toLowerCase().trim() == b.toLowerCase().trim();
+  final common = wa.intersection(wb).length;
+  return common == wa.length || common == wb.length || common >= 2;
 }
 
 /// Best entry of ESPN's `odds` list (often `[null]` or missing): the
@@ -418,6 +552,9 @@ double? _american(Object? v) {
   return a > 0 ? 1 + a / 100 : 1 + 100 / -a;
 }
 
+String _isoDay(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
 String _ymd(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
@@ -427,6 +564,37 @@ class FixturesApi {
   final _cache = <String, (DateTime, List<Match>)>{};
 
   static const _base = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
+
+  /// TheSportsDB's free feed; 123 is its public key.
+  static const _tsdb = 'https://www.thesportsdb.com/api/v1/json/123';
+
+  /// Runs every (league, isTheSportsDb, url) request at once. Returns the
+  /// ESPN and TheSportsDB matches, and false when every request failed.
+  Future<(List<Match>, List<Match>, bool)> _fetchAll(List<(League, bool, String)> requests) async {
+    var failures = 0;
+    final results = await Future.wait([
+      for (final (league, isTsdb, url) in requests)
+        () async {
+          try {
+            final res = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+            if (res.statusCode != 200) {
+              failures++;
+              return (isTsdb, const <Match>[]);
+            }
+            final body = utf8.decode(res.bodyBytes);
+            return (isTsdb, isTsdb ? parseSportsDb(body, league) : parseScoreboard(body, league));
+          } catch (_) {
+            failures++;
+            return (isTsdb, const <Match>[]);
+          }
+        }(),
+    ]);
+    return (
+      [for (final (t, ms) in results) if (!t) ...ms],
+      [for (final (t, ms) in results) if (t) ...ms],
+      requests.isEmpty || failures < requests.length,
+    );
+  }
 
   /// Matches kicking off on [day] in the phone's time zone, grouped feed-wide.
   /// ESPN buckets matches by US Eastern date, so the day before and after are
@@ -438,30 +606,17 @@ class FixturesApi {
     if (!refresh && hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 2)) return hit.$2;
 
     final days = [local.subtract(const Duration(days: 1)), local, local.add(const Duration(days: 1))];
-    var failures = 0, requests = 0;
-    final results = await Future.wait([
+    final (espn, tsdb, ok) = await _fetchAll([
       for (final l in country.leagues)
-        for (final d in days)
-          () async {
-            requests++;
-            try {
-              final res = await _client
-                  .get(Uri.parse('$_base/${l.slug}/scoreboard?dates=${_ymd(d)}'))
-                  .timeout(const Duration(seconds: 15));
-              if (res.statusCode != 200) {
-                failures++;
-                return const <Match>[];
-              }
-              return parseScoreboard(utf8.decode(res.bodyBytes), l);
-            } catch (_) {
-              failures++;
-              return const <Match>[];
-            }
-          }(),
+        for (final d in days) ...[
+          if (l.onEspn) (l, false, '$_base/${l.slug}/scoreboard?dates=${_ymd(d)}'),
+          if (l.tsdb != null) (l, true, '$_tsdb/eventsday.php?d=${_isoDay(d)}&l=${l.tsdb}'),
+        ],
     ]);
-    if (requests > 0 && failures == requests) {
+    if (!ok) {
       throw const FixturesException("Couldn't load matches. Check your connection and try again.");
     }
+    final results = [mergeSportsDb(espn, tsdb)];
     final seen = <String>{};
     final list =
         [
@@ -475,6 +630,31 @@ class FixturesApi {
     return list;
   }
 
+  /// The latest version of each of [saved] (starred matches), by id, read
+  /// from its league's list for its day. Matches no feed has are left out.
+  Future<Map<String, Match>> refreshMatches(List<Match> saved, {bool refresh = false}) async {
+    final groups = <String, (League, DateTime)>{};
+    for (final m in saved) {
+      final d = m.kickoff.toLocal();
+      groups['${m.league.slug}|${_ymd(d)}'] = (m.league, DateTime(d.year, d.month, d.day));
+    }
+    final out = <String, Match>{};
+    await Future.wait([
+      for (final (l, d) in groups.values)
+        () async {
+          try {
+            final list = await matches(Country('league:${l.slug}', l.name, '', [l]), d, refresh: refresh);
+            for (final m in list) {
+              out[m.id] = m;
+            }
+          } on FixturesException {
+            // Keep what was saved for this league.
+          }
+        }(),
+    ]);
+    return out;
+  }
+
   (DateTime, List<Match>)? _live;
 
   /// Every match being played right now across all the leagues the app
@@ -483,26 +663,21 @@ class FixturesApi {
     final hit = _live;
     if (!refresh && hit != null && DateTime.now().difference(hit.$1) < const Duration(seconds: 30)) return hit.$2;
     final leagues = {for (final c in countries) for (final l in c.leagues) l.slug: l}.values;
-    var failures = 0;
-    final results = await Future.wait([
-      for (final l in leagues)
-        () async {
-          try {
-            final res = await _client.get(Uri.parse('$_base/${l.slug}/scoreboard')).timeout(const Duration(seconds: 15));
-            if (res.statusCode != 200) {
-              failures++;
-              return const <Match>[];
-            }
-            return parseScoreboard(utf8.decode(res.bodyBytes), l);
-          } catch (_) {
-            failures++;
-            return const <Match>[];
-          }
-        }(),
+    // TheSportsDB has no free live feed, so read today's and yesterday's
+    // (UTC) matches; evening kick-offs in the Americas cross midnight UTC.
+    final today = DateTime.now().toUtc();
+    final (espn, tsdb, ok) = await _fetchAll([
+      for (final l in leagues) ...[
+        if (l.onEspn) (l, false, '$_base/${l.slug}/scoreboard'),
+        if (l.tsdb != null)
+          for (final d in [today.subtract(const Duration(days: 1)), today])
+            (l, true, '$_tsdb/eventsday.php?d=${_isoDay(d)}&l=${l.tsdb}'),
+      ],
     ]);
-    if (leagues.isNotEmpty && failures == leagues.length) {
+    if (!ok) {
       throw const FixturesException("Couldn't load live matches. Check your connection and try again.");
     }
+    final results = [mergeSportsDb(espn, tsdb)];
     final seen = <String>{};
     final list = [
       for (final m in results.expand((r) => r))
@@ -518,12 +693,19 @@ class FixturesApi {
   Future<MatchDetails> details(Match m, {bool refresh = false}) async {
     final hit = _details[m.id];
     if (!refresh && hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 1)) return hit.$2;
+    // Matches only TheSportsDB has: just the status and score it gave.
+    if (m.id.startsWith('tsdb:')) return MatchDetails.statusOf(m);
     try {
       final res = await _client
           .get(Uri.parse('$_base/${m.league.slug}/summary?event=${m.id}'))
           .timeout(const Duration(seconds: 15));
       if (res.statusCode != 200) throw FixturesException('ESPN answered ${res.statusCode}');
-      final d = parseMatchDetails(utf8.decode(res.bodyBytes));
+      var d = parseMatchDetails(utf8.decode(res.bodyBytes));
+      // ESPN never moves some leagues past "scheduled"; trust the score
+      // TheSportsDB gave the match list.
+      if (d.state == MatchState.scheduled && (m.state == MatchState.live || m.state == MatchState.finished)) {
+        d = d.withStatusOf(m);
+      }
       _details[m.id] = (DateTime.now(), d);
       return d;
     } on FixturesException {

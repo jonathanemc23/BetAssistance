@@ -13,6 +13,9 @@ import 'package:http/testing.dart';
 import 'package:bank_track/data/fixtures.dart';
 
 import 'fixtures_test.dart' show espnEvent, board;
+import 'slip_reader_test.dart' show screen;
+import 'package:bank_track/logic/slip_reader.dart';
+import 'package:bank_track/ui/slip_import.dart';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -310,6 +313,18 @@ void main() {
     expect(find.textContaining('2 live now'), findsOneWidget);
     expect(tester.getTopLeft(find.text('Arsenal')).dy, lessThan(tester.getTopLeft(find.text('Real Madrid')).dy));
     await shot('live');
+
+    // Star a match; it shows under Favorites with its live score.
+    await tester.tap(find.byTooltip('Add to favorites').first);
+    await settle(tester);
+    expect(store.favorites.single.home, 'Arsenal');
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(Tab, 'Favorites'));
+    await settle(tester);
+    expect(find.text('LIVE NOW · 1'), findsOneWidget);
+    expect(find.byTooltip('Remove from favorites'), findsOneWidget);
+    await shot('favorites');
     await tester.tap(find.widgetWithText(Tab, 'Matches'));
     await tester.pumpAndSettle();
     await tester.pageBack();
@@ -372,6 +387,44 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.parlays.single.status, BetStatus.won);
     expect(store.parlays.single.legs.every((l) => l.status == BetStatus.won), isTrue);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // A slip screenshot from another betting site becomes a parlay.
+    SlipImport.pickImage = () async => '/slip.png';
+    SlipImport.scanner = _FakeScanner(screen([
+      ['Apuesta combinada (3)'],
+      ['Millonarios - Santa Fe'],
+      ['1X2 Tiempo reglamentario'],
+      ['Millonarios', '2,05'],
+      ['Junior - Nacional'],
+      ['Total de goles'],
+      ['Más de 2.5', '1,80'],
+      ['América - Cali'],
+      ['Ambos equipos marcan'],
+      ['Sí', '1,95'],
+      ['Cuota total', '7,19'],
+      ['Apuesta', '\$ 10.000'],
+    ]));
+    await tester.tap(find.text('From screenshot'));
+    await settle(tester);
+    expect(find.textContaining('Read 3 selections'), findsOneWidget);
+    expect(find.text('Millonarios - Santa Fe'), findsOneWidget);
+    await shot('slip_review');
+    await tester.scrollUntilVisible(find.text('Save as a parlay'), 300,
+        scrollable: find.descendant(of: find.byKey(const Key('slip-review')), matching: find.byType(Scrollable)).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save as a parlay'));
+    await settle(tester);
+    final imported = store.parlays.firstWhere((p) => p.name == 'Parlay 2');
+    expect(imported.legs.map((l) => (l.selection, l.event, l.odds)), [
+      ('Millonarios', 'Millonarios - Santa Fe', 2.05),
+      ('Más de 2.5', 'Junior - Nacional', 1.80),
+      ('Sí', 'América - Cali', 1.95),
+    ]);
+    expect(imported.stake, 10000);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
     await shot('parlays');
@@ -534,3 +587,10 @@ http.Client _fixturesClient() => MockClient((req) async {
     _ => http.Response(board([]), 200),
   };
 });
+
+class _FakeScanner implements SlipScanner {
+  _FakeScanner(this.lines);
+  final List<SlipLine> lines;
+  @override
+  Future<List<SlipLine>> scan(String imagePath) async => lines;
+}

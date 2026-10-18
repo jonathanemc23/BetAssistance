@@ -10,7 +10,8 @@ import '../logic/stats.dart';
 import 'match_page.dart';
 import 'parlay_screens.dart';
 
-/// Matches page: fixtures by country and day, and everything live now.
+/// Matches page: fixtures by country and day, everything live now, and the
+/// matches the user starred.
 class MatchesTabs extends StatelessWidget {
   const MatchesTabs({super.key, required this.store, required this.api, this.today, this.onPick});
   final BankStore store;
@@ -20,13 +21,14 @@ class MatchesTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-        length: 2,
+        length: 3,
         child: Column(children: [
-          const TabBar(tabs: [Tab(text: 'Matches'), Tab(text: 'Live')]),
+          const TabBar(tabs: [Tab(text: 'Matches'), Tab(text: 'Live'), Tab(text: 'Favorites')]),
           Expanded(
             child: TabBarView(children: [
               MatchesScreen(store: store, api: api, today: today, onPick: onPick),
               LiveMatches(store: store, api: api, onPick: onPick),
+              FavoriteMatches(store: store, api: api, onPick: onPick),
             ]),
           ),
         ]),
@@ -121,6 +123,7 @@ class _LiveMatchesState extends State<LiveMatches> {
                         ),
                         _MatchCard(
                           match: m,
+                          store: widget.store,
                           oddsFormat: widget.store.settings.oddsFormat,
                           onTap: () => _openMatch(m),
                           onPick: (sel, odds) => _pick(m, sel, odds),
@@ -409,6 +412,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
               padding: const EdgeInsets.only(bottom: 8),
               child: _MatchCard(
                 match: m,
+                store: widget.store,
                 oddsFormat: widget.store.settings.oddsFormat,
                 onTap: () => _openMatch(m),
                 onPick: (sel, odds) => _pick(m, sel, odds),
@@ -421,9 +425,20 @@ class _MatchesScreenState extends State<MatchesScreen> {
 }
 
 class _MatchCard extends StatelessWidget {
-  const _MatchCard({required this.match, required this.oddsFormat, required this.onTap, required this.onPick});
+  const _MatchCard({
+    required this.match,
+    required this.store,
+    required this.oddsFormat,
+    required this.onTap,
+    required this.onPick,
+    this.showDate = false,
+  });
   final Match match;
+  final BankStore store;
   final OddsFormat oddsFormat;
+
+  /// Show the kick-off day as well as the time (lists across several days).
+  final bool showDate;
   final VoidCallback onTap;
   final void Function(String selection, double odds) onPick;
 
@@ -434,9 +449,11 @@ class _MatchCard extends StatelessWidget {
     final m = match;
     final live = m.state == MatchState.live;
     final status = switch (m.state) {
-      MatchState.scheduled => DateFormat.Hm().format(m.kickoff.toLocal()),
+      MatchState.scheduled => showDate
+          ? '${DateFormat.MMMd().format(m.kickoff.toLocal())}\n${DateFormat.Hm().format(m.kickoff.toLocal())}'
+          : DateFormat.Hm().format(m.kickoff.toLocal()),
       MatchState.live => m.detail,
-      MatchState.finished => 'FT',
+      MatchState.finished => showDate ? '${DateFormat.MMMd().format(m.kickoff.toLocal())}\n${m.detail.isEmpty ? 'FT' : m.detail}' : 'FT',
       MatchState.other => m.detail,
     };
     final homeWon =
@@ -477,8 +494,9 @@ class _MatchCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 16, 12),
+          padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
                 width: 56,
@@ -527,10 +545,173 @@ class _MatchCard extends StatelessWidget {
                   ],
                 ),
               ),
+              FavoriteStar(store: store, match: m, compact: true),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Star that adds a match to Favorites or takes it off.
+class FavoriteStar extends StatelessWidget {
+  const FavoriteStar({super.key, required this.store, required this.match, this.compact = false});
+  final BankStore store;
+  final Match match;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: store,
+        builder: (context, _) {
+          final on = store.isFavorite(match.id);
+          final cs = Theme.of(context).colorScheme;
+          return IconButton(
+            tooltip: on ? 'Remove from favorites' : 'Add to favorites',
+            visualDensity: compact ? VisualDensity.compact : null,
+            icon: Icon(on ? Icons.star_rounded : Icons.star_outline_rounded,
+                color: on ? Colors.amber.shade600 : (compact ? cs.onSurfaceVariant : null)),
+            onPressed: () async {
+              final starred = await store.toggleFavorite(match);
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(SnackBar(
+                  content: Text(starred ? 'Added to favorites' : 'Removed from favorites'),
+                  duration: const Duration(seconds: 2),
+                  persist: false,
+                ));
+            },
+          );
+        },
+      );
+}
+
+/// The matches the user starred: live first, then upcoming by kick-off,
+/// then finished, newest first. Status and scores refresh every minute.
+class FavoriteMatches extends StatefulWidget {
+  const FavoriteMatches({super.key, required this.store, required this.api, this.onPick});
+  final BankStore store;
+  final FixturesApi api;
+  final void Function(Match match, String selection, double odds)? onPick;
+
+  @override
+  State<FavoriteMatches> createState() => _FavoriteMatchesState();
+}
+
+class _FavoriteMatchesState extends State<FavoriteMatches> {
+  Map<String, Match> _current = {};
+  Set<String> _loadedIds = {};
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.store.addListener(_storeChanged);
+    _load();
+    _timer = Timer.periodic(const Duration(seconds: 60), (_) => _load(refresh: true));
+  }
+
+  @override
+  void dispose() {
+    widget.store.removeListener(_storeChanged);
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _storeChanged() {
+    final ids = {for (final f in widget.store.favorites) f.matchId};
+    if (ids.difference(_loadedIds).isNotEmpty) _load();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _load({bool refresh = false}) async {
+    final saved = [for (final f in widget.store.favorites) f.toMatch()];
+    _loadedIds = {for (final m in saved) m.id};
+    if (saved.isEmpty) return;
+    final current = await widget.api.refreshMatches(saved, refresh: refresh);
+    if (mounted) setState(() => _current = {..._current, ...current});
+  }
+
+  void _openMatch(Match m) => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+            builder: (_) => MatchPage(match: m, store: widget.store, api: widget.api, onPick: widget.onPick)),
+      );
+
+  void _pick(Match m, String selection, double odds) => widget.onPick != null
+      ? widget.onPick!(m, selection, odds)
+      : pickSelection(context, store: widget.store, api: widget.api, match: m, selection: selection, odds: odds);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final now = DateTime.now().toUtc();
+    final all = [
+      for (final f in widget.store.favorites)
+        _current[f.matchId] ??
+            // Not in any feed any more: once it should be over, list it as ended.
+            (now.difference(f.kickoff) > const Duration(hours: 3)
+                ? f.toMatch().withStatus(MatchState.other, 'Ended', null, null)
+                : f.toMatch()),
+    ];
+    if (all.isEmpty) {
+      return ListView(padding: const EdgeInsets.all(32), children: [
+        const SizedBox(height: 48),
+        Icon(Icons.star_outline_rounded, size: 48, color: cs.onSurfaceVariant),
+        const SizedBox(height: 12),
+        Text('Tap the star on any match to follow it here.',
+            textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
+      ]);
+    }
+    final live = all.where((m) => m.state == MatchState.live).toList()
+      ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    final upcoming = all.where((m) => m.state == MatchState.scheduled).toList()
+      ..sort((a, b) => a.kickoff.compareTo(b.kickoff));
+    final done = all.where((m) => m.state == MatchState.finished || m.state == MatchState.other).toList()
+      ..sort((a, b) => b.kickoff.compareTo(a.kickoff));
+
+    Widget section(String title, List<Match> list) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+              child: Row(children: [
+                Text('${title.toUpperCase()} · ${list.length}',
+                    style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: cs.primary)),
+                const SizedBox(width: 8),
+                Expanded(child: Divider(color: cs.outlineVariant)),
+              ]),
+            ),
+            for (final m in list)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, bottom: 4),
+                    child: Text(m.league.name, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                  ),
+                  _MatchCard(
+                    match: m,
+                    store: widget.store,
+                    oddsFormat: widget.store.settings.oddsFormat,
+                    showDate: true,
+                    onTap: () => _openMatch(m),
+                    onPick: (sel, odds) => _pick(m, sel, odds),
+                  ),
+                ]),
+              ),
+          ],
+        );
+
+    return RefreshIndicator(
+      onRefresh: () => _load(refresh: true),
+      child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
+        if (live.isNotEmpty) section('Live now', live),
+        if (upcoming.isNotEmpty) section('Upcoming', upcoming),
+        if (done.isNotEmpty) section('Finished', done),
+      ]),
     );
   }
 }

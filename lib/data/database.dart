@@ -2,6 +2,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import 'board.dart';
+import 'favorites.dart';
 import 'models.dart';
 import 'parlay.dart';
 
@@ -135,6 +136,21 @@ final List<Future<void> Function(DatabaseExecutor db)> migrations = [
     await db.execute('ALTER TABLE bets ADD COLUMN league_slug TEXT');
     await db.execute('ALTER TABLE bets ADD COLUMN league_name TEXT');
     await db.execute('ALTER TABLE bets ADD COLUMN kickoff TEXT');
+  },
+  // 5 -> 6: favourite matches.
+  (db) async {
+    await db.execute('''
+      CREATE TABLE favorites (
+        match_id TEXT PRIMARY KEY,
+        league_slug TEXT NOT NULL,
+        league_name TEXT NOT NULL DEFAULT '',
+        home TEXT NOT NULL,
+        away TEXT NOT NULL,
+        home_logo TEXT,
+        away_logo TEXT,
+        kickoff TEXT NOT NULL,
+        added TEXT NOT NULL
+      )''');
   },
 ];
 
@@ -312,4 +328,12 @@ class AppDatabase {
         await txn.delete('parlay_legs', where: 'parlay_id = ?', whereArgs: [id]);
         await txn.delete('parlays', where: 'id = ?', whereArgs: [id]);
       });
+
+  Future<List<FavoriteMatch>> favorites() async =>
+      [for (final r in await db.query('favorites', orderBy: 'kickoff')) FavoriteMatch.fromRow(r)];
+
+  Future<void> saveFavorite(FavoriteMatch f) =>
+      db.insert('favorites', f.toRow(), conflictAlgorithm: ConflictAlgorithm.replace);
+
+  Future<void> deleteFavorite(String matchId) => db.delete('favorites', where: 'match_id = ?', whereArgs: [matchId]);
 }
