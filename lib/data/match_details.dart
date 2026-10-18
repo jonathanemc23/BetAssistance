@@ -44,6 +44,33 @@ class MatchDetails {
   final MatchState state;
   final String clock;
   final int? homeScore, awayScore;
+
+  /// Only the status and score of [m], for matches no feed has details for.
+  static MatchDetails statusOf(Match m) => MatchDetails(
+    state: m.state,
+    clock: m.detail,
+    homeScore: int.tryParse(m.home.score ?? ''),
+    awayScore: int.tryParse(m.away.score ?? ''),
+  );
+
+  /// These details with the status and score of [m].
+  MatchDetails withStatusOf(Match m) => MatchDetails(
+    odds: odds,
+    news: news,
+    home: home,
+    away: away,
+    events: events,
+    stats: stats,
+    statsAreSeason: statsAreSeason,
+    h2hSummary: h2hSummary,
+    h2h: h2h,
+    table: table,
+    tableTitle: tableTitle,
+    state: m.state,
+    clock: m.detail,
+    homeScore: int.tryParse(m.home.score ?? ''),
+    awayScore: int.tryParse(m.away.score ?? ''),
+  );
 }
 
 class NewsItem {

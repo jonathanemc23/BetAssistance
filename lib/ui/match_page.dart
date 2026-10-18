@@ -75,6 +75,7 @@ class _MatchPageState extends State<MatchPage> {
         appBar: AppBar(
           title: Text(m.league.name),
           actions: [
+            FavoriteStar(store: widget.store, match: m),
             IconButton(
               tooltip: 'Open in Matchboard',
               icon: const Icon(Icons.space_dashboard_outlined),

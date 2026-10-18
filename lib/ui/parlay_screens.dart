@@ -13,6 +13,7 @@ import 'format.dart';
 import 'market_sheet.dart';
 import 'matches_screen.dart';
 import 'share_ui.dart';
+import 'slip_import.dart';
 import 'themes.dart';
 
 /// Parlay builder: the user's saved parlays, newest activity first.
@@ -27,14 +28,26 @@ class ParlaysPage extends StatelessWidget {
     final cs = theme.colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Parlay builder')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final p = await store.newParlay();
-          if (context.mounted) await openParlay(context, store: store, api: api, parlay: p);
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('New parlay'),
-      ),
+      floatingActionButton: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+        FloatingActionButton.extended(
+          heroTag: 'slip',
+          onPressed: () => importSlip(context, store: store, api: api),
+          backgroundColor: cs.secondaryContainer,
+          foregroundColor: cs.onSecondaryContainer,
+          icon: const Icon(Icons.document_scanner_outlined),
+          label: const Text('From screenshot'),
+        ),
+        const SizedBox(height: 12),
+        FloatingActionButton.extended(
+          heroTag: 'new',
+          onPressed: () async {
+            final p = await store.newParlay();
+            if (context.mounted) await openParlay(context, store: store, api: api, parlay: p);
+          },
+          icon: const Icon(Icons.add),
+          label: const Text('New parlay'),
+        ),
+      ]),
       body: ListenableBuilder(
         listenable: store,
         builder: (context, _) {
@@ -49,8 +62,8 @@ class ParlaysPage extends StatelessWidget {
                   Text('Build your parlays', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   Text(
-                    'Add picks from the match list or matches that are not listed, check them, '
-                    'share them and mark the result.',
+                    'Add picks from the match list or matches that are not listed, or load a screenshot '
+                    'of a slip from any betting site. Check them, share them and mark the result.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: cs.onSurfaceVariant),
                   ),
@@ -59,7 +72,7 @@ class ParlaysPage extends StatelessWidget {
             );
           }
           return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 168),
             itemCount: list.length,
             separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, i) => _ParlayTile(
@@ -515,12 +528,19 @@ class _SlipHeader extends StatelessWidget {
               },
             ),
           ),
-          const Spacer(),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('Returns', style: theme.textTheme.labelSmall?.copyWith(color: fg.withValues(alpha: 0.8))),
-            Text(p.stake > 0 && p.legs.isNotEmpty ? fmt.money(p.potentialReturn) : '–',
-                style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w800)),
-          ]),
+          const SizedBox(width: 12),
+          // Large amounts (e.g. pesos) shrink rather than overflow.
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('Returns', style: theme.textTheme.labelSmall?.copyWith(color: fg.withValues(alpha: 0.8))),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(p.stake > 0 && p.legs.isNotEmpty ? fmt.money(p.potentialReturn) : '–',
+                    style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w800)),
+              ),
+            ]),
+          ),
         ]),
       ]),
     );

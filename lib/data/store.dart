@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../logic/stats.dart';
 import 'board.dart';
 import 'database.dart';
+import 'favorites.dart';
 import 'fixtures.dart';
 import 'models.dart';
 import 'parlay.dart';
@@ -18,6 +19,7 @@ class BankStore extends ChangeNotifier {
   Settings settings = Settings.defaults();
   List<Board> boards = [];
   List<Parlay> parlays = [];
+  List<FavoriteMatch> favorites = [];
 
   /// Selected look, one of [appThemes] ids. Saved as a preference.
   String themeId = 'olive';
@@ -31,6 +33,7 @@ class BankStore extends ChangeNotifier {
     txs = await _db.transactions();
     boards = await _db.boards();
     parlays = await _db.parlays();
+    favorites = await _db.favorites();
     themeId = await _db.pref('app.theme') ?? 'olive';
     loaded = true;
     notifyListeners();
@@ -158,6 +161,28 @@ class BankStore extends ChangeNotifier {
   Future<void> deleteParlay(Parlay p) async {
     if (p.id != null) await _db.deleteParlay(p.id!);
     parlays = await _db.parlays();
+    notifyListeners();
+  }
+
+  // Favourite matches
+  bool isFavorite(String matchId) => favorites.any((f) => f.matchId == matchId);
+
+  /// Stars or unstars [m]. Returns whether it is a favourite now.
+  Future<bool> toggleFavorite(Match m) async {
+    final starred = !isFavorite(m.id);
+    if (starred) {
+      await _db.saveFavorite(FavoriteMatch.fromMatch(m, _now()));
+    } else {
+      await _db.deleteFavorite(m.id);
+    }
+    favorites = await _db.favorites();
+    notifyListeners();
+    return starred;
+  }
+
+  Future<void> removeFavorite(String matchId) async {
+    await _db.deleteFavorite(matchId);
+    favorites = await _db.favorites();
     notifyListeners();
   }
 }
