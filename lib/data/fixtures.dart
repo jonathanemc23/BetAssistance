@@ -489,6 +489,14 @@ Set<String> _teamWords(String name) {
   return plain.split(RegExp(r'[^a-z0-9]+')).where((w) => w.length > 1 && !_filler.contains(w)).toSet();
 }
 
+/// The two teams in a pick's event text: "A vs B", "A v B", "A - B", "A @ B".
+(String, String)? splitEvent(String event) {
+  final parts = event.split(RegExp(r'\s+(?:vs\.?|v|-|–|—|@|x)\s+', caseSensitive: false));
+  if (parts.length != 2) return null;
+  final a = parts[0].trim(), b = parts[1].trim();
+  return a.isEmpty || b.isEmpty ? null : (a, b);
+}
+
 /// Whether two feeds' names for a team are the same club, e.g.
 /// "Deportes Limache" and "Limache", or "Ñublense" and "Nublense".
 bool sameTeam(String a, String b) {
@@ -739,6 +747,57 @@ class FixturesApi {
         }(),
     ]);
     return out;
+  }
+
+  (DateTime, List<Match>)? _window;
+
+  /// Every match from yesterday to six days ahead in all the leagues the
+  /// app knows, for finding the real match behind a typed or scanned pick.
+  /// One ESPN request per league (a date range) and TheSportsDB's next and
+  /// last events for its leagues. Cached for ten minutes.
+  Future<List<Match>> upcomingWindow({bool refresh = false}) async {
+    final hit = _window;
+    if (!refresh && hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 10)) return hit.$2;
+    final leagues = {
+      for (final c in countries)
+        for (final l in c.leagues) l.slug: l,
+    }.values;
+    final today = DateTime.now();
+    final from = today.subtract(const Duration(days: 1)), to = today.add(const Duration(days: 6));
+    final (espn, tsdb, ok) = await _fetchAll([
+      for (final l in leagues) ...[
+        if (l.onEspn) (l, false, '$_base/${l.slug}/scoreboard?dates=${_ymd(from)}-${_ymd(to)}&limit=300'),
+        if (l.tsdb != null) ...[
+          (l, true, '$_tsdb/eventsnextleague.php?id=${l.tsdb}'),
+          (l, true, '$_tsdb/eventspastleague.php?id=${l.tsdb}'),
+        ],
+      ],
+    ]);
+    if (!ok) throw const FixturesException("Couldn't load matches. Check your connection and try again.");
+    final seen = <String>{};
+    final list = [
+      for (final m in mergeSportsDb(espn, tsdb))
+        if (seen.add(m.id)) m,
+    ];
+    _window = (DateTime.now(), list);
+    return list;
+  }
+
+  /// The real match for a pick's event text ("Fiorentina vs Como", "A - B"),
+  /// the one nearest to now when a fixture repeats. Null when not found.
+  Future<Match?> findMatch(String event) async {
+    final teams = splitEvent(event);
+    if (teams == null) return null;
+    final list = await upcomingWindow();
+    final now = DateTime.now();
+    Match? best;
+    for (final m in list) {
+      final same = sameTeam(m.home.name, teams.$1) && sameTeam(m.away.name, teams.$2);
+      final swapped = sameTeam(m.home.name, teams.$2) && sameTeam(m.away.name, teams.$1);
+      if (!same && !swapped) continue;
+      if (best == null || m.kickoff.difference(now).abs() < best.kickoff.difference(now).abs()) best = m;
+    }
+    return best;
   }
 
   (DateTime, List<Match>)? _live;

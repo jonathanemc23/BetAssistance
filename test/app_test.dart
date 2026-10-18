@@ -193,12 +193,15 @@ void main() {
     // Matches. Let the "Bet logged" message time out first.
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
-    // Matches lives in the side menu; the bottom bar keeps four tabs.
+    // Bet Tools lives in the side menu; Matches is a bottom tab.
     expect(find.byType(NavigationDestination), findsNWidgets(4));
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
+    expect(find.text('Bet Tools'), findsOneWidget);
     await shot('drawer');
-    await tester.tap(find.text('Matches'));
+    Navigator.of(tester.element(find.byType(NavigationDrawer))).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Matches'));
     for (var i = 0; i < 3; i++) {
       await tester.pump();
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
@@ -217,12 +220,14 @@ void main() {
     expect(find.text('BET 365'), findsOneWidget);
     await shot('match_odds');
     await openTab(tester, 'Teams');
-    expect(find.text('Form (latest first)'), findsWidgets);
+    expect(find.text('FORM GUIDE'), findsOneWidget);
+    expect(find.text('Last 5: 9 of 15 points · scored 6, conceded 4 in 5'), findsOneWidget);
     await shot('match_teams');
     await openTab(tester, 'News');
     await shot('match_news');
     await openTab(tester, 'Table');
     expect(find.text('Manchester City'), findsWidgets);
+    expect(find.text('Level on 10 points, 1 place apart.'), findsOneWidget);
     await shot('match_table');
 
     // Money movement: DraftKings opened Chelsea at +130, now +120.
@@ -335,10 +340,10 @@ void main() {
     await shot('favorites');
     await tester.tap(find.widgetWithText(Tab, 'Matches'));
     await tester.pumpAndSettle();
-    await tester.pageBack();
-    await tester.pumpAndSettle();
 
-    // Bet Tools: Matchboard and the parlay builder.
+    // Bet Tools, from the side menu: Matchboard and the parlay builder.
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Bet Tools'));
     await tester.pumpAndSettle();
     expect(find.text('1 open'), findsOneWidget);
@@ -438,6 +443,8 @@ void main() {
     await tester.pumpAndSettle();
     await shot('parlays');
     await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.pageBack(); // Bet Tools
     await tester.pumpAndSettle();
 
     // Settings: pick a theme; it applies straight away and is saved.

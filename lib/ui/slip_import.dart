@@ -6,6 +6,7 @@ import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/parlay.dart';
 import '../data/store.dart';
+import '../logic/leg_linker.dart';
 import '../logic/slip_reader.dart';
 import '../logic/stats.dart';
 import 'parlay_screens.dart';
@@ -77,7 +78,17 @@ Future<void> importSlip(BuildContext context, {required BankStore store, require
     ),
   );
   if (result == null || !context.mounted) return;
-  var parlay = await store.newParlay(legs: result.$1);
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const AlertDialog(
+      content: Row(children: [CircularProgressIndicator(), SizedBox(width: 20), Expanded(child: Text('Finding the matches…'))]),
+    ),
+  );
+  final legs = await linkLegs(api, result.$1);
+  if (!context.mounted) return;
+  Navigator.of(context, rootNavigator: true).pop();
+  var parlay = await store.newParlay(legs: legs);
   if (result.$2 > 0) parlay = await store.saveParlay(parlay.copyWith(stake: result.$2));
   messenger.showSnackBar(SnackBar(content: Text('Parlay saved with ${result.$1.length} selections'), persist: false));
   if (context.mounted) await openParlay(context, store: store, api: api, parlay: parlay);

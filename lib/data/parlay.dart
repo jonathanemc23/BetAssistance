@@ -128,6 +128,22 @@ class ParlayLeg {
         kickoff: m.kickoff,
       );
 
+  /// This pick tied to the real match [m], as if chosen from the Matches list.
+  ParlayLeg linkedTo(Match m, {String? selection}) => ParlayLeg(
+        id: id,
+        selection: selection ?? this.selection,
+        event: m.title,
+        sport: sport,
+        odds: odds,
+        status: status,
+        matchId: m.id,
+        leagueSlug: m.league.slug,
+        leagueName: m.league.name,
+        home: m.home.name,
+        away: m.away.name,
+        kickoff: m.kickoff,
+      );
+
   /// Enough of a [Match] to fetch its details.
   Match? toMatch() => !isLinked
       ? null

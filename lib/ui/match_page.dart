@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide TableRow;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -480,93 +480,248 @@ class _NewsTab extends StatelessWidget {
 
 // ---------------------------------------------------------------- Teams
 
-class _TeamsTab extends StatelessWidget {
+class _TeamsTab extends StatefulWidget {
   const _TeamsTab({required this.match, required this.details});
   final Match match;
   final MatchDetails details;
 
   @override
+  State<_TeamsTab> createState() => _TeamsTabState();
+}
+
+/// Recent results from one team's side: goals for and against, and W/D/L.
+class _TeamGame {
+  const _TeamGame(this.game, this.opponent, this.home, this.gf, this.ga, this.result);
+  final PastGame game;
+  final String opponent;
+  final bool home;
+  final int? gf, ga;
+  final String result;
+
+  static List<_TeamGame> of(String team, TeamInfo info) => [
+        // ESPN lists the last games oldest first.
+        for (final g in info.lastGames.reversed)
+          () {
+            final home = sameTeam(g.home, team) || (!sameTeam(g.away, team) && g.home == info.name);
+            final s = RegExp(r'(\d+)\s*-\s*(\d+)').firstMatch(g.score);
+            final a = int.tryParse(s?.group(1) ?? ''), b = int.tryParse(s?.group(2) ?? '');
+            final gf = home ? a : b, ga = home ? b : a;
+            final result = g.result.isNotEmpty
+                ? g.result
+                : gf == null || ga == null
+                    ? ''
+                    : gf > ga
+                        ? 'W'
+                        : gf < ga
+                            ? 'L'
+                            : 'D';
+            return _TeamGame(g, home ? g.away : g.home, home, gf, ga, result);
+          }(),
+      ];
+}
+
+class _TeamsTabState extends State<_TeamsTab> {
+  int _side = 0;
+
+  @override
   Widget build(BuildContext context) {
+    final match = widget.match, details = widget.details;
     final teams = [(match.home, details.home), (match.away, details.away)];
     if (teams.every((t) => t.$2.form.isEmpty && t.$2.lastGames.isEmpty && t.$2.leaders.isEmpty && t.$2.record.isEmpty)) {
       return const _Empty(icon: Icons.groups, text: 'No team info for this match.');
     }
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final (team, info) = teams[_side];
+    final games = _TeamGame.of(team.name, info);
     return _list([
-      for (final (t, info) in teams)
+      _Section(
+        title: 'Form guide',
+        child: Column(children: [
+          for (final (i, (t, inf)) in teams.indexed) ...[
+            if (i == 1) Divider(height: 24, color: cs.outlineVariant),
+            _FormGuideRow(team: t, info: inf, position: _position(inf), games: _TeamGame.of(t.name, inf)),
+          ],
+        ]),
+      ),
+      SegmentedButton<int>(
+        showSelectedIcon: false,
+        segments: [
+          for (final (i, (t, _)) in teams.indexed)
+            ButtonSegment(value: i, label: Text(t.shortName, maxLines: 1, overflow: TextOverflow.ellipsis)),
+        ],
+        selected: {_side},
+        onSelectionChanged: (s) => setState(() => _side = s.first),
+      ),
+      const SizedBox(height: 12),
+      if (games.isNotEmpty)
         _Section(
-          title: t.name,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(children: [
-              TeamLogo(url: t.logo ?? info.logo, name: t.name, size: 40),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Wrap(spacing: 16, runSpacing: 4, children: [
-                  if (info.record.isNotEmpty) _Fact('Record', _wdl(info.record)),
-                  if (info.points.isNotEmpty) _Fact('Points', info.points),
-                  if (_position(info) case final pos?) _Fact('Position', pos),
+          title: 'Latest results',
+          child: Column(children: [for (final g in games) _ResultRow(game: g)]),
+        ),
+      if (info.leaders.isNotEmpty)
+        _Section(
+          title: 'Top players',
+          child: Column(children: [
+            for (final (cat, player, value) in info.leaders)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(children: [
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(player, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+                      Text(cat, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                    ]),
+                  ),
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(10)),
+                    child: Text(value,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w800, color: cs.onPrimaryContainer)),
+                  ),
                 ]),
               ),
-            ]),
-            if (_form(info).isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text('Form (latest first)', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 6),
-              Row(children: [for (final r in _form(info).split('')) _FormChip(r)]),
-            ],
-            if (info.lastGames.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text('Last matches', style: theme.textTheme.labelLarge),
-              for (final g in info.lastGames.reversed) _GameRow(game: g, showResult: true),
-            ],
-            if (info.leaders.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text('Top players', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 4),
-              for (final (cat, player, value) in info.leaders)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(children: [
-                    SizedBox(
-                        width: 110,
-                        child: Text(cat, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant))),
-                    Expanded(child: Text(player, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                    Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  ]),
-                ),
-            ],
           ]),
         ),
     ]);
   }
 
   String? _position(TeamInfo info) {
-    for (final r in details.table) {
-      if ((info.id.isNotEmpty && r.teamId == info.id) || r.team == info.name) return '#${r.rank}';
+    for (final r in widget.details.table) {
+      if ((info.id.isNotEmpty && r.teamId == info.id) || r.team == info.name) return _ordinal(r.rank);
     }
     return null;
   }
-
-  /// ESPN's form string (newest first), else built from the last games,
-  /// which ESPN lists oldest first.
-  static String _form(TeamInfo info) => info.form.isNotEmpty
-      ? info.form
-      : info.lastGames.reversed.map((g) => g.result).where((r) => r.isNotEmpty).join();
 }
 
-class _Fact extends StatelessWidget {
-  const _Fact(this.label, this.value);
-  final String label;
-  final String value;
+String _ordinal(int n) {
+  final s = (n % 100 >= 11 && n % 100 <= 13)
+      ? 'th'
+      : switch (n % 10) {
+          1 => 'st',
+          2 => 'nd',
+          3 => 'rd',
+          _ => 'th',
+        };
+  return '$n$s';
+}
+
+/// One team in the form guide: badge, table place, the last results as
+/// chips and what they add up to.
+class _FormGuideRow extends StatelessWidget {
+  const _FormGuideRow({required this.team, required this.info, required this.position, required this.games});
+  final Team team;
+  final TeamInfo info;
+  final String? position;
+  final List<_TeamGame> games;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-      Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-      Text(value, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+    final cs = theme.colorScheme;
+    final form = info.form.isNotEmpty ? info.form : games.map((g) => g.result).join();
+    final recent = form.length > 5 ? form.substring(0, 5) : form;
+    final w = recent.split('').where((r) => r == 'W').length, d = recent.split('').where((r) => r == 'D').length;
+    final scored = games.where((g) => g.gf != null).toList();
+    final gf = scored.fold<int>(0, (a, g) => a + g.gf!), ga = scored.fold<int>(0, (a, g) => a + g.ga!);
+    final facts = [
+      ?position,
+      if (info.points.isNotEmpty) '${info.points} pts',
+      if (info.record.isNotEmpty) _wdl(info.record),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        TeamLogo(url: team.logo ?? info.logo, name: team.name, size: 36),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(team.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+            if (facts.isNotEmpty)
+              Text(facts.join(' · '), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          ]),
+        ),
+      ]),
+      if (recent.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        Row(children: [
+          for (final r in recent.split('')) Expanded(child: _FormBlock(r)),
+        ]),
+        const SizedBox(height: 6),
+        Text(
+          'Last ${recent.length}: ${w * 3 + d} of ${recent.length * 3} points'
+          '${scored.isEmpty ? '' : ' · scored $gf, conceded $ga in ${scored.length}'}',
+          style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+        ),
+      ],
     ]);
+  }
+}
+
+/// A wide form chip; the newest result is on the left.
+class _FormBlock extends StatelessWidget {
+  const _FormBlock(this.result);
+  final String result;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (result) {
+      'W' => BankColors.win(context),
+      'L' => BankColors.loss(context),
+      _ => BankColors.neutral(context),
+    };
+    return Container(
+      height: 30,
+      margin: const EdgeInsets.only(right: 6),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
+      child: Text(result, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
+    );
+  }
+}
+
+/// One past game from the team's side: result, opponent, home or away, score.
+class _ResultRow extends StatelessWidget {
+  const _ResultRow({required this.game});
+  final _TeamGame game;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final g = game;
+    final sub = [
+      if (g.game.date != null) DateFormat('d MMM').format(g.game.date!.toLocal()),
+      g.home ? 'Home' : 'Away',
+      if (g.game.competition.isNotEmpty) g.game.competition,
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(children: [
+        _FormChip(g.result.isEmpty ? '–' : g.result),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${g.home ? 'vs' : 'at'} ${g.opponent}',
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+            Text(sub,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          ]),
+        ),
+        Text(
+          g.gf == null ? g.game.score : '${g.gf} – ${g.ga}',
+          style: theme.textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w800, fontFeatures: const [FontFeature.tabularFigures()]),
+        ),
+      ]),
+    );
   }
 }
 
@@ -593,9 +748,8 @@ class _FormChip extends StatelessWidget {
 }
 
 class _GameRow extends StatelessWidget {
-  const _GameRow({required this.game, this.showResult = false});
+  const _GameRow({required this.game});
   final PastGame game;
-  final bool showResult;
 
   @override
   Widget build(BuildContext context) {
@@ -618,7 +772,6 @@ class _GameRow extends StatelessWidget {
           child: Text(g.score, style: const TextStyle(fontWeight: FontWeight.w700)),
         ),
         Expanded(child: Text(g.away, maxLines: 1, overflow: TextOverflow.ellipsis)),
-        if (showResult && g.result.isNotEmpty) ...[const SizedBox(width: 6), _FormChip(g.result)],
       ]),
     );
   }
@@ -753,38 +906,63 @@ class _StatsTab extends StatelessWidget {
   final Match match;
   final MatchDetails details;
 
+  static const _groups = [
+    ('Attack', ['shot', 'on goal', 'on target', 'corner', 'offside', 'penalt', 'cross']),
+    ('Passing', ['pass', 'long ball']),
+    ('Defence', ['save', 'tackle', 'intercept', 'clearance', 'block']),
+    ('Discipline', ['foul', 'card']),
+  ];
+
   @override
   Widget build(BuildContext context) {
     if (details.stats.isEmpty) return const _Empty(icon: Icons.bar_chart, text: 'No stats for this match yet.');
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final possession = details.stats.where((s) => s.$1.toLowerCase().contains('possession')).firstOrNull;
+    final grouped = <String, List<(String, String, String)>>{};
+    for (final s in details.stats) {
+      if (identical(s, possession)) continue;
+      final l = s.$1.toLowerCase();
+      final g = _groups.where((g) => g.$2.any(l.contains)).firstOrNull?.$1 ?? 'Other';
+      (grouped[g] ??= []).add(s);
+    }
+    Widget legend(Team t, Color c, {bool end = false}) => Row(
+          mainAxisAlignment: end ? MainAxisAlignment.end : MainAxisAlignment.start,
+          children: [
+            if (!end) ...[_Dot(c), const SizedBox(width: 6)],
+            Flexible(
+              child: Text(t.shortName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+            ),
+            if (end) ...[const SizedBox(width: 6), _Dot(c)],
+          ],
+        );
     return _list([
-      _Section(
-        title: details.statsAreSeason ? 'Season so far' : 'Match stats',
+      Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(16)),
         child: Column(children: [
           Row(children: [
-            Expanded(child: Text(match.home.shortName, style: theme.textTheme.labelLarge)),
-            Expanded(child: Text(match.away.shortName, textAlign: TextAlign.right, style: theme.textTheme.labelLarge)),
+            Expanded(child: legend(match.home, cs.primary)),
+            Text(details.statsAreSeason ? 'Season so far' : 'This match',
+                style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+            Expanded(child: legend(match.away, cs.tertiary, end: true)),
           ]),
-          const SizedBox(height: 8),
-          for (final (label, h, a) in details.stats) ...[
-            Row(children: [
-              SizedBox(width: 56, child: Text(h, style: const TextStyle(fontWeight: FontWeight.w700))),
-              Expanded(
-                child: Text(_title(label),
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-              ),
-              SizedBox(
-                  width: 56,
-                  child: Text(a, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w700))),
-            ]),
-            const SizedBox(height: 4),
-            _CompareBar(home: _value(h), away: _value(a)),
-            const SizedBox(height: 10),
+          if (possession != null) ...[
+            const SizedBox(height: 14),
+            _PossessionBar(home: _value(possession.$2), away: _value(possession.$3)),
           ],
         ]),
       ),
+      for (final g in [..._groups.map((g) => g.$1), 'Other'])
+        if (grouped[g] case final rows?)
+          _Section(
+            title: g,
+            child: Column(children: [for (final (label, h, a) in rows) _StatRow(label: _title(label), home: h, away: a)]),
+          ),
     ]);
   }
 
@@ -794,28 +972,116 @@ class _StatsTab extends StatelessWidget {
   static String _title(String s) => s == s.toUpperCase() && s.length > 3 ? s[0] + s.substring(1).toLowerCase() : s;
 }
 
-class _CompareBar extends StatelessWidget {
-  const _CompareBar({required this.home, required this.away});
-  final double? home;
-  final double? away;
+class _Dot extends StatelessWidget {
+  const _Dot(this.color);
+  final Color color;
+  @override
+  Widget build(BuildContext context) =>
+      Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle));
+}
+
+/// Possession as one wide split bar with the shares written on it.
+class _PossessionBar extends StatelessWidget {
+  const _PossessionBar({required this.home, required this.away});
+  final double? home, away;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final h = (home ?? 0).abs(), a = (away ?? 0).abs();
-    final total = h + a;
-    if (total == 0) return const SizedBox(height: 6);
-    final hf = (h / total * 1000).round(), af = 1000 - hf;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(3),
-      child: SizedBox(
-        height: 6,
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final h = home ?? 0, a = away ?? 0;
+    if (h + a == 0) return const SizedBox.shrink();
+    final hf = (h / (h + a) * 1000).round();
+    Widget part(int flex, Color bg, Color fg, String text, Alignment align) => Expanded(
+          flex: flex,
+          child: Container(
+            height: 34,
+            color: bg,
+            alignment: align,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w800)),
+          ),
+        );
+    String pct(double v) => '${v.toStringAsFixed(v % 1 == 0 ? 0 : 1)}%';
+    return Column(children: [
+      Text('Possession', style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+      const SizedBox(height: 6),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(10),
         child: Row(children: [
-          if (hf > 0) Expanded(flex: hf, child: Container(color: cs.primary)),
-          if (hf > 0 && af > 0) const SizedBox(width: 2),
-          if (af > 0) Expanded(flex: af, child: Container(color: cs.tertiary)),
+          if (hf > 0) part(hf, cs.primary, cs.onPrimary, pct(h), Alignment.centerLeft),
+          if (hf < 1000) part(1000 - hf, cs.tertiary, cs.onTertiary, pct(a), Alignment.centerRight),
         ]),
       ),
+    ]);
+  }
+}
+
+/// One stat: both values with the leader highlighted, and bars that grow
+/// out from the middle so the bigger side is obvious at a glance.
+class _StatRow extends StatelessWidget {
+  const _StatRow({required this.label, required this.home, required this.away});
+  final String label, home, away;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final h = _StatsTab._value(home)?.abs() ?? 0, a = _StatsTab._value(away)?.abs() ?? 0;
+    final max = h > a ? h : a;
+    Widget value(String text, bool lead, Color color) => Container(
+          constraints: const BoxConstraints(minWidth: 44),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: lead ? color : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            text,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: lead ? (color == cs.primary ? cs.onPrimary : cs.onTertiary) : cs.onSurface,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        );
+    Widget bar(double v, Color color, bool fromRight) => Expanded(
+          child: Align(
+            alignment: fromRight ? Alignment.centerRight : Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: max == 0 ? 0 : (v / max).clamp(0.02, 1.0),
+              child: Container(
+                height: 6,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: v == max && v > 0 ? 1 : 0.35),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Column(children: [
+        Row(children: [
+          value(home, h > a, cs.primary),
+          Expanded(
+            child: Text(label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+          ),
+          value(away, a > h, cs.tertiary),
+        ]),
+        const SizedBox(height: 6),
+        Row(children: [
+          bar(h, cs.primary, true),
+          const SizedBox(width: 4),
+          bar(a, cs.tertiary, false),
+        ]),
+      ]),
     );
   }
 }
@@ -848,50 +1114,170 @@ class _H2HTab extends StatelessWidget {
 
 // ---------------------------------------------------------------- Table
 
-class _TableTab extends StatelessWidget {
+class _TableTab extends StatefulWidget {
   const _TableTab({required this.match, required this.details});
   final Match match;
   final MatchDetails details;
 
   @override
+  State<_TableTab> createState() => _TableTabState();
+}
+
+class _TableTabState extends State<_TableTab> {
+  bool _around = false;
+
+  @override
   Widget build(BuildContext context) {
+    final details = widget.details, match = widget.match;
     if (details.table.isEmpty) return const _Empty(icon: Icons.table_rows, text: 'No league table for this competition.');
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final ids = {details.home.id, details.away.id}..remove('');
-    final names = {match.home.name, match.away.name};
-    TextStyle? head = theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant);
-    Widget cell(String t, {double w = 28, TextStyle? style}) =>
+    bool ours(TableRow r) => ids.contains(r.teamId) || r.team == match.home.name || r.team == match.away.name;
+    final mine = details.table.where(ours).toList();
+
+    // "Around the match": the two teams and two places either side.
+    var rows = details.table;
+    if (_around && mine.isNotEmpty) {
+      final idx = [for (final (i, r) in details.table.indexed) if (ours(r)) i];
+      final lo = (idx.reduce((a, b) => a < b ? a : b) - 2).clamp(0, details.table.length - 1);
+      final hi = (idx.reduce((a, b) => a > b ? a : b) + 2).clamp(0, details.table.length - 1);
+      rows = details.table.sublist(lo, hi + 1);
+    }
+
+    final head = theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700);
+    Widget cell(String t, {double w = 26, TextStyle? style}) =>
         SizedBox(width: w, child: Text(t, textAlign: TextAlign.center, style: style));
-    Widget row(List<Widget> cells, {bool highlight = false}) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-          decoration: highlight
-              ? BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(8))
-              : null,
-          child: Row(children: cells),
-        );
+
     return _list([
-      _Section(
-        title: details.tableTitle.isEmpty ? 'Table' : details.tableTitle,
-        child: Column(children: [
-          row([
-            cell('#', style: head),
-            Expanded(child: Text('Team', style: head)),
-            for (final h in ['P', 'W', 'D', 'L', 'GD']) cell(h, style: head),
-            cell('Pts', w: 34, style: head),
-          ]),
-          for (final r in details.table)
-            row(
-              [
-                cell('${r.rank}'),
-                Expanded(child: Text(r.team, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                for (final v in [r.played, r.won, r.drawn, r.lost, r.goalDiff]) cell(v),
-                cell(r.points, w: 34, style: const TextStyle(fontWeight: FontWeight.w800)),
+      if (mine.length == 2)
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(16)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              for (final (i, r) in mine.indexed) ...[
+                if (i == 1) const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(12)),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(_ordinal(r.rank),
+                          style: theme.textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w800, color: cs.onPrimaryContainer)),
+                      Text(r.team,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(color: cs.onPrimaryContainer)),
+                      Text('${r.points} pts · GD ${r.goalDiff}',
+                          style: theme.textTheme.bodySmall?.copyWith(color: cs.onPrimaryContainer)),
+                    ]),
+                  ),
+                ),
               ],
-              highlight: ids.contains(r.teamId) || names.contains(r.team),
-            ),
+            ]),
+            const SizedBox(height: 10),
+            Text(_gap(mine[0], mine[1]), style: theme.textTheme.bodyMedium),
+          ]),
+        ),
+      Row(children: [
+        Expanded(
+          child: Text((details.tableTitle.isEmpty ? 'Table' : details.tableTitle).toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: cs.primary)),
+        ),
+        if (mine.isNotEmpty)
+          SegmentedButton<bool>(
+            showSelectedIcon: false,
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            segments: const [
+              ButtonSegment(value: false, label: Text('Full')),
+              ButtonSegment(value: true, label: Text('Nearby')),
+            ],
+            selected: {_around},
+            onSelectionChanged: (s) => setState(() => _around = s.first),
+          ),
+      ]),
+      const SizedBox(height: 8),
+      Container(
+        decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(16)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+            child: Row(children: [
+              cell('#', w: 30, style: head),
+              const SizedBox(width: 6),
+              Expanded(child: Text('TEAM', style: head)),
+              for (final h in ['P', 'W', 'D', 'L', 'GD']) cell(h, style: head, w: h == 'GD' ? 32 : 26),
+              cell('PTS', w: 38, style: head),
+            ]),
+          ),
+          for (final (i, r) in rows.indexed)
+            () {
+              final hi = ours(r);
+              final gd = int.tryParse(r.goalDiff.replaceAll('+', ''));
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                decoration: BoxDecoration(
+                  color: hi
+                      ? cs.primaryContainer
+                      : i.isOdd
+                          ? cs.surfaceContainer
+                          : null,
+                  border: Border(left: BorderSide(color: hi ? cs.primary : Colors.transparent, width: 4)),
+                ),
+                child: Row(children: [
+                  SizedBox(
+                    width: 30,
+                    child: Text('${r.rank}',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700, color: hi ? cs.onPrimaryContainer : cs.onSurfaceVariant)),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(r.team,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: hi ? FontWeight.w800 : FontWeight.w500,
+                            color: hi ? cs.onPrimaryContainer : null)),
+                  ),
+                  for (final v in [r.played, r.won, r.drawn, r.lost])
+                    cell(v, style: theme.textTheme.bodySmall?.copyWith(color: hi ? cs.onPrimaryContainer : null)),
+                  cell(r.goalDiff,
+                      w: 32,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: gd == null || gd == 0
+                              ? (hi ? cs.onPrimaryContainer : null)
+                              : gd > 0
+                                  ? BankColors.win(context)
+                                  : BankColors.loss(context))),
+                  cell(r.points,
+                      w: 38,
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w800, color: hi ? cs.onPrimaryContainer : null)),
+                ]),
+              );
+            }(),
         ]),
       ),
     ]);
+  }
+
+  /// How far apart the two teams are, in plain words.
+  static String _gap(TableRow a, TableRow b) {
+    final pa = int.tryParse(a.points), pb = int.tryParse(b.points);
+    final places = (a.rank - b.rank).abs();
+    if (pa == null || pb == null) return '$places place${places == 1 ? '' : 's'} apart.';
+    if (pa == pb) return 'Level on $pa points, $places place${places == 1 ? '' : 's'} apart.';
+    final (top, other) = pa > pb ? (a, b) : (b, a);
+    final diff = (pa - pb).abs();
+    return '${top.team} lead ${other.team} by $diff point${diff == 1 ? '' : 's'}.';
   }
 }
