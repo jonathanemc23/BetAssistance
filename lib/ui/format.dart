@@ -14,7 +14,12 @@ class Fmt {
     return (sign && n > 0.004 ? '+' : '') + s;
   }
 
-  String pct(double n) => '${n > 0.0004 ? '+' : n < -0.0004 ? '−' : ''}${(n.abs() * 100).toStringAsFixed(1)}%';
+  String pct(double n) =>
+      '${n > 0.0004
+          ? '+'
+          : n < -0.0004
+          ? '−'
+          : ''}${(n.abs() * 100).toStringAsFixed(1)}%';
 
   String compact(double n) => NumberFormat.compact().format(n);
 
@@ -32,13 +37,16 @@ class BankColors {
   static Color neutral(BuildContext c) => _dark(c) ? const Color(0xFF93A2AD) : const Color(0xFF6B7A86);
   static bool _dark(BuildContext c) => Theme.of(c).brightness == Brightness.dark;
 
-  static Color forValue(BuildContext c, double v) =>
-      v > 0.004 ? win(c) : v < -0.004 ? loss(c) : Theme.of(c).colorScheme.onSurface;
+  static Color forValue(BuildContext c, double v) => v > 0.004
+      ? win(c)
+      : v < -0.004
+      ? loss(c)
+      : Theme.of(c).colorScheme.onSurface;
 
   static Color forStatus(BuildContext c, BetStatus s) => switch (s) {
-        BetStatus.won => win(c),
-        BetStatus.lost => loss(c),
-        BetStatus.pending => pending(c),
-        _ => neutral(c),
-      };
+    BetStatus.won => win(c),
+    BetStatus.lost => loss(c),
+    BetStatus.pending => pending(c),
+    _ => neutral(c),
+  };
 }

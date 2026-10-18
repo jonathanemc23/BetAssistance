@@ -2,8 +2,14 @@ import 'package:bank_track/data/models.dart';
 import 'package:bank_track/logic/stats.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Bet bet(BetStatus s, {double stake = 10, double odds = 2, String date = '2026-01-10', String sport = 'Soccer', double? cashout}) =>
-    Bet(selection: 'x', date: date, stake: stake, odds: odds, status: s, sport: sport, cashout: cashout, created: '');
+Bet bet(
+  BetStatus s, {
+  double stake = 10,
+  double odds = 2,
+  String date = '2026-01-10',
+  String sport = 'Soccer',
+  double? cashout,
+}) => Bet(selection: 'x', date: date, stake: stake, odds: odds, status: s, sport: sport, cashout: cashout, created: '');
 
 void main() {
   const settings = Settings(startBankroll: 1000, startDate: '2026-01-01', unit: 10);
@@ -50,12 +56,16 @@ void main() {
   });
 
   test('bankroll series merges same-day events in date order', () {
-    final pts = bankrollSeries(settings, [
-      bet(BetStatus.won, date: '2026-01-10'),
-      bet(BetStatus.lost, date: '2026-01-10'),
-      bet(BetStatus.won, date: '2026-01-03', odds: 1.5),
-      bet(BetStatus.pending, date: '2026-01-12'),
-    ], [const BankTx(kind: TxKind.deposit, amount: 100, date: '2026-01-05')]);
+    final pts = bankrollSeries(
+      settings,
+      [
+        bet(BetStatus.won, date: '2026-01-10'),
+        bet(BetStatus.lost, date: '2026-01-10'),
+        bet(BetStatus.won, date: '2026-01-03', odds: 1.5),
+        bet(BetStatus.pending, date: '2026-01-12'),
+      ],
+      [const BankTx(kind: TxKind.deposit, amount: 100, date: '2026-01-05')],
+    );
     expect([for (final p in pts) p.value], [1000, 1005, 1105, 1105]);
     expect(pts.first.date, DateTime(2026, 1, 1));
   });

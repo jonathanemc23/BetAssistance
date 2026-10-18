@@ -14,6 +14,7 @@ import 'package:bank_track/data/fixtures.dart';
 
 import 'fixtures_test.dart' show espnEvent, board;
 import 'slip_reader_test.dart' show screen;
+
 import 'package:bank_track/logic/slip_reader.dart';
 import 'package:bank_track/ui/slip_import.dart';
 
@@ -126,7 +127,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     // Load the brand icon so the header shows it in screenshots.
-    await tester.runAsync(() => precacheImage(const AssetImage('assets/brand/icon.png'), tester.element(find.byType(BrandTitle))));
+    await tester.runAsync(
+      () => precacheImage(const AssetImage('assets/brand/icon.png'), tester.element(find.byType(BrandTitle))),
+    );
     await tester.pumpAndSettle();
 
     // Summary is the main page and holds no bet list.
@@ -225,6 +228,13 @@ void main() {
     expect(find.text('Manchester City'), findsWidgets);
     await shot('match_table');
 
+    // Money movement: DraftKings opened Chelsea at +130, now +120.
+    await openTab(tester, 'Money');
+    await settle(tester);
+    expect(find.text('Money is moving towards Chelsea'), findsOneWidget);
+    expect(find.textContaining('DraftKings prices since they opened'), findsOneWidget);
+    await shot('match_money');
+
     // Any market with your own odds: a handicap on Chelsea, logged as a bet.
     await openTab(tester, 'Odds');
     await tester.tap(find.text('More markets: handicap, corners, cards…'));
@@ -307,10 +317,11 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
 
-    // The Live tab lists every live match, A to Z.
+    // The Live tab groups live matches by country and league.
     await tester.tap(find.widgetWithText(Tab, 'Live'));
     await settle(tester);
     expect(find.textContaining('2 live now'), findsOneWidget);
+    expect(find.text('ENGLAND · PREMIER LEAGUE'), findsOneWidget);
     expect(tester.getTopLeft(find.text('Arsenal')).dy, lessThan(tester.getTopLeft(find.text('Real Madrid')).dy));
     await shot('live');
 
@@ -334,6 +345,7 @@ void main() {
     await tester.tap(find.text('Bet Tools'));
     await tester.pumpAndSettle();
     expect(find.text('1 open'), findsOneWidget);
+    expect(find.text('Money movement'), findsOneWidget);
     await shot('bet_tools');
     await tester.tap(find.text('Matchboard'));
     await settle(tester);
@@ -373,12 +385,20 @@ void main() {
     expect(store.parlays.single.check, isNotNull);
     expect(find.text('Price only'), findsWidgets);
     expect(find.textContaining('Weakest leg'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Check again'), 200, scrollable: find.descendant(of: find.byKey(const Key('parlay-page')), matching: find.byType(Scrollable)).first);
+    await tester.scrollUntilVisible(
+      find.text('Check again'),
+      200,
+      scrollable: find.descendant(of: find.byKey(const Key('parlay-page')), matching: find.byType(Scrollable)).first,
+    );
     await tester.pumpAndSettle();
     await shot('parlay_check');
 
     final result = find.text('Won');
-    await tester.scrollUntilVisible(result, 200, scrollable: find.descendant(of: find.byKey(const Key('parlay-page')), matching: find.byType(Scrollable)).first);
+    await tester.scrollUntilVisible(
+      result,
+      200,
+      scrollable: find.descendant(of: find.byKey(const Key('parlay-page')), matching: find.byType(Scrollable)).first,
+    );
     await tester.pumpAndSettle();
     await tester.runAsync(() async {
       await tester.tap(result);
@@ -392,27 +412,32 @@ void main() {
 
     // A slip screenshot from another betting site becomes a parlay.
     SlipImport.pickImage = () async => '/slip.png';
-    SlipImport.scanner = _FakeScanner(screen([
-      ['Apuesta combinada (3)'],
-      ['Millonarios - Santa Fe'],
-      ['1X2 Tiempo reglamentario'],
-      ['Millonarios', '2,05'],
-      ['Junior - Nacional'],
-      ['Total de goles'],
-      ['Más de 2.5', '1,80'],
-      ['América - Cali'],
-      ['Ambos equipos marcan'],
-      ['Sí', '1,95'],
-      ['Cuota total', '7,19'],
-      ['Apuesta', '\$ 10.000'],
-    ]));
+    SlipImport.scanner = _FakeScanner(
+      screen([
+        ['Apuesta combinada (3)'],
+        ['Millonarios - Santa Fe'],
+        ['1X2 Tiempo reglamentario'],
+        ['Millonarios', '2,05'],
+        ['Junior - Nacional'],
+        ['Total de goles'],
+        ['Más de 2.5', '1,80'],
+        ['América - Cali'],
+        ['Ambos equipos marcan'],
+        ['Sí', '1,95'],
+        ['Cuota total', '7,19'],
+        ['Apuesta', '\$ 10.000'],
+      ]),
+    );
     await tester.tap(find.text('From screenshot'));
     await settle(tester);
     expect(find.textContaining('Read 3 selections'), findsOneWidget);
     expect(find.text('Millonarios - Santa Fe'), findsOneWidget);
     await shot('slip_review');
-    await tester.scrollUntilVisible(find.text('Save as a parlay'), 300,
-        scrollable: find.descendant(of: find.byKey(const Key('slip-review')), matching: find.byType(Scrollable)).first);
+    await tester.scrollUntilVisible(
+      find.text('Save as a parlay'),
+      300,
+      scrollable: find.descendant(of: find.byKey(const Key('slip-review')), matching: find.byType(Scrollable)).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save as a parlay'));
     await settle(tester);
@@ -420,7 +445,7 @@ void main() {
     expect(imported.legs.map((l) => (l.selection, l.event, l.odds)), [
       ('Millonarios', 'Millonarios - Santa Fe', 2.05),
       ('Más de 2.5', 'Junior - Nacional', 1.80),
-      ('Sí', 'América - Cali', 1.95),
+      ('Sí · Ambos equipos marcan', 'América - Cali', 1.95),
     ]);
     expect(imported.stake, 10000);
     await tester.pump(const Duration(seconds: 5));
@@ -436,6 +461,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Olive & Gold'), findsOneWidget);
     await shot('settings_themes');
+    await tester.scrollUntilVisible(find.byKey(const Key('ai-key')), 300, scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(find.text('AI chat'), findsOneWidget);
+    await shot('settings_ai');
+    await tester.scrollUntilVisible(find.text('Olive & Gold'), -300, scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     await tester.runAsync(() async {
       await tester.tap(find.text('Ocean'));
       await Future<void>.delayed(const Duration(milliseconds: 200));
@@ -493,10 +524,16 @@ void main() {
       detail: 'FT',
       venue: 'Metropolitano Ciudad de Itagüí',
     );
-    await tester.pumpWidget(MaterialApp(
-      theme: BankTrackApp.theme('olive'),
-      home: MatchPage(match: match, store: store, api: FixturesApi(client: _fixturesClient())),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: BankTrackApp.theme('olive'),
+        home: MatchPage(
+          match: match,
+          store: store,
+          api: FixturesApi(client: _fixturesClient()),
+        ),
+      ),
+    );
     await settle(tester);
     await openTab(tester, 'Line-ups');
     expect(find.text('4-2-3-1'), findsOneWidget);
@@ -534,13 +571,12 @@ Future<void> openTab(WidgetTester tester, String name) async {
 /// Match summaries: Everton vs Chelsea before kick-off, anything else a
 /// finished Colombian match with line-ups and key events.
 http.Response _summary(Uri url) => http.Response.bytes(
-      File(url.queryParameters['event'] == '401878771'
-              ? 'test/data/espn_summary_pre.json'
-              : 'test/data/espn_summary_col.json')
-          .readAsBytesSync(),
-      200,
-      headers: {'content-type': 'application/json; charset=utf-8'},
-    );
+  File(
+    url.queryParameters['event'] == '401878771' ? 'test/data/espn_summary_pre.json' : 'test/data/espn_summary_col.json',
+  ).readAsBytesSync(),
+  200,
+  headers: {'content-type': 'application/json; charset=utf-8'},
+);
 
 http.Client _fixturesClient() => MockClient((req) async {
   if (req.url.pathSegments.last == 'summary') return _summary(req.url);
@@ -549,8 +585,21 @@ http.Client _fixturesClient() => MockClient((req) async {
     // Today's scoreboard, used by the Live tab.
     return http.Response(
       board(switch (slug) {
-        'eng.1' => [espnEvent('2', '2026-10-18T14:00:00Z', 'Arsenal', 'Tottenham Hotspur', state: 'in', detail: "67'", hs: '2', as: '1')],
-        'esp.1' => [espnEvent('9', '2026-10-18T14:00:00Z', 'Real Madrid', 'Getafe', state: 'in', detail: "12'", hs: '0', as: '0')],
+        'eng.1' => [
+          espnEvent(
+            '2',
+            '2026-10-18T14:00:00Z',
+            'Arsenal',
+            'Tottenham Hotspur',
+            state: 'in',
+            detail: "67'",
+            hs: '2',
+            as: '1',
+          ),
+        ],
+        'esp.1' => [
+          espnEvent('9', '2026-10-18T14:00:00Z', 'Real Madrid', 'Getafe', state: 'in', detail: "12'", hs: '0', as: '0'),
+        ],
         _ => [],
       }),
       200,
@@ -571,7 +620,16 @@ http.Client _fixturesClient() => MockClient((req) async {
           hs: '0',
           as: '3',
         ),
-        espnEvent('2', '2026-10-18T14:00:00Z', 'Arsenal', 'Tottenham Hotspur', state: 'in', detail: "67'", hs: '2', as: '1'),
+        espnEvent(
+          '2',
+          '2026-10-18T14:00:00Z',
+          'Arsenal',
+          'Tottenham Hotspur',
+          state: 'in',
+          detail: "67'",
+          hs: '2',
+          as: '1',
+        ),
         espnEvent('3', '2026-10-18T16:30:00Z', 'AFC Bournemouth', 'Sunderland', odds: [2.1, 3.4, 3.6]),
         espnEvent('401878771', '2026-10-18T19:00:00Z', 'Everton', 'Chelsea', odds: [3.0, 3.8, 2.2]),
       ]),

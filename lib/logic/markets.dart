@@ -22,13 +22,13 @@ class Market {
 
   /// The sides to choose from for a match between [home] and [away].
   List<String> sides(String home, String away) => switch (id) {
-        'result' || 'half_time' => [home, 'Draw', away],
-        'double_chance' => ['$home or draw', '$home or $away', '$away or draw'],
-        'dnb' || 'handicap' => [home, away],
-        'goals' || 'corners' || 'cards' => ['Over', 'Under'],
-        'btts' => ['Yes', 'No'],
-        _ => const [],
-      };
+    'result' || 'half_time' => [home, 'Draw', away],
+    'double_chance' => ['$home or draw', '$home or $away', '$away or draw'],
+    'dnb' || 'handicap' => [home, away],
+    'goals' || 'corners' || 'cards' => ['Over', 'Under'],
+    'btts' => ['Yes', 'No'],
+    _ => const [],
+  };
 
   /// The selection text for a side, line and free text.
   String selection({String? side, double? line, String text = ''}) {

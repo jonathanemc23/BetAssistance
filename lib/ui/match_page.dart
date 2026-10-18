@@ -11,13 +11,24 @@ import 'format.dart';
 import 'market_sheet.dart';
 import 'matchboard_screen.dart';
 import 'matches_screen.dart';
+import 'money_movement.dart';
 import 'parlay_screens.dart';
 
-/// One match: score header, then tabs for odds, news, teams, line-ups, key
+/// One match: score header, then tabs for odds, money movement, news, teams, line-ups, key
 /// events, stats, head-to-head and the league table (ESPN summary feed).
 class MatchPage extends StatefulWidget {
-  const MatchPage({super.key, required this.match, required this.store, required this.api, this.onPick});
+  const MatchPage({
+    super.key,
+    required this.match,
+    required this.store,
+    required this.api,
+    this.onPick,
+    this.initialTab = 0,
+  });
   final Match match;
+
+  /// Tab to open on, an index into the tabs (1 is Money).
+  final int initialTab;
   final BankStore store;
   final FixturesApi api;
 
@@ -33,7 +44,7 @@ class _MatchPageState extends State<MatchPage> {
   String? _error;
   bool _loading = true;
 
-  static const _tabs = ['Odds', 'News', 'Teams', 'Line-ups', 'Events', 'Stats', 'H2H', 'Table'];
+  static const _tabs = ['Odds', 'Money', 'News', 'Teams', 'Line-ups', 'Events', 'Stats', 'H2H', 'Table'];
 
   @override
   void initState() {
@@ -71,6 +82,7 @@ class _MatchPageState extends State<MatchPage> {
     final m = widget.match;
     return DefaultTabController(
       length: _tabs.length,
+      initialIndex: widget.initialTab,
       child: Scaffold(
         appBar: AppBar(
           title: Text(m.league.name),
@@ -96,15 +108,17 @@ class _MatchPageState extends State<MatchPage> {
           icon: const Icon(Icons.add),
           label: const Text('Log a bet'),
         ),
-        body: Column(children: [
-          _Header(match: m, details: _details),
-          TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            tabs: [for (final t in _tabs) Tab(text: t)],
-          ),
-          Expanded(child: _body()),
-        ]),
+        body: Column(
+          children: [
+            _Header(match: m, details: _details),
+            TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              tabs: [for (final t in _tabs) Tab(text: t)],
+            ),
+            Expanded(child: _body()),
+          ],
+        ),
       ),
     );
   }
@@ -121,16 +135,19 @@ class _MatchPageState extends State<MatchPage> {
     }
     final fmt = widget.store.settings.oddsFormat;
     final m = widget.match;
-    return TabBarView(children: [
-      _OddsTab(match: m, details: d, format: fmt, onPick: _pick),
-      _NewsTab(news: d.news),
-      _TeamsTab(match: m, details: d),
-      _LineupsTab(details: d),
-      _EventsTab(match: m, details: d),
-      _StatsTab(match: m, details: d),
-      _H2HTab(details: d),
-      _TableTab(match: m, details: d),
-    ]);
+    return TabBarView(
+      children: [
+        _OddsTab(match: m, details: d, format: fmt, onPick: _pick),
+        MoneyMovementView(match: m, details: d, store: widget.store),
+        _NewsTab(news: d.news),
+        _TeamsTab(match: m, details: d),
+        _LineupsTab(details: d),
+        _EventsTab(match: m, details: d),
+        _StatsTab(match: m, details: d),
+        _H2HTab(details: d),
+        _TableTab(match: m, details: d),
+      ],
+    );
   }
 }
 
@@ -146,26 +163,35 @@ class _Header extends StatelessWidget {
     final m = match;
     final live = m.state == MatchState.live;
     Widget side(Team t, TeamInfo? info) => Expanded(
-          child: Column(children: [
-            TeamLogo(url: t.logo ?? info?.logo, name: t.name, size: 52),
-            const SizedBox(height: 8),
-            Text(t.name,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-            if (info != null && info.record.isNotEmpty)
-              Text(_wdl(info.record), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-          ]),
-        );
+      child: Column(
+        children: [
+          TeamLogo(url: t.logo ?? info?.logo, name: t.name, size: 52),
+          const SizedBox(height: 8),
+          Text(
+            t.name,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          if (info != null && info.record.isNotEmpty)
+            Text(_wdl(info.record), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+        ],
+      ),
+    );
     final centre = m.hasScore
-        ? Text('${m.home.score ?? '-'}  –  ${m.away.score ?? '-'}',
+        ? Text(
+            '${m.home.score ?? '-'}  –  ${m.away.score ?? '-'}',
             style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: live ? cs.error : null,
-                fontFeatures: const [FontFeature.tabularFigures()]))
-        : Text(DateFormat.Hm().format(m.kickoff.toLocal()),
-            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800));
+              fontWeight: FontWeight.w800,
+              color: live ? cs.error : null,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          )
+        : Text(
+            DateFormat.Hm().format(m.kickoff.toLocal()),
+            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+          );
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       padding: const EdgeInsets.fromLTRB(12, 16, 12, 14),
@@ -177,35 +203,46 @@ class _Header extends StatelessWidget {
           colors: [cs.primaryContainer, cs.surfaceContainerHigh],
         ),
       ),
-      child: Column(children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          side(m.home, details?.home),
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Column(children: [
-              centre,
-              const SizedBox(height: 4),
-              if (live)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(6)),
-                  child: Text('LIVE ${m.detail}',
-                      style: TextStyle(color: cs.onError, fontSize: 11, fontWeight: FontWeight.w800)),
-                )
-              else
-                Text(m.state == MatchState.scheduled ? 'Kick-off' : m.detail,
-                    style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
-            ]),
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              side(m.home, details?.home),
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Column(
+                  children: [
+                    centre,
+                    const SizedBox(height: 4),
+                    if (live)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(6)),
+                        child: Text(
+                          'LIVE ${m.detail}',
+                          style: TextStyle(color: cs.onError, fontSize: 11, fontWeight: FontWeight.w800),
+                        ),
+                      )
+                    else
+                      Text(
+                        m.state == MatchState.scheduled ? 'Kick-off' : m.detail,
+                        style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                  ],
+                ),
+              ),
+              side(m.away, details?.away),
+            ],
           ),
-          side(m.away, details?.away),
-        ]),
-        const SizedBox(height: 10),
-        Text(
-          [DateFormat.yMMMEd().format(m.kickoff.toLocal()), if (m.venue != null) m.venue!].join(' · '),
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-        ),
-      ]),
+          const SizedBox(height: 10),
+          Text(
+            [DateFormat.yMMMEd().format(m.kickoff.toLocal()), if (m.venue != null) m.venue!].join(' · '),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -228,12 +265,19 @@ class _Empty extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 40, color: cs.outline),
-          const SizedBox(height: 12),
-          Text(text, textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
-          if (action != null) ...[const SizedBox(height: 16), action!],
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 40, color: cs.outline),
+            const SizedBox(height: 12),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: cs.onSurfaceVariant),
+            ),
+            if (action != null) ...[const SizedBox(height: 16), action!],
+          ],
+        ),
       ),
     );
   }
@@ -252,17 +296,24 @@ class _Section extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(color: theme.colorScheme.surfaceContainerLow, borderRadius: BorderRadius.circular(16)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          Expanded(
-            child: Text(title.toUpperCase(),
-                style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: theme.colorScheme.primary)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title.toUpperCase(),
+                  style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: theme.colorScheme.primary),
+                ),
+              ),
+              ?trailing,
+            ],
           ),
-          ?trailing,
-        ]),
-        const SizedBox(height: 10),
-        child,
-      ]),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
     );
   }
 }
@@ -297,8 +348,11 @@ class _OddsTab extends StatelessWidget {
         const SizedBox(height: 24),
         Icon(Icons.percent, size: 40, color: theme.colorScheme.onSurfaceVariant),
         const SizedBox(height: 8),
-        Text('No bookmaker prices for this match yet. You can still add any market with your own odds.',
-            textAlign: TextAlign.center, style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+        Text(
+          'No bookmaker prices for this match yet. You can still add any market with your own odds.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+        ),
         const SizedBox(height: 16),
       ] else ...[
         Text('Tap a price to log it as a bet or add it to a parlay.', style: theme.textTheme.bodySmall),
@@ -309,73 +363,82 @@ class _OddsTab extends StatelessWidget {
       for (final o in books)
         _Section(
           title: o.provider.isEmpty ? 'Odds' : o.provider,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            if (o.count > 0) ...[
-              Text('Match result', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 6),
-              OddsRow(
-                odds: o,
-                homeName: m.home.name,
-                awayName: m.away.name,
-                format: format,
-                onPick: onPick,
-                large: true,
-              ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (o.count > 0) ...[
+                Text('Match result', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 6),
+                OddsRow(
+                  odds: o,
+                  homeName: m.home.name,
+                  awayName: m.away.name,
+                  format: format,
+                  onPick: onPick,
+                  large: true,
+                ),
+              ],
+              if (o.totalLine != null && (o.over != null || o.under != null)) ...[
+                const SizedBox(height: 12),
+                Text('Total goals ${_num(o.totalLine!)}', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    if (o.over != null)
+                      Expanded(
+                        child: _PriceButton(
+                          label: 'Over',
+                          price: o.over!,
+                          format: format,
+                          onTap: () => onPick('Over ${_num(o.totalLine!)} goals', o.over!),
+                        ),
+                      ),
+                    if (o.over != null && o.under != null) const SizedBox(width: 8),
+                    if (o.under != null)
+                      Expanded(
+                        child: _PriceButton(
+                          label: 'Under',
+                          price: o.under!,
+                          format: format,
+                          onTap: () => onPick('Under ${_num(o.totalLine!)} goals', o.under!),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+              if (o.extras.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text('More markets', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final (label, price) in o.extras)
+                      SizedBox(
+                        width: (MediaQuery.sizeOf(context).width - 32 - 28 - 8) / 2,
+                        child: _PriceButton(
+                          label: label.replaceFirst('Double chance ', ''),
+                          price: price,
+                          format: format,
+                          onTap: () => onPick(_extraSelection(label, m), price),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ],
-            if (o.totalLine != null && (o.over != null || o.under != null)) ...[
-              const SizedBox(height: 12),
-              Text('Total goals ${_num(o.totalLine!)}', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 6),
-              Row(children: [
-                if (o.over != null)
-                  Expanded(
-                    child: _PriceButton(
-                      label: 'Over',
-                      price: o.over!,
-                      format: format,
-                      onTap: () => onPick('Over ${_num(o.totalLine!)} goals', o.over!),
-                    ),
-                  ),
-                if (o.over != null && o.under != null) const SizedBox(width: 8),
-                if (o.under != null)
-                  Expanded(
-                    child: _PriceButton(
-                      label: 'Under',
-                      price: o.under!,
-                      format: format,
-                      onTap: () => onPick('Under ${_num(o.totalLine!)} goals', o.under!),
-                    ),
-                  ),
-              ]),
-            ],
-            if (o.extras.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text('More markets', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 6),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final (label, price) in o.extras)
-                  SizedBox(
-                    width: (MediaQuery.sizeOf(context).width - 32 - 28 - 8) / 2,
-                    child: _PriceButton(
-                      label: label.replaceFirst('Double chance ', ''),
-                      price: price,
-                      format: format,
-                      onTap: () => onPick(_extraSelection(label, m), price),
-                    ),
-                  ),
-              ]),
-            ],
-          ]),
+          ),
         ),
     ]);
   }
 
   static String _extraSelection(String label, Match m) => switch (label) {
-        'Double chance 1X' => '${m.home.name} or draw',
-        'Double chance 12' => '${m.home.name} or ${m.away.name}',
-        'Double chance X2' => '${m.away.name} or draw',
-        _ => label,
-      };
+    'Double chance 1X' => '${m.home.name} or draw',
+    'Double chance 12' => '${m.home.name} or ${m.away.name}',
+    'Double chance X2' => '${m.away.name} or draw',
+    _ => label,
+  };
 }
 
 String _num(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v';
@@ -399,17 +462,23 @@ class _PriceButton extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-          child: Row(children: [
-            Expanded(
-              child: Text(label,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
-            ),
-            const SizedBox(width: 4),
-            Text(formatOdds(price, format),
-                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onPrimaryContainer)),
-          ]),
+                  style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                formatOdds(price, format),
+                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onPrimaryContainer),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -435,36 +504,51 @@ class _NewsTab extends StatelessWidget {
           elevation: 0,
           color: cs.surfaceContainerLow,
           child: InkWell(
-            onTap: n.url == null
-                ? null
-                : () => launchUrl(Uri.parse(n.url!), mode: LaunchMode.externalApplication),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              if (n.image != null)
-                AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Image.network(n.image!,
+            onTap: n.url == null ? null : () => launchUrl(Uri.parse(n.url!), mode: LaunchMode.externalApplication),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (n.image != null)
+                  AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Image.network(
+                      n.image!,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => Container(color: cs.surfaceContainerHighest)),
+                      errorBuilder: (_, _, _) => Container(color: cs.surfaceContainerHighest),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(n.headline, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      if (n.description.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          n.description,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          if (n.published != null)
+                            Text(
+                              DateFormat.yMMMd().add_Hm().format(n.published!.toLocal()),
+                              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                            ),
+                          const Spacer(),
+                          if (n.url != null) Icon(Icons.open_in_new, size: 16, color: cs.primary),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(n.headline, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                  if (n.description.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(n.description, maxLines: 3, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium),
-                  ],
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    if (n.published != null)
-                      Text(DateFormat.yMMMd().add_Hm().format(n.published!.toLocal()),
-                          style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                    const Spacer(),
-                    if (n.url != null) Icon(Icons.open_in_new, size: 16, color: cs.primary),
-                  ]),
-                ]),
-              ),
-            ]),
+              ],
+            ),
           ),
         ),
     ]);
@@ -481,7 +565,9 @@ class _TeamsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final teams = [(match.home, details.home), (match.away, details.away)];
-    if (teams.every((t) => t.$2.form.isEmpty && t.$2.lastGames.isEmpty && t.$2.leaders.isEmpty && t.$2.record.isEmpty)) {
+    if (teams.every(
+      (t) => t.$2.form.isEmpty && t.$2.lastGames.isEmpty && t.$2.leaders.isEmpty && t.$2.record.isEmpty,
+    )) {
       return const _Empty(icon: Icons.groups, text: 'No team info for this match.');
     }
     final theme = Theme.of(context);
@@ -490,46 +576,58 @@ class _TeamsTab extends StatelessWidget {
       for (final (t, info) in teams)
         _Section(
           title: t.name,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(children: [
-              TeamLogo(url: t.logo ?? info.logo, name: t.name, size: 40),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Wrap(spacing: 16, runSpacing: 4, children: [
-                  if (info.record.isNotEmpty) _Fact('Record', _wdl(info.record)),
-                  if (info.points.isNotEmpty) _Fact('Points', info.points),
-                  if (_position(info) case final pos?) _Fact('Position', pos),
-                ]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  TeamLogo(url: t.logo ?? info.logo, name: t.name, size: 40),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 16,
+                      runSpacing: 4,
+                      children: [
+                        if (info.record.isNotEmpty) _Fact('Record', _wdl(info.record)),
+                        if (info.points.isNotEmpty) _Fact('Points', info.points),
+                        if (_position(info) case final pos?) _Fact('Position', pos),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ]),
-            if (_form(info).isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text('Form (latest first)', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 6),
-              Row(children: [for (final r in _form(info).split('')) _FormChip(r)]),
+              if (_form(info).isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text('Form (latest first)', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 6),
+                Row(children: [for (final r in _form(info).split('')) _FormChip(r)]),
+              ],
+              if (info.lastGames.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text('Last matches', style: theme.textTheme.labelLarge),
+                for (final g in info.lastGames.reversed) _GameRow(game: g, showResult: true),
+              ],
+              if (info.leaders.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text('Top players', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 4),
+                for (final (cat, player, value) in info.leaders)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 110,
+                          child: Text(cat, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                        ),
+                        Expanded(child: Text(player, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+              ],
             ],
-            if (info.lastGames.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text('Last matches', style: theme.textTheme.labelLarge),
-              for (final g in info.lastGames.reversed) _GameRow(game: g, showResult: true),
-            ],
-            if (info.leaders.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text('Top players', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 4),
-              for (final (cat, player, value) in info.leaders)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(children: [
-                    SizedBox(
-                        width: 110,
-                        child: Text(cat, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant))),
-                    Expanded(child: Text(player, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                    Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  ]),
-                ),
-            ],
-          ]),
+          ),
         ),
     ]);
   }
@@ -543,9 +641,8 @@ class _TeamsTab extends StatelessWidget {
 
   /// ESPN's form string (newest first), else built from the last games,
   /// which ESPN lists oldest first.
-  static String _form(TeamInfo info) => info.form.isNotEmpty
-      ? info.form
-      : info.lastGames.reversed.map((g) => g.result).where((r) => r.isNotEmpty).join();
+  static String _form(TeamInfo info) =>
+      info.form.isNotEmpty ? info.form : info.lastGames.reversed.map((g) => g.result).where((r) => r.isNotEmpty).join();
 }
 
 class _Fact extends StatelessWidget {
@@ -556,10 +653,14 @@ class _Fact extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-      Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-      Text(value, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-    ]);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        Text(value, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+      ],
+    );
   }
 }
 
@@ -580,7 +681,10 @@ class _FormChip extends StatelessWidget {
       margin: const EdgeInsets.only(right: 6),
       alignment: Alignment.center,
       decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(7)),
-      child: Text(result, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
+      child: Text(
+        result,
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+      ),
     );
   }
 }
@@ -597,22 +701,28 @@ class _GameRow extends StatelessWidget {
     final g = game;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(children: [
-        SizedBox(
-          width: 54,
-          child: Text(g.date == null ? '' : DateFormat('d MMM\nyyyy').format(g.date!.toLocal()),
-              style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-        ),
-        Expanded(child: Text(g.home, textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis)),
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(6)),
-          child: Text(g.score, style: const TextStyle(fontWeight: FontWeight.w700)),
-        ),
-        Expanded(child: Text(g.away, maxLines: 1, overflow: TextOverflow.ellipsis)),
-        if (showResult && g.result.isNotEmpty) ...[const SizedBox(width: 6), _FormChip(g.result)],
-      ]),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 54,
+            child: Text(
+              g.date == null ? '' : DateFormat('d MMM\nyyyy').format(g.date!.toLocal()),
+              style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ),
+          Expanded(
+            child: Text(g.home, textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(6)),
+            child: Text(g.score, style: const TextStyle(fontWeight: FontWeight.w700)),
+          ),
+          Expanded(child: Text(g.away, maxLines: 1, overflow: TextOverflow.ellipsis)),
+          if (showResult && g.result.isNotEmpty) ...[const SizedBox(width: 6), _FormChip(g.result)],
+        ],
+      ),
     );
   }
 }
@@ -628,46 +738,57 @@ class _LineupsTab extends StatelessWidget {
     final teams = [details.home, details.away];
     if (teams.every((t) => t.starters.isEmpty)) {
       return const _Empty(
-          icon: Icons.format_list_numbered, text: 'Line-ups usually appear about an hour before kick-off.');
+        icon: Icons.format_list_numbered,
+        text: 'Line-ups usually appear about an hour before kick-off.',
+      );
     }
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     Widget player(Player p) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(children: [
-            CircleAvatar(
-              radius: 13,
-              backgroundColor: cs.secondaryContainer,
-              child: Text(p.jersey,
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.onSecondaryContainer)),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 13,
+            backgroundColor: cs.secondaryContainer,
+            child: Text(
+              p.jersey,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.onSecondaryContainer),
             ),
-            const SizedBox(width: 10),
-            Expanded(child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
-            if (p.subbedIn) Icon(Icons.arrow_upward, size: 16, color: BankColors.win(context)),
-            if (p.subbedOut) Icon(Icons.arrow_downward, size: 16, color: BankColors.loss(context)),
-            const SizedBox(width: 6),
-            SizedBox(
-              width: 34,
-              child: Text(p.position == 'SUB' ? '' : p.position,
-                  textAlign: TextAlign.right,
-                  style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+          if (p.subbedIn) Icon(Icons.arrow_upward, size: 16, color: BankColors.win(context)),
+          if (p.subbedOut) Icon(Icons.arrow_downward, size: 16, color: BankColors.loss(context)),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 34,
+            child: Text(
+              p.position == 'SUB' ? '' : p.position,
+              textAlign: TextAlign.right,
+              style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
             ),
-          ]),
-        );
+          ),
+        ],
+      ),
+    );
     return _list([
       for (final t in teams)
         if (t.starters.isNotEmpty)
           _Section(
             title: t.name,
             trailing: t.formation == null ? null : Text(t.formation!, style: theme.textTheme.labelLarge),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              for (final p in t.starters) player(p),
-              if (t.subs.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text('Substitutes', style: theme.textTheme.labelLarge),
-                for (final p in t.subs) player(p),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final p in t.starters) player(p),
+                if (t.subs.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text('Substitutes', style: theme.textTheme.labelLarge),
+                  for (final p in t.subs) player(p),
+                ],
               ],
-            ]),
+            ),
           ),
     ]);
   }
@@ -683,33 +804,46 @@ class _EventsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final events = details.events.where((e) => e.kind != KeyEventKind.other).toList();
-    if (events.isEmpty) return const _Empty(icon: Icons.timeline, text: 'Goals, cards and subs appear once the match starts.');
+    if (events.isEmpty)
+      return const _Empty(icon: Icons.timeline, text: 'Goals, cards and subs appear once the match starts.');
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return _list([
       for (final e in events)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SizedBox(
-              width: 40,
-              child: Text(e.clock,
-                  style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurfaceVariant)),
-            ),
-            _EventIcon(e.kind),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                if (e.side != null)
-                  Text(e.side == 'home' ? match.home.name : match.away.name,
-                      style: theme.textTheme.labelSmall?.copyWith(color: cs.primary)),
-                Text(e.text,
-                    style: e.kind == KeyEventKind.goal || e.kind == KeyEventKind.period
-                        ? const TextStyle(fontWeight: FontWeight.w700)
-                        : null),
-              ]),
-            ),
-          ]),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 40,
+                child: Text(
+                  e.clock,
+                  style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurfaceVariant),
+                ),
+              ),
+              _EventIcon(e.kind),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (e.side != null)
+                      Text(
+                        e.side == 'home' ? match.home.name : match.away.name,
+                        style: theme.textTheme.labelSmall?.copyWith(color: cs.primary),
+                      ),
+                    Text(
+                      e.text,
+                      style: e.kind == KeyEventKind.goal || e.kind == KeyEventKind.period
+                          ? const TextStyle(fontWeight: FontWeight.w700)
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
     ]);
   }
@@ -723,11 +857,11 @@ class _EventIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     Widget card(Color c) => Container(
-          width: 14,
-          height: 18,
-          margin: const EdgeInsets.symmetric(horizontal: 5),
-          decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(3)),
-        );
+      width: 14,
+      height: 18,
+      margin: const EdgeInsets.symmetric(horizontal: 5),
+      decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(3)),
+    );
     return switch (kind) {
       KeyEventKind.goal => Icon(Icons.sports_soccer, size: 22, color: BankColors.win(context)),
       KeyEventKind.yellow => card(const Color(0xFFF2C230)),
@@ -754,29 +888,47 @@ class _StatsTab extends StatelessWidget {
     return _list([
       _Section(
         title: details.statsAreSeason ? 'Season so far' : 'Match stats',
-        child: Column(children: [
-          Row(children: [
-            Expanded(child: Text(match.home.shortName, style: theme.textTheme.labelLarge)),
-            Expanded(child: Text(match.away.shortName, textAlign: TextAlign.right, style: theme.textTheme.labelLarge)),
-          ]),
-          const SizedBox(height: 8),
-          for (final (label, h, a) in details.stats) ...[
-            Row(children: [
-              SizedBox(width: 56, child: Text(h, style: const TextStyle(fontWeight: FontWeight.w700))),
-              Expanded(
-                child: Text(_title(label),
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text(match.home.shortName, style: theme.textTheme.labelLarge)),
+                Expanded(
+                  child: Text(match.away.shortName, textAlign: TextAlign.right, style: theme.textTheme.labelLarge),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (final (label, h, a) in details.stats) ...[
+              Row(
+                children: [
+                  SizedBox(
+                    width: 56,
+                    child: Text(h, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _title(label),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 56,
+                    child: Text(
+                      a,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
               ),
-              SizedBox(
-                  width: 56,
-                  child: Text(a, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w700))),
-            ]),
-            const SizedBox(height: 4),
-            _CompareBar(home: _value(h), away: _value(a)),
-            const SizedBox(height: 10),
+              const SizedBox(height: 4),
+              _CompareBar(home: _value(h), away: _value(a)),
+              const SizedBox(height: 10),
+            ],
           ],
-        ]),
+        ),
       ),
     ]);
   }
@@ -803,11 +955,21 @@ class _CompareBar extends StatelessWidget {
       borderRadius: BorderRadius.circular(3),
       child: SizedBox(
         height: 6,
-        child: Row(children: [
-          if (hf > 0) Expanded(flex: hf, child: Container(color: cs.primary)),
-          if (hf > 0 && af > 0) const SizedBox(width: 2),
-          if (af > 0) Expanded(flex: af, child: Container(color: cs.tertiary)),
-        ]),
+        child: Row(
+          children: [
+            if (hf > 0)
+              Expanded(
+                flex: hf,
+                child: Container(color: cs.primary),
+              ),
+            if (hf > 0 && af > 0) const SizedBox(width: 2),
+            if (af > 0)
+              Expanded(
+                flex: af,
+                child: Container(color: cs.tertiary),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -827,13 +989,16 @@ class _H2HTab extends StatelessWidget {
     return _list([
       _Section(
         title: 'Head to head',
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (details.h2hSummary.isNotEmpty) ...[
-            Text(details.h2hSummary, style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (details.h2hSummary.isNotEmpty) ...[
+              Text(details.h2hSummary, style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 6),
+            ],
+            for (final g in details.h2h) _GameRow(game: g),
           ],
-          for (final g in details.h2h) _GameRow(game: g),
-        ]),
+        ),
       ),
     ]);
   }
@@ -848,42 +1013,42 @@ class _TableTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (details.table.isEmpty) return const _Empty(icon: Icons.table_rows, text: 'No league table for this competition.');
+    if (details.table.isEmpty)
+      return const _Empty(icon: Icons.table_rows, text: 'No league table for this competition.');
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final ids = {details.home.id, details.away.id}..remove('');
     final names = {match.home.name, match.away.name};
     TextStyle? head = theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant);
-    Widget cell(String t, {double w = 28, TextStyle? style}) =>
-        SizedBox(width: w, child: Text(t, textAlign: TextAlign.center, style: style));
+    Widget cell(String t, {double w = 28, TextStyle? style}) => SizedBox(
+      width: w,
+      child: Text(t, textAlign: TextAlign.center, style: style),
+    );
     Widget row(List<Widget> cells, {bool highlight = false}) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-          decoration: highlight
-              ? BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(8))
-              : null,
-          child: Row(children: cells),
-        );
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      decoration: highlight ? BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(8)) : null,
+      child: Row(children: cells),
+    );
     return _list([
       _Section(
         title: details.tableTitle.isEmpty ? 'Table' : details.tableTitle,
-        child: Column(children: [
-          row([
-            cell('#', style: head),
-            Expanded(child: Text('Team', style: head)),
-            for (final h in ['P', 'W', 'D', 'L', 'GD']) cell(h, style: head),
-            cell('Pts', w: 34, style: head),
-          ]),
-          for (final r in details.table)
-            row(
-              [
+        child: Column(
+          children: [
+            row([
+              cell('#', style: head),
+              Expanded(child: Text('Team', style: head)),
+              for (final h in ['P', 'W', 'D', 'L', 'GD']) cell(h, style: head),
+              cell('Pts', w: 34, style: head),
+            ]),
+            for (final r in details.table)
+              row([
                 cell('${r.rank}'),
                 Expanded(child: Text(r.team, maxLines: 1, overflow: TextOverflow.ellipsis)),
                 for (final v in [r.played, r.won, r.drawn, r.lost, r.goalDiff]) cell(v),
                 cell(r.points, w: 34, style: const TextStyle(fontWeight: FontWeight.w800)),
-              ],
-              highlight: ids.contains(r.teamId) || names.contains(r.team),
-            ),
-        ]),
+              ], highlight: ids.contains(r.teamId) || names.contains(r.team)),
+          ],
+        ),
       ),
     ]);
   }

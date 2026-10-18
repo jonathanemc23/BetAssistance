@@ -18,8 +18,16 @@ void main() {
   const a = DataAssistant();
 
   test('every suggested question has a topic, in English and Spanish', () {
-    expect(suggestedQuestions.map(DataAssistant.topicOf),
-        ['summary', 'form', 'h2h', 'goals', 'table', 'odds', 'lineups', 'news']);
+    expect(suggestedQuestions.map(DataAssistant.topicOf), [
+      'summary',
+      'form',
+      'h2h',
+      'goals',
+      'table',
+      'odds',
+      'lineups',
+      'news',
+    ]);
     expect(DataAssistant.topicOf('¿Cuál es la cuota del empate?'), 'odds');
     expect(DataAssistant.topicOf('historial entre ellos'), 'h2h');
     expect(DataAssistant.topicOf('¿Quién gana?'), 'summary');

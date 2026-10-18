@@ -24,10 +24,13 @@ class SlipLeg {
 }
 
 class SlipRead {
-  const SlipRead({this.legs = const [], this.stake, this.totalOdds});
+  const SlipRead({this.legs = const [], this.stake, this.totalOdds, this.error});
   final List<SlipLeg> legs;
   final double? stake;
   final double? totalOdds;
+
+  /// Why the text reader failed, when it did (shown so it can be reported).
+  final String? error;
 }
 
 /// Reads the text of a bet slip screenshot. On the phone this is ML Kit's
@@ -49,13 +52,18 @@ SlipRead parseSlip(List<SlipLine> lines) {
   final prices = <double?>[];
   final rest = <String>[];
   for (final r in rows) {
-    final text = r.join(' ');
+    var text = r.join(' ');
     final lower = _plain(text);
-    if (_noise.hasMatch(lower) && _price(r.last) == null) {
-      kinds.add(_Kind.noise);
-      prices.add(null);
-      rest.add('');
-      continue;
+    if (_noise.hasMatch(lower)) {
+      // "Combinada de 6  $60.000   23.61": the heading carries the total odds.
+      final head = _price(r.last);
+      if (head != null && _parlayHead.hasMatch(lower)) total ??= head;
+      if (head == null || _parlayHead.hasMatch(lower)) {
+        kinds.add(_Kind.noise);
+        prices.add(null);
+        rest.add('');
+        continue;
+      }
     }
     if (_isMoneyRow(lower)) {
       if (_stakeWords.hasMatch(lower) && !_returnWords.hasMatch(lower)) stake ??= _amount(text);
@@ -67,7 +75,9 @@ SlipRead parseSlip(List<SlipLine> lines) {
     }
     // A price on its own at the right, or at the end of the row's text.
     final last = r.length > 1 ? _price(r.last) : null;
-    final (before, price) = last != null ? (r.sublist(0, r.length - 1).join(' '), last) : (_trailingPrice(text) ?? (text, null));
+    final (before, price) = last != null
+        ? (r.sublist(0, r.length - 1).join(' '), last)
+        : (_trailingPrice(text) ?? (text, null));
     final only = _price(text);
     if (only != null) {
       kinds.add(_Kind.price);
@@ -78,19 +88,25 @@ SlipRead parseSlip(List<SlipLine> lines) {
       prices.add(price);
       rest.add(_clean(before));
     } else {
-      kinds.add(_noise.hasMatch(lower) || _clean(text).isEmpty
-          ? _Kind.noise
-          : _isEvent(text)
-              ? _Kind.event
-              : _isMarket(lower)
-                  ? _Kind.market
-                  : _Kind.text);
+      text = _withoutDates(text);
+      kinds.add(
+        _noise.hasMatch(lower) || _clean(text).isEmpty
+            ? _Kind.noise
+            : _isEvent(text)
+            ? _Kind.event
+            : _isMarket(lower)
+            ? _Kind.market
+            : _Kind.text,
+      );
       prices.add(null);
       rest.add(_clean(text));
     }
   }
 
-  final priceRows = [for (var i = 0; i < kinds.length; i++) if (kinds[i] == _Kind.price) i];
+  final priceRows = [
+    for (var i = 0; i < kinds.length; i++)
+      if (kinds[i] == _Kind.price) i,
+  ];
   if (priceRows.isEmpty) return SlipRead(stake: stake, totalOdds: total);
 
   // Does the match come before the price (the leg's block ends with the
@@ -103,7 +119,10 @@ SlipRead parseSlip(List<SlipLine> lines) {
     final p = priceRows[n];
     final from = eventFirst ? (n == 0 ? 0 : priceRows[n - 1] + 1) : p + 1;
     final to = eventFirst ? p : (n + 1 < priceRows.length ? priceRows[n + 1] : kinds.length);
-    final block = [for (var i = from; i < to; i++) if (kinds[i] != _Kind.noise && kinds[i] != _Kind.price) i];
+    final block = [
+      for (var i = from; i < to; i++)
+        if (kinds[i] != _Kind.noise && kinds[i] != _Kind.price) i,
+    ];
 
     String? event, market;
     final texts = <String>[];
@@ -119,18 +138,20 @@ SlipRead parseSlip(List<SlipLine> lines) {
     }
     // The pick: next to the price, else the text row nearest to it.
     var selection = rest[p];
-    if (selection.isEmpty && texts.isNotEmpty) selection = eventFirst ? texts.last : texts.first;
+    if (selection.isEmpty && texts.isNotEmpty) selection = eventFirst ? texts.removeLast() : texts.removeAt(0);
     if (selection.isEmpty && market != null) {
       selection = market;
       market = null;
     }
     if (selection.isEmpty) continue;
-    legs.add(SlipLeg(
-      selection: selection,
-      event: event ?? '',
-      market: _marketId(market, selection),
-      odds: prices[p]!,
-    ));
+    // No "A v B" line: many slips list the two teams one under the other.
+    if (event == null && texts.length == 2) event = '${texts[0]} vs ${texts[1]}';
+    // A bare team or answer means little without its market ("Sí" for both
+    // teams to score, "Como 1907" for win or lead by two).
+    if (market != null && !_isPlainResult(market) && !_saysItAll.hasMatch(_plain(selection))) {
+      selection = '$selection · $market';
+    }
+    legs.add(SlipLeg(selection: selection, event: event ?? '', market: _marketId(market, selection), odds: prices[p]!));
   }
   return SlipRead(legs: legs, stake: stake, totalOdds: total);
 }
@@ -210,46 +231,75 @@ String _plain(String s) {
   return s.toLowerCase().split('').map((c) => acc[c] ?? c).join();
 }
 
+/// Dates and kick-off times next to the teams ("18/10/2026, 08:00").
+String _withoutDates(String s) => s
+    .replaceAll(RegExp(r'\b\d{1,2}[/.-]\d{1,2}([/.-]\d{2,4})?,?(\s*\d{1,2}:\d{2})?'), ' ')
+    .replaceAll(RegExp(r'\b\d{1,2}:\d{2}\b'), ' ')
+    .trim();
+
 String _clean(String s) => s
     .replaceAll(RegExp(r'^[\s•·✓✔☑○●◉▪■□x×*>-]+(?=\S)'), '')
+    .replaceAll(RegExp(r'^[?+©®]\s*(?=[A-Za-zÀ-ÿ])'), '')
+    .replaceAll(RegExp(r'\s*[✓✔☑✅]+\s*$'), '')
     .replaceAll(RegExp(r'\s+@\s*$'), '')
     .replaceAll(RegExp(r'\s+'), ' ')
     .trim();
 
+final _parlayHead = RegExp(
+  r'^(combinada|parlay|parley|multiple|múltiple|acca|accumulator|apuesta multiple|apuesta combinada)',
+);
+
+bool _isPlainResult(String market) => RegExp(
+  r'^(1x2|match result|resultado|full time result|tiempo reglamentario|ganador del partido|money ?line|1x2 tiempo reglamentario|resultado final)$',
+).hasMatch(_plain(market).trim());
+
+/// Picks that already name their market: lines, double chance, over/under.
+final _saysItAll = RegExp(r'\d[.,]\d|\b(o|or|empate|draw|over|under|mas|menos|y|and|to win|to score)\b|[+-]\d');
+
 final _stakeWords = RegExp(r'\b(stake|apuesta|apostado|importe|monto|valor|wager|bet amount|risk|riesgo|stk)\b');
-final _returnWords = RegExp(r'(\breturns?\b|retorno|ganancia|premio|\bpago\b|payout|^to win\b|para ganar|posible|potential|\bcobro\b)');
-final _totalOddsWords = RegExp(r'(total odds|cuota total|cuotas totales|odds total|combined odds|cuota combinada|momio)');
+final _returnWords = RegExp(
+  r'(\breturns?\b|retorno|ganancia|premio|\bpago\b|payout|^to win\b|para ganar|posible|potential|\bcobro\b)',
+);
+final _totalOddsWords = RegExp(
+  r'(total odds|cuota total|cuotas totales|odds total|combined odds|cuota combinada|momio)',
+);
 
 bool _isMoneyRow(String lower) =>
     _stakeWords.hasMatch(lower) ||
     _returnWords.hasMatch(lower) ||
     _totalOddsWords.hasMatch(lower) ||
-    RegExp(r'(cash ?out|\bcobrar\b|\bsaldo\b|\bbalance\b|\bbono\b|\bbonus\b|freebet|apuesta gratis|^total\s*[:$€£\d])').hasMatch(lower) ||
+    RegExp(r'(cash ?out|\bcobrar\b|\bsaldo\b|\bbalance\b|\bbono\b|\bbonus\b|freebet|apuesta gratis|^total\s*[:$€£\d])')
+        .hasMatch(lower) ||
     RegExp(r'([$€£]|\bcop\b|\busd\b|\beur\b|\bmxn\b|\bs/)\s*\d').hasMatch(lower);
 
 /// Rows that are slip chrome: headings, buttons, dates and ids.
 final _noise = RegExp(
-    r'^(bet ?slip|boleto|cupon|cupón|mis apuestas|my bets|parlay|parley|combinada|multiple|múltiple|acca|accumulator|'
-    r'apuesta multiple|apuesta combinada|\d+ (selecciones|selections|legs|picks|fold)|singles?|sencillas?|'
-    r'en vivo|live|abiertas|open|settled|liquidadas|place bet|realizar apuesta|apostar|share|compartir|'
-    r'id[: ]|ref[: ]|ticket|hoy|today|tomorrow|manana|mañana)(\b|$)|^[\d\s:/.-]+$',
-    caseSensitive: false);
+  r'^(bet ?slip|boleto|cupon|cupón|mis apuestas|my bets|parlay|parley|combinada|multiple|múltiple|acca|accumulator|'
+  r'apuesta multiple|apuesta combinada|\d+ (selecciones|selections|legs|picks|fold)|singles?|sencillas?|'
+  r'en vivo|live|abiertas|open|settled|liquidadas|place bet|realizar apuesta|apostar|share|compartir|'
+  r'id[: ]|ref[: ]|ticket|hoy|today|tomorrow|manana|mañana)(\b|$)|^[\d\s:/.-]+$',
+  caseSensitive: false,
+);
 
 bool _isEvent(String s) {
-  final m = RegExp(r'^(.*[a-zA-ZÀ-ÿ].*?)\s+(vs\.?|v|-|–|x|@|vs)\s+(.*[a-zA-ZÀ-ÿ].*)$', caseSensitive: false).firstMatch(s.trim());
+  final m = RegExp(
+    r'^(.*[a-zA-ZÀ-ÿ].*?)\s+(vs\.?|v|-|–|x|@|vs)\s+(.*[a-zA-ZÀ-ÿ].*)$',
+    caseSensitive: false,
+  ).firstMatch(s.trim());
   if (m == null) return false;
   // "Over 2.5 - goals" and "Handicap -1" are not matches.
   return !RegExp(r'^(over|under|mas|más|menos|handicap|total)\b', caseSensitive: false).hasMatch(m.group(1)!.trim());
 }
 
 final _marketWords = RegExp(
-    r'(match result|full time|result|resultado|ganador|1x2|money ?line|moneyline|winner|tiempo reglamentario|'
-    r'double chance|doble oportunidad|draw no bet|empate no|apuesta sin empate|handicap|hándicap|spread|'
-    r'total goals|total de goles|goles|goals|over/under|mas/menos|más/menos|both teams|ambos equipos|btts|'
-    r'corner|córner|tiros de esquina|cards|tarjetas|half|mitad|medio tiempo|descanso|correct score|marcador|'
-    r'goleador|scorer|anotador|to score|marcar)');
+  r'(match result|full time|result|resultado|ganador|1x2|money ?line|moneyline|winner|tiempo reglamentario|'
+  r'double chance|doble oportunidad|draw no bet|empate no|apuesta sin empate|handicap|hándicap|spread|'
+  r'total goals|total de goles|goles|goals|over/under|mas/menos|más/menos|both teams|ambos equipos|btts|'
+  r'corner|córner|tiros de esquina|cards|tarjetas|half|mitad|medio tiempo|descanso|correct score|marcador|'
+  r'goleador|scorer|anotador|to score|marcar|ganar el partido|liderar|lead by)',
+);
 
-bool _isMarket(String lower) => _marketWords.hasMatch(lower) && lower.split(' ').length <= 7;
+bool _isMarket(String lower) => _marketWords.hasMatch(lower) && lower.split(' ').length <= 9;
 
 String _marketId(String? market, String selection) {
   final fromSelection = marketOf(selection);
@@ -264,6 +314,7 @@ String _marketId(String? market, String selection) {
   if (RegExp(r'correct score|marcador').hasMatch(m)) return 'correct_score';
   if (RegExp(r'scorer|goleador|anotador|to score|marcar').hasMatch(m)) return 'scorer';
   if (RegExp(r'half|mitad|medio tiempo|descanso').hasMatch(m)) return 'half_time';
+  if (RegExp(r'liderar|lead by|early payout|pago anticipado').hasMatch(m)) return 'other';
   if (RegExp(r'goal|goles|total|over|mas/menos').hasMatch(m)) return 'goals';
   if (RegExp(r'result|ganador|1x2|money|winner|reglamentario').hasMatch(m)) return 'result';
   return fromSelection;

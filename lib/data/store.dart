@@ -6,6 +6,7 @@ import 'database.dart';
 import 'favorites.dart';
 import 'fixtures.dart';
 import 'models.dart';
+import 'odds_history.dart';
 import 'parlay.dart';
 
 /// In-memory view of the database that the screens listen to. Every change
@@ -99,8 +100,16 @@ class BankStore extends ChangeNotifier {
     await _boardChanged(b);
   }
 
-  Future<void> addNote(Board b, {required String category, required String title, required String body, String source = 'assistant'}) async {
-    await _db.addNote(BoardNote(boardId: b.id!, category: category, title: title, body: body, source: source, created: _now()));
+  Future<void> addNote(
+    Board b, {
+    required String category,
+    required String title,
+    required String body,
+    String source = 'assistant',
+  }) async {
+    await _db.addNote(
+      BoardNote(boardId: b.id!, category: category, title: title, body: body, source: source, created: _now()),
+    );
     await _boardChanged(b);
   }
 
@@ -151,12 +160,14 @@ class BankStore extends ChangeNotifier {
   }
 
   /// Sets the whole parlay's result. Won marks open legs won as well.
-  Future<Parlay> setParlayStatus(Parlay p, BetStatus status) => saveParlay(p.copyWith(
-        status: status,
-        legs: status == BetStatus.won
-            ? [for (final l in p.legs) l.status == BetStatus.pending ? l.copyWith(status: BetStatus.won) : l]
-            : null,
-      ));
+  Future<Parlay> setParlayStatus(Parlay p, BetStatus status) => saveParlay(
+    p.copyWith(
+      status: status,
+      legs: status == BetStatus.won
+          ? [for (final l in p.legs) l.status == BetStatus.pending ? l.copyWith(status: BetStatus.won) : l]
+          : null,
+    ),
+  );
 
   Future<void> deleteParlay(Parlay p) async {
     if (p.id != null) await _db.deleteParlay(p.id!);
@@ -178,6 +189,21 @@ class BankStore extends ChangeNotifier {
     favorites = await _db.favorites();
     notifyListeners();
     return starred;
+  }
+
+  /// Saves [odds] for [matchId] when the prices changed since the last
+  /// reading, and returns every reading, oldest first.
+  Future<List<OddsSnapshot>> recordOdds(String matchId, MatchOdds? odds, {DateTime? at}) async {
+    var history = await _db.oddsHistory(matchId);
+    if (odds != null) {
+      final now = OddsSnapshot.of(odds, at ?? DateTime.now());
+      final last = history.where((h) => h.provider == now.provider).lastOrNull;
+      if (last == null || !last.samePrices(now)) {
+        await _db.addOddsSnapshot(matchId, now);
+        history = await _db.oddsHistory(matchId);
+      }
+    }
+    return history.where((h) => odds == null || h.provider == odds.provider).toList();
   }
 
   Future<void> removeFavorite(String matchId) async {

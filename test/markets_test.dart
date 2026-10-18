@@ -8,7 +8,13 @@ void main() {
     final picks = <String, String>{};
     for (final m in markets) {
       final sides = m.sides('Arsenal', 'Chelsea');
-      final text = m.hasText ? (m.id == 'correct_score' ? '2-1' : m.id == 'scorer' ? 'Saka' : 'Arsenal win both halves') : '';
+      final text = m.hasText
+          ? (m.id == 'correct_score'
+                ? '2-1'
+                : m.id == 'scorer'
+                ? 'Saka'
+                : 'Arsenal win both halves')
+          : '';
       final sel = m.selection(side: sides.isEmpty ? null : sides.last, line: m.line, text: text);
       picks[m.id] = sel;
       if (m.id != 'other') expect(marketOf(sel), m.id, reason: sel);
