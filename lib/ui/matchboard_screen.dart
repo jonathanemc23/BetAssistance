@@ -5,6 +5,7 @@ import '../data/board.dart';
 import '../data/fixtures.dart';
 import '../data/store.dart';
 import '../logic/assistant.dart';
+import '../logic/claude_assistant.dart';
 import 'matches_screen.dart';
 
 /// Matchboard tab: the workspaces the user has opened, newest activity first.
@@ -79,11 +80,17 @@ class MatchboardScreen extends StatelessWidget {
   }
 }
 
+/// Opens a board. With an AI key in Settings the chat uses Claude with web
+/// search, otherwise the offline [DataAssistant].
 Future<void> openBoard(BuildContext context,
-        {required BankStore store, required FixturesApi api, required Board board, MatchAssistant? assistant}) =>
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => BoardPage(store: store, api: api, board: board, assistant: assistant ?? const DataAssistant()),
-    ));
+    {required BankStore store, required FixturesApi api, required Board board, MatchAssistant? assistant}) async {
+  final key = assistant == null ? (await store.pref(aiKeyPref))?.trim() ?? '' : '';
+  final chosen = assistant ?? (key.isEmpty ? const DataAssistant() : ClaudeAssistant(key));
+  if (!context.mounted) return;
+  await Navigator.of(context).push(MaterialPageRoute<void>(
+    builder: (_) => BoardPage(store: store, api: api, board: board, assistant: chosen),
+  ));
+}
 
 class _BoardTile extends StatelessWidget {
   const _BoardTile({required this.board, required this.onTap, required this.onDelete});
@@ -157,6 +164,7 @@ const _categoryIcons = <String, IconData>{
   'Line-ups': Icons.groups,
   'Stats': Icons.bar_chart,
   'News': Icons.newspaper,
+  'Research': Icons.travel_explore,
   'My notes': Icons.edit_note,
 };
 
@@ -238,11 +246,16 @@ class _BoardPageState extends State<BoardPage> with SingleTickerProviderStateMix
     await store.addMessage(board, ChatRole.user, q);
     await _reload();
     final details = await _details;
+    final history = [
+      for (final m in _messages) (m.role == ChatRole.user, m.text),
+    ];
+    // The question itself was just saved as the last message.
+    if (history.isNotEmpty && history.last.$1 && history.last.$2 == q) history.removeLast();
     final AssistantReply reply;
     if (details == null) {
       reply = const AssistantReply("I couldn't load this match's data. Check your connection and ask again.");
     } else {
-      reply = await widget.assistant.ask(q, board.toMatch(), details);
+      reply = await widget.assistant.ask(q, board.toMatch(), details, history: history);
     }
     await store.addMessage(board, ChatRole.assistant, reply.text);
     if (reply.note != null) {
@@ -401,8 +414,11 @@ class _BoardPageState extends State<BoardPage> with SingleTickerProviderStateMix
                     style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
                 Text(
-                  'Answers come from the match data: odds, form, head to head, goals, table, line-ups, stats and '
-                  'news. Each answer is saved on the board.',
+                  widget.assistant is ClaudeAssistant
+                      ? 'Ask anything. Claude answers with the match data and searches the web for the rest. '
+                          'Each answer is saved on the board.'
+                      : 'Answers come from the match data: odds, form, head to head, goals, table, line-ups, stats and '
+                          'news. Each answer is saved on the board. Add an AI key in Settings to ask anything.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: cs.onSurfaceVariant),
                 ),

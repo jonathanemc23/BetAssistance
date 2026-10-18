@@ -137,6 +137,14 @@ const countries = <Country>[
   Country('ven', 'Venezuela', '🇻🇪', [League('ven.1', 'Liga FUTVE')]),
 ];
 
+/// The country a league belongs to (the first one listing it).
+Country? countryOfLeague(String slug) {
+  for (final c in countries) {
+    if (c.leagues.any((l) => l.slug == slug)) return c;
+  }
+  return null;
+}
+
 League? leagueBySlug(String slug) {
   for (final c in countries) {
     for (final l in c.leagues) {
@@ -215,11 +223,16 @@ class MatchOdds {
     this.over,
     this.under,
     this.extras = const [],
+    this.opening,
   });
   final double? home;
   final double? draw;
   final double? away;
   final String provider;
+
+  /// The same provider's first prices for this match, when the feed has
+  /// them (ESPN's DraftKings lines carry `open` next to the current price).
+  final MatchOdds? opening;
 
   /// Total goals line (2.5) with over / under prices, when offered.
   final double? totalLine;
@@ -346,8 +359,12 @@ List<Match> parseSportsDb(String body, League league) {
       final kickoff = DateTime.parse(RegExp(r'(Z|[+-]\d\d:?\d\d)$').hasMatch(ts) ? ts : '${ts}Z').toUtc();
       final hs = e['intHomeScore']?.toString(), as = e['intAwayScore']?.toString();
       final (state, detail) = sportsDbStatus((e['strStatus'] ?? '') as String, hasScore: hs != null && as != null);
-      Team team(String name, Object? badge, String? score) =>
-          Team(name, name, badge is String && badge.isNotEmpty ? badge : null, state == MatchState.scheduled ? null : score);
+      Team team(String name, Object? badge, String? score) => Team(
+        name,
+        name,
+        badge is String && badge.isNotEmpty ? badge : null,
+        state == MatchState.scheduled ? null : score,
+      );
       out.add(
         Match(
           id: 'tsdb:${e['idEvent']}',
@@ -398,11 +415,13 @@ List<Match> parseSportsDb(String body, League league) {
 List<Match> mergeSportsDb(List<Match> espn, List<Match> tsdb) {
   final out = [...espn];
   for (final t in tsdb) {
-    final i = out.indexWhere((e) =>
-        !e.id.startsWith('tsdb:') &&
-        e.kickoff.difference(t.kickoff).inHours.abs() <= 30 &&
-        sameTeam(e.home.name, t.home.name) &&
-        sameTeam(e.away.name, t.away.name));
+    final i = out.indexWhere(
+      (e) =>
+          !e.id.startsWith('tsdb:') &&
+          e.kickoff.difference(t.kickoff).inHours.abs() <= 30 &&
+          sameTeam(e.home.name, t.home.name) &&
+          sameTeam(e.away.name, t.away.name),
+    );
     if (i < 0) {
       out.add(t);
     } else if (t.state != MatchState.scheduled && out[i].state != t.state) {
@@ -412,11 +431,58 @@ List<Match> mergeSportsDb(List<Match> espn, List<Match> tsdb) {
   return out;
 }
 
-const _accents = {'á': 'a', 'à': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
-  'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i', 'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o', 'ú': 'u', 'ù': 'u',
-  'û': 'u', 'ü': 'u', 'ñ': 'n', 'ç': 'c'};
-const _filler = {'fc', 'cf', 'cd', 'sc', 'ac', 'afc', 'club', 'deportes', 'deportivo', 'de', 'del', 'la', 'el',
-  'the', 'kv', 'kvc', 'krc', 'kaa', 'rsc', 'royal', 'sk', 'ksv', 'and', 'y'};
+const _accents = {
+  'á': 'a',
+  'à': 'a',
+  'â': 'a',
+  'ä': 'a',
+  'ã': 'a',
+  'é': 'e',
+  'è': 'e',
+  'ê': 'e',
+  'ë': 'e',
+  'í': 'i',
+  'ì': 'i',
+  'î': 'i',
+  'ï': 'i',
+  'ó': 'o',
+  'ò': 'o',
+  'ô': 'o',
+  'ö': 'o',
+  'õ': 'o',
+  'ú': 'u',
+  'ù': 'u',
+  'û': 'u',
+  'ü': 'u',
+  'ñ': 'n',
+  'ç': 'c',
+};
+const _filler = {
+  'fc',
+  'cf',
+  'cd',
+  'sc',
+  'ac',
+  'afc',
+  'club',
+  'deportes',
+  'deportivo',
+  'de',
+  'del',
+  'la',
+  'el',
+  'the',
+  'kv',
+  'kvc',
+  'krc',
+  'kaa',
+  'rsc',
+  'royal',
+  'sk',
+  'ksv',
+  'and',
+  'y',
+};
 
 Set<String> _teamWords(String name) {
   final plain = name.toLowerCase().split('').map((c) => _accents[c] ?? c).join();
@@ -456,7 +522,8 @@ List<MatchOdds> parseOddsList(Object? raw) {
     double? price(String sideKey, String lineKey) {
       final side = o[sideKey];
       if (side is Map) {
-        final d = _decimal(side['value']) ??
+        final d =
+            _decimal(side['value']) ??
             _decimal(side['odds'] is Map ? side['odds']['value'] : null) ??
             _fractional(side['summary']) ??
             _fractional(side['odds'] is Map ? side['odds']['summary'] : null) ??
@@ -515,7 +582,20 @@ List<MatchOdds> parseOddsList(Object? raw) {
       ],
     ];
 
+    double? open(String market, String side) {
+      final v = o[market] is Map ? o[market][side] : null;
+      return _american(v is Map && v['open'] is Map ? v['open']['odds'] : null);
+    }
+
+    final opening = MatchOdds(
+      home: open('moneyline', 'home'),
+      draw: open('moneyline', 'draw'),
+      away: open('moneyline', 'away'),
+      over: open('total', 'over'),
+      under: open('total', 'under'),
+    );
     final odds = MatchOdds(
+      opening: opening.isEmpty ? null : opening,
       home: price('homeTeamOdds', 'home'),
       draw: price('drawOdds', 'draw'),
       away: price('awayTeamOdds', 'away'),
@@ -590,8 +670,14 @@ class FixturesApi {
         }(),
     ]);
     return (
-      [for (final (t, ms) in results) if (!t) ...ms],
-      [for (final (t, ms) in results) if (t) ...ms],
+      [
+        for (final (t, ms) in results)
+          if (!t) ...ms,
+      ],
+      [
+        for (final (t, ms) in results)
+          if (t) ...ms,
+      ],
       requests.isEmpty || failures < requests.length,
     );
   }
@@ -662,7 +748,10 @@ class FixturesApi {
   Future<List<Match>> liveMatches({bool refresh = false}) async {
     final hit = _live;
     if (!refresh && hit != null && DateTime.now().difference(hit.$1) < const Duration(seconds: 30)) return hit.$2;
-    final leagues = {for (final c in countries) for (final l in c.leagues) l.slug: l}.values;
+    final leagues = {
+      for (final c in countries)
+        for (final l in c.leagues) l.slug: l,
+    }.values;
     // TheSportsDB has no free live feed, so read today's and yesterday's
     // (UTC) matches; evening kick-offs in the Americas cross midnight UTC.
     final today = DateTime.now().toUtc();

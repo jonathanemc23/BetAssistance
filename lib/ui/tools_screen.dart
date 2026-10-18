@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/fixtures.dart';
 import '../data/store.dart';
 import 'matchboard_screen.dart';
+import 'money_movement.dart';
 import 'parlay_screens.dart';
 import 'themes.dart';
 
@@ -46,6 +47,15 @@ class BetToolsScreen extends StatelessWidget {
             badge: open == 0 ? null : '$open open',
             onTap: () => Navigator.of(context)
                 .push(MaterialPageRoute<void>(builder: (_) => ParlaysPage(store: store, api: api))),
+          ),
+          const SizedBox(height: 12),
+          _ToolCard(
+            icon: Icons.swap_vert,
+            title: 'Money movement',
+            text: 'Which way the market is moving on a match: how the odds shortened or drifted since they opened.',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => MoneyToolPage(store: store, api: api, onOpenMatches: onOpenMatches),
+            )),
           ),
           const SizedBox(height: 12),
           _ToolCard(

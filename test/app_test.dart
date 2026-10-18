@@ -225,6 +225,13 @@ void main() {
     expect(find.text('Manchester City'), findsWidgets);
     await shot('match_table');
 
+    // Money movement: DraftKings opened Chelsea at +130, now +120.
+    await openTab(tester, 'Money');
+    await settle(tester);
+    expect(find.text('Money is moving towards Chelsea'), findsOneWidget);
+    expect(find.textContaining('DraftKings prices since they opened'), findsOneWidget);
+    await shot('match_money');
+
     // Any market with your own odds: a handicap on Chelsea, logged as a bet.
     await openTab(tester, 'Odds');
     await tester.tap(find.text('More markets: handicap, corners, cards…'));
@@ -307,10 +314,11 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
 
-    // The Live tab lists every live match, A to Z.
+    // The Live tab groups live matches by country and league.
     await tester.tap(find.widgetWithText(Tab, 'Live'));
     await settle(tester);
     expect(find.textContaining('2 live now'), findsOneWidget);
+    expect(find.text('ENGLAND · PREMIER LEAGUE'), findsOneWidget);
     expect(tester.getTopLeft(find.text('Arsenal')).dy, lessThan(tester.getTopLeft(find.text('Real Madrid')).dy));
     await shot('live');
 
@@ -334,6 +342,7 @@ void main() {
     await tester.tap(find.text('Bet Tools'));
     await tester.pumpAndSettle();
     expect(find.text('1 open'), findsOneWidget);
+    expect(find.text('Money movement'), findsOneWidget);
     await shot('bet_tools');
     await tester.tap(find.text('Matchboard'));
     await settle(tester);
@@ -420,7 +429,7 @@ void main() {
     expect(imported.legs.map((l) => (l.selection, l.event, l.odds)), [
       ('Millonarios', 'Millonarios - Santa Fe', 2.05),
       ('Más de 2.5', 'Junior - Nacional', 1.80),
-      ('Sí', 'América - Cali', 1.95),
+      ('Sí · Ambos equipos marcan', 'América - Cali', 1.95),
     ]);
     expect(imported.stake, 10000);
     await tester.pump(const Duration(seconds: 5));
@@ -436,6 +445,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Olive & Gold'), findsOneWidget);
     await shot('settings_themes');
+    await tester.scrollUntilVisible(find.byKey(const Key('ai-key')), 300, scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(find.text('AI chat'), findsOneWidget);
+    await shot('settings_ai');
+    await tester.scrollUntilVisible(find.text('Olive & Gold'), -300, scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     await tester.runAsync(() async {
       await tester.tap(find.text('Ocean'));
       await Future<void>.delayed(const Duration(milliseconds: 200));

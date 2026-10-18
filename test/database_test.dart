@@ -5,6 +5,7 @@ import 'package:bank_track/data/database.dart';
 import 'package:bank_track/data/favorites.dart';
 import 'package:bank_track/data/fixtures.dart';
 import 'package:bank_track/data/models.dart';
+import 'package:bank_track/data/odds_history.dart';
 import 'package:bank_track/data/parlay.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -359,6 +360,41 @@ void main() {
     expect(f.toMatch().league.tsdb, 5831);
     await db.deleteFavorite('tsdb:7');
     expect(await db.favorites(), isEmpty);
+    await db.close();
+  });
+
+  test('upgrading from 0.9.0 (v6) keeps favourites and adds odds history', () async {
+    final old = await factory.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onCreate: (db, _) async {
+          for (var v = 0; v < 6; v++) {
+            await migrations[v](db);
+          }
+        },
+      ),
+    );
+    await old.insert('favorites', {
+      'match_id': '1',
+      'league_slug': 'eng.1',
+      'home': 'A',
+      'away': 'B',
+      'kickoff': '2026-10-18T19:00:00Z',
+      'added': 'x',
+    });
+    await old.close();
+
+    final db = await AppDatabase.open(factory: factory, path: path);
+    expect(await db.db.getVersion(), schemaVersion);
+    expect((await db.favorites()).single.home, 'A');
+    expect(await db.oddsHistory('1'), isEmpty);
+    await db.addOddsSnapshot(
+      '1',
+      OddsSnapshot(at: DateTime.utc(2026, 10, 18, 9), provider: 'DK', home: 2.1, away: 3.4),
+    );
+    final h = (await db.oddsHistory('1')).single;
+    expect((h.at, h.provider, h.home, h.draw, h.away), (DateTime.utc(2026, 10, 18, 9), 'DK', 2.1, null, 3.4));
     await db.close();
   });
 }

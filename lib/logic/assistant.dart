@@ -15,13 +15,14 @@ class NoteDraft {
   final String body;
 }
 
-/// Answers questions about a match. The beta ships [DataAssistant], which
-/// works offline from the ESPN data the app already loads. An LLM-backed
-/// assistant (for example the Claude API with the user's own key) can
-/// implement the same interface later and be swapped in from Settings.
+/// Answers questions about a match. [DataAssistant] works offline from the
+/// data the app already loads; [ClaudeAssistant] answers anything, with web
+/// search, once the user adds their own key in Settings. [history] is the
+/// chat so far, oldest first, as (from the user, text).
 abstract class MatchAssistant {
   String get name;
-  Future<AssistantReply> ask(String question, Match match, MatchDetails details);
+  Future<AssistantReply> ask(String question, Match match, MatchDetails details,
+      {List<(bool, String)> history = const []});
 }
 
 /// Ready-made questions shown as chips in the chat.
@@ -80,7 +81,8 @@ class DataAssistant implements MatchAssistant {
   }
 
   @override
-  Future<AssistantReply> ask(String question, Match match, MatchDetails details) async {
+  Future<AssistantReply> ask(String question, Match match, MatchDetails details,
+      {List<(bool, String)> history = const []}) async {
     final m = match, d = details;
     // A question naming one team gets that team's form and table position.
     final team = _teamIn(question, m);
@@ -97,7 +99,8 @@ class DataAssistant implements MatchAssistant {
       'news' => _news(d),
       _ => const AssistantReply(
           "I can answer from this match's data: favourite and odds, form, head to head, goals trends "
-          '(over/under, both teams to score), the table, line-ups, stats and news. Try one of the suggestions.'),
+          '(over/under, both teams to score), the table, line-ups, stats and news. Try one of the suggestions, '
+          'or add an AI key in Settings so I can answer anything with help from the web.'),
     };
   }
 

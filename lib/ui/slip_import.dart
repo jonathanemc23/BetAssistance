@@ -21,8 +21,13 @@ class MlKitSlipScanner implements SlipScanner {
       return [
         for (final b in text.blocks)
           for (final l in b.lines)
-            SlipLine(l.text,
-                left: l.boundingBox.left, top: l.boundingBox.top, right: l.boundingBox.right, bottom: l.boundingBox.bottom),
+            SlipLine(
+              l.text,
+              left: l.boundingBox.left,
+              top: l.boundingBox.top,
+              right: l.boundingBox.right,
+              bottom: l.boundingBox.bottom,
+            ),
       ];
     } finally {
       await recognizer.close();
@@ -49,19 +54,27 @@ Future<void> importSlip(BuildContext context, {required BankStore store, require
     context: context,
     barrierDismissible: false,
     builder: (_) => const AlertDialog(
-      content: Row(children: [CircularProgressIndicator(), SizedBox(width: 20), Expanded(child: Text('Reading the slip…'))]),
+      content: Row(
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(width: 20),
+          Expanded(child: Text('Reading the slip…')),
+        ],
+      ),
     ),
   );
   SlipRead read;
   try {
     read = parseSlip(await SlipImport.scanner.scan(path));
-  } catch (_) {
-    read = const SlipRead();
+  } catch (e) {
+    read = SlipRead(error: '$e');
   }
   if (!context.mounted) return;
   Navigator.of(context, rootNavigator: true).pop();
   final result = await Navigator.of(context).push<(List<ParlayLeg>, double)>(
-    MaterialPageRoute(builder: (_) => SlipReviewPage(read: read, format: store.settings.oddsFormat)),
+    MaterialPageRoute(
+      builder: (_) => SlipReviewPage(read: read, format: store.settings.oddsFormat),
+    ),
   );
   if (result == null || !context.mounted) return;
   var parlay = await store.newParlay(legs: result.$1);
@@ -82,9 +95,9 @@ class SlipReviewPage extends StatefulWidget {
 
 class _LegFields {
   _LegFields(String selection, String event, String odds)
-      : selection = TextEditingController(text: selection),
-        event = TextEditingController(text: event),
-        odds = TextEditingController(text: odds);
+    : selection = TextEditingController(text: selection),
+      event = TextEditingController(text: event),
+      odds = TextEditingController(text: odds);
   final TextEditingController selection, event, odds;
 
   void dispose() {
@@ -99,7 +112,8 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
     for (final l in widget.read.legs) _LegFields(l.selection, l.event, formatOdds(l.odds, widget.format)),
   ];
   late final _stake = TextEditingController(
-      text: widget.read.stake == null ? '' : widget.read.stake!.toStringAsFixed(widget.read.stake! % 1 == 0 ? 0 : 2));
+    text: widget.read.stake == null ? '' : widget.read.stake!.toStringAsFixed(widget.read.stake! % 1 == 0 ? 0 : 2),
+  );
 
   @override
   void initState() {
@@ -153,18 +167,22 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(16)),
-            child: Row(children: [
-              Icon(read > 0 ? Icons.document_scanner_outlined : Icons.info_outline, color: cs.onSecondaryContainer),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  read > 0
-                      ? 'Read $read selection${read == 1 ? '' : 's'} from the screenshot. Check each one and fix anything that was misread.'
-                      : "Couldn't read any selections from this picture. Add them by hand, or try a sharper screenshot of the slip.",
-                  style: TextStyle(color: cs.onSecondaryContainer),
+            child: Row(
+              children: [
+                Icon(read > 0 ? Icons.document_scanner_outlined : Icons.info_outline, color: cs.onSecondaryContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    read > 0
+                        ? 'Read $read selection${read == 1 ? '' : 's'} from the screenshot. Check each one and fix anything that was misread.'
+                        : widget.read.error != null
+                        ? "The text reader didn't work on this phone (${widget.read.error}). Add the selections by hand for now."
+                        : "Couldn't read any selections from this picture. Add them by hand, or try a sharper screenshot of the slip.",
+                    style: TextStyle(color: cs.onSecondaryContainer),
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
           ),
           for (final (i, l) in _legs.indexed) ...[
             const SizedBox(height: 12),
@@ -172,47 +190,61 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
               key: ObjectKey(l),
               padding: const EdgeInsets.fromLTRB(14, 8, 6, 14),
               decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(16)),
-              child: Column(children: [
-                Row(children: [
-                  Text('Selection ${i + 1}', style: theme.textTheme.labelLarge?.copyWith(color: cs.primary)),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: 'Remove',
-                    icon: const Icon(Icons.close),
-                    onPressed: _legs.length == 1
-                        ? null
-                        : () {
-                            final gone = _legs[i];
-                            setState(() => _legs.removeAt(i));
-                            WidgetsBinding.instance.addPostFrameCallback((_) => gone.dispose());
-                          },
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Text('Selection ${i + 1}', style: theme.textTheme.labelLarge?.copyWith(color: cs.primary)),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: 'Remove',
+                        icon: const Icon(Icons.close),
+                        onPressed: _legs.length == 1
+                            ? null
+                            : () {
+                                final gone = _legs[i];
+                                setState(() => _legs.removeAt(i));
+                                WidgetsBinding.instance.addPostFrameCallback((_) => gone.dispose());
+                              },
+                      ),
+                    ],
                   ),
-                ]),
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Column(children: [
-                    TextField(controller: l.selection, decoration: const InputDecoration(labelText: 'Pick')),
-                    const SizedBox(height: 8),
-                    Row(children: [
-                      Expanded(
-                        flex: 3,
-                        child: TextField(controller: l.event, decoration: const InputDecoration(labelText: 'Match')),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: l.odds,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                          decoration: InputDecoration(
-                            labelText: 'Odds',
-                            errorText: l.odds.text.isNotEmpty && _odds(l) == null ? 'Check' : null,
-                          ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: l.selection,
+                          decoration: const InputDecoration(labelText: 'Pick'),
                         ),
-                      ),
-                    ]),
-                  ]),
-                ),
-              ]),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: TextField(
+                                controller: l.event,
+                                decoration: const InputDecoration(labelText: 'Match'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: l.odds,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                                decoration: InputDecoration(
+                                  labelText: 'Odds',
+                                  errorText: l.odds.text.isNotEmpty && _odds(l) == null ? 'Check' : null,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
           const SizedBox(height: 8),
@@ -236,8 +268,10 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
           ),
           const SizedBox(height: 12),
           if (combined != null)
-            Text('Combined odds ${formatOdds(combined, widget.format)}',
-                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              'Combined odds ${formatOdds(combined, widget.format)}',
+              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
           if (mismatch)
             Padding(
               padding: const EdgeInsets.only(top: 4),

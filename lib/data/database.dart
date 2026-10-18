@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import 'board.dart';
 import 'favorites.dart';
 import 'models.dart';
+import 'odds_history.dart';
 import 'parlay.dart';
 
 /// Schema migrations, applied in order. Entry N upgrades the schema from
@@ -151,6 +152,20 @@ final List<Future<void> Function(DatabaseExecutor db)> migrations = [
         kickoff TEXT NOT NULL,
         added TEXT NOT NULL
       )''');
+  },
+  // 6 -> 7: match prices seen over time, for the money movement tool.
+  (db) async {
+    await db.execute('''
+      CREATE TABLE odds_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        match_id TEXT NOT NULL,
+        at TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT '',
+        home REAL,
+        draw REAL,
+        away REAL
+      )''');
+    await db.execute('CREATE INDEX odds_history_match ON odds_history(match_id, at)');
   },
 ];
 
@@ -336,4 +351,13 @@ class AppDatabase {
       db.insert('favorites', f.toRow(), conflictAlgorithm: ConflictAlgorithm.replace);
 
   Future<void> deleteFavorite(String matchId) => db.delete('favorites', where: 'match_id = ?', whereArgs: [matchId]);
+
+  // Odds history
+  Future<List<OddsSnapshot>> oddsHistory(String matchId) async => [
+        for (final r in await db.query('odds_history', where: 'match_id = ?', whereArgs: [matchId], orderBy: 'at'))
+          OddsSnapshot.fromRow(r),
+      ];
+
+  Future<void> addOddsSnapshot(String matchId, OddsSnapshot s) =>
+      db.insert('odds_history', {'match_id': matchId, ...s.toRow()});
 }

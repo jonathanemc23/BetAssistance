@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../data/store.dart';
+import '../logic/claude_assistant.dart';
 import 'format.dart';
 import 'themes.dart';
 
@@ -174,8 +175,10 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _start, _unit;
+  final _aiKey = TextEditingController();
   late String _currency, _startDate;
   late OddsFormat _odds;
+  bool _showKey = false;
 
   @override
   void initState() {
@@ -186,12 +189,16 @@ class _SettingsPageState extends State<SettingsPage> {
     _currency = currencies.contains(s.currency) ? s.currency : 'USD';
     _startDate = s.startDate;
     _odds = s.oddsFormat;
+    widget.store.pref(aiKeyPref).then((k) {
+      if (mounted && k != null) _aiKey.text = k;
+    });
   }
 
   @override
   void dispose() {
     _start.dispose();
     _unit.dispose();
+    _aiKey.dispose();
     super.dispose();
   }
 
@@ -203,6 +210,7 @@ class _SettingsPageState extends State<SettingsPage> {
       startDate: _startDate,
       oddsFormat: _odds,
     );
+    await widget.store.setPref(aiKeyPref, _aiKey.text.trim());
     await widget.store.saveSettings(s);
     if (mounted) Navigator.pop(context, 'Settings saved');
   }
@@ -268,6 +276,32 @@ class _SettingsPageState extends State<SettingsPage> {
             DropdownMenuItem(value: OddsFormat.american, child: Text('American (+150)')),
           ],
           onChanged: (v) => setState(() => _odds = v ?? _odds),
+        ),
+        const SizedBox(height: 24),
+        Text('AI chat', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Text(
+          'Optional. With an Anthropic API key the Matchboard chat can answer any question, searching the web for '
+          'news, injuries and anything else. Questions are sent to Anthropic and billed to your own account '
+          '(console.anthropic.com). Without a key the chat answers from the match data only.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          key: const Key('ai-key'),
+          controller: _aiKey,
+          obscureText: !_showKey,
+          autocorrect: false,
+          enableSuggestions: false,
+          decoration: InputDecoration(
+            labelText: 'Anthropic API key',
+            hintText: 'sk-ant-…',
+            suffixIcon: IconButton(
+              tooltip: _showKey ? 'Hide' : 'Show',
+              icon: Icon(_showKey ? Icons.visibility_off : Icons.visibility),
+              onPressed: () => setState(() => _showKey = !_showKey),
+            ),
+          ),
         ),
         const SizedBox(height: 24),
         FilledButton(onPressed: _save, child: const Text('Save settings')),

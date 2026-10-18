@@ -11,13 +11,18 @@ import 'format.dart';
 import 'market_sheet.dart';
 import 'matchboard_screen.dart';
 import 'matches_screen.dart';
+import 'money_movement.dart';
 import 'parlay_screens.dart';
 
-/// One match: score header, then tabs for odds, news, teams, line-ups, key
+/// One match: score header, then tabs for odds, money movement, news, teams, line-ups, key
 /// events, stats, head-to-head and the league table (ESPN summary feed).
 class MatchPage extends StatefulWidget {
-  const MatchPage({super.key, required this.match, required this.store, required this.api, this.onPick});
+  const MatchPage(
+      {super.key, required this.match, required this.store, required this.api, this.onPick, this.initialTab = 0});
   final Match match;
+
+  /// Tab to open on, an index into the tabs (1 is Money).
+  final int initialTab;
   final BankStore store;
   final FixturesApi api;
 
@@ -33,7 +38,7 @@ class _MatchPageState extends State<MatchPage> {
   String? _error;
   bool _loading = true;
 
-  static const _tabs = ['Odds', 'News', 'Teams', 'Line-ups', 'Events', 'Stats', 'H2H', 'Table'];
+  static const _tabs = ['Odds', 'Money', 'News', 'Teams', 'Line-ups', 'Events', 'Stats', 'H2H', 'Table'];
 
   @override
   void initState() {
@@ -71,6 +76,7 @@ class _MatchPageState extends State<MatchPage> {
     final m = widget.match;
     return DefaultTabController(
       length: _tabs.length,
+      initialIndex: widget.initialTab,
       child: Scaffold(
         appBar: AppBar(
           title: Text(m.league.name),
@@ -123,6 +129,7 @@ class _MatchPageState extends State<MatchPage> {
     final m = widget.match;
     return TabBarView(children: [
       _OddsTab(match: m, details: d, format: fmt, onPick: _pick),
+      MoneyMovementView(match: m, details: d, store: widget.store),
       _NewsTab(news: d.news),
       _TeamsTab(match: m, details: d),
       _LineupsTab(details: d),
