@@ -5,7 +5,7 @@ import 'dart:collection';
 /// the user is looking at) first. Firing a hundred requests at once made
 /// phones time out and the feeds throttle the app.
 class RequestGate {
-  RequestGate(this.concurrent, {this.perMinute, this.reserve = 5});
+  RequestGate(this.concurrent, {this.perMinute, this.reserve = 5, this.urgentSlots = 0});
 
   final int concurrent;
 
@@ -15,6 +15,10 @@ class RequestGate {
 
   /// Starts of each minute kept for urgent requests.
   final int reserve;
+
+  /// Of [concurrent], how many only urgent requests may use, so what's on
+  /// screen never waits for slow background requests to finish.
+  final int urgentSlots;
 
   int _running = 0;
   DateTime? _pausedUntil;
@@ -31,7 +35,7 @@ class RequestGate {
     if (!urgent && (_paused || (cap != null && _recent + _urgent.length + _normal.length >= cap - reserve))) {
       throw const GateFull();
     }
-    if (_urgent.isEmpty && (urgent || _normal.isEmpty) && _free) {
+    if (_urgent.isEmpty && (urgent || _normal.isEmpty) && _free(urgent)) {
       _take();
     } else {
       final turn = Completer<void>();
@@ -70,8 +74,8 @@ class RequestGate {
     return false;
   }
 
-  bool get _free {
-    if (_running >= concurrent || _paused) return false;
+  bool _free(bool urgent) {
+    if (_running >= (urgent ? concurrent : concurrent - urgentSlots) || _paused) return false;
     final cap = perMinute;
     return cap == null || _recent < cap;
   }
@@ -82,7 +86,7 @@ class RequestGate {
   }
 
   void _next() {
-    while ((_urgent.isNotEmpty || _normal.isNotEmpty) && _free) {
+    while ((_urgent.isNotEmpty && _free(true)) || (_urgent.isEmpty && _normal.isNotEmpty && _free(false))) {
       _take();
       (_urgent.isNotEmpty ? _urgent : _normal).removeFirst().complete();
     }

@@ -49,5 +49,16 @@ void main() {
     expect(await gate.run(urgent: true, () async => 2), 2);
     expect(watch.elapsedMilliseconds, greaterThanOrEqualTo(70));
   });
-}
 
+  test('slots kept for urgent requests stay free of background ones', () async {
+    final gate = RequestGate(3, urgentSlots: 1);
+    final release = Completer<void>();
+    var running = 0;
+    final background = [for (var i = 0; i < 4; i++) gate.run(() async { running++; await release.future; })];
+    await Future<void>.delayed(Duration.zero);
+    expect(running, 2);
+    expect(await gate.run(urgent: true, () async => 'screen'), 'screen');
+    release.complete();
+    await Future.wait(background);
+  });
+}

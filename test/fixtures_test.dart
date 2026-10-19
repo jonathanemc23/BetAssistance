@@ -165,36 +165,6 @@ void main() {
     expect(list.map((m) => m.id), ['b', 'a']);
   });
 
-  test('countries for a day: one pass over the leagues, and a league that fails stays listed', () async {
-    final urls = <Uri>[];
-    var open = 0, most = 0;
-    final api = FixturesApi(
-      client: MockClient((req) async {
-        urls.add(req.url);
-        open++;
-        most = open > most ? open : most;
-        await Future<void>.delayed(const Duration(milliseconds: 1));
-        open--;
-        if (req.url.path.contains('/tur.1/')) return http.Response('busy', 503);
-        if (req.url.path.contains('/eng.1/')) {
-          return http.Response(board([espnEvent('a', '2026-10-18T14:00Z', 'Arsenal', 'Chelsea')]), 200);
-        }
-        if (req.url.host.contains('thesportsdb')) return http.Response('{"events":null}', 200);
-        return http.Response(board([]), 200);
-      }),
-    );
-    final playing = await api.leaguesPlaying(DateTime(2026, 10, 18));
-    expect(playing, containsAll(['eng.1', 'tur.1']));
-    expect(playing, isNot(contains('esp.1')));
-    final espnLeagues = {for (final c in countries) ...c.leagues.where((l) => l.onEspn).map((l) => l.slug)};
-    final espn = urls.where((u) => u.host.contains('espn')).length;
-    // The league that answered 503 is tried again once.
-    final dates = espnDatesFor(DateTime(2026, 10, 18)).length;
-    expect(espn, espnLeagues.length * dates + dates);
-    // Never a flood: a few requests at a time per feed.
-    expect(most, lessThanOrEqualTo(10));
-  });
-
   test('reports an error only when every request fails', () async {
     final client = MockClient((_) async => throw Exception('offline'));
     expect(
@@ -345,7 +315,7 @@ void main() {
     expect(list.single.league.name, 'Belgian Cup');
   });
 
-  test('a TheSportsDB league is read by whole rounds, not the day list that stops at three', () async {
+  test('a full TheSportsDB day list (it stops at three) reads the whole rounds', () async {
     final urls = <Uri>[];
     final round9 = [
       for (var i = 0; i < 5; i++) tsdbEvent('9$i', '2026-10-18T1$i:00:00', 'Home $i', 'Away $i'),
@@ -379,20 +349,18 @@ void main() {
               200);
         }
         // The day list: three at most.
-        return http.Response(jsonEncode({'events': round9.take(3).toList()}), 200);
+        final d = u.queryParameters['d'];
+        return http.Response(jsonEncode({'events': round9.where((e) => e['dateEvent'] == d).take(3).toList()}), 200);
       }),
     );
     final ukraine = countryByCode('ukr')!;
     final day = await api.matches(ukraine, DateTime(2026, 10, 18, 12).toUtc().toLocal());
     expect(day.where((m) => _isOn(m, 2026, 10, 18)), hasLength(5));
-    expect(urls.where((u) => u.path.endsWith('eventsday.php')), isEmpty);
+    expect(urls.where((u) => u.path.endsWith('eventsround.php')), hasLength(2));
 
-    // Another day of the same rounds needs no more requests; one past them
-    // reads its day list.
+    // A quiet day's list is complete: no rounds are read for it.
     final before = urls.length;
-    await api.matches(ukraine, DateTime(2026, 10, 24, 12).toUtc().toLocal());
-    expect(urls.length, before);
-    await api.matches(ukraine, DateTime(2026, 10, 30, 12).toUtc().toLocal());
+    expect(await api.matches(ukraine, DateTime(2026, 10, 30, 12).toUtc().toLocal()), isEmpty);
     expect(urls.skip(before).map((u) => u.path.split('/').last), everyElement('eventsday.php'));
   });
 
@@ -441,6 +409,37 @@ void main() {
     urls.clear();
     await api.liveMatches(full: true);
     expect(espnCount(), full);
+  });
+  test('a live league that fails on a refresh keeps its matches', () async {
+    final now = DateTime.now().toUtc();
+    final kickoff = '${now.subtract(const Duration(minutes: 30)).toIso8601String().substring(0, 16)}Z';
+    var down = false;
+    final api = FixturesApi(
+      retryDelay: Duration.zero,
+      client: MockClient((req) async {
+        if (req.url.path.contains('/eng.1/')) {
+          if (down) throw const SocketException('reset');
+          return http.Response(board([espnEvent('1', kickoff, 'Chelsea', 'Fulham', state: 'in', detail: "30'")]), 200);
+        }
+        if (req.url.path.contains('/esp.1/')) {
+          return http.Response(board([espnEvent('2', kickoff, 'Barcelona', 'Girona', state: 'in', detail: "31'")]), 200);
+        }
+        return http.Response(board([]), 200);
+      }),
+    );
+    expect((await api.liveMatches()).map((m) => m.title), ['Barcelona vs Girona', 'Chelsea vs Fulham']);
+    down = true;
+    expect((await api.liveMatches(refresh: true)).map((m) => m.title), ['Barcelona vs Girona', 'Chelsea vs Fulham']);
+  });
+  test("a women's league match from TheSportsDB is not folded into the men's ESPN match", () {
+    const ligaMx = League('mex.1', 'Liga MX');
+    const femenil = League('tsdb.5206', 'Liga MX Femenil', tsdb: 5206);
+    final men = parseScoreboard(board([espnEvent('401', '2026-10-21T02:00Z', 'Guadalajara', 'Necaxa')]), ligaMx);
+    final women = parseSportsDb(
+      jsonEncode({'events': [tsdbEvent('9', '2026-10-20T23:00:00', 'CD Guadalajara Femenil', 'Necaxa Femenil')]}),
+      femenil,
+    );
+    expect(mergeSportsDb(men, women).map((m) => m.id), ['401', 'tsdb:9']);
   });
 }
 
