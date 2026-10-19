@@ -129,7 +129,7 @@ void main() {
     expect(bet.odds, 3.1);
   });
 
-  test('fetches every league for the day either side, keeps the local day, dedupes and sorts', () async {
+  test('fetches every league for the dates the local day overlaps, keeps the local day, dedupes and sorts', () async {
     final urls = <String>[];
     final client = MockClient((req) async {
       urls.add(req.url.toString());
@@ -157,8 +157,39 @@ void main() {
     });
     final eng = countryByCode('eng')!;
     final list = await FixturesApi(client: client).matches(eng, DateTime(2026, 10, 18));
-    expect(urls, hasLength(eng.leagues.length * 3));
+    // ESPN files by US Eastern date: one or two dates per local day.
+    final dates = espnDatesFor(DateTime(2026, 10, 18));
+    expect(dates.length, inInclusiveRange(1, 2));
+    expect(urls, hasLength(eng.leagues.length * dates.length));
     expect(list.map((m) => m.id), ['b', 'a']);
+  });
+
+  test('countries for a day: one pass over the leagues, and a league that fails stays listed', () async {
+    final urls = <Uri>[];
+    var open = 0, most = 0;
+    final api = FixturesApi(
+      client: MockClient((req) async {
+        urls.add(req.url);
+        open++;
+        most = open > most ? open : most;
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        open--;
+        if (req.url.path.contains('/tur.1/')) return http.Response('busy', 503);
+        if (req.url.path.contains('/eng.1/')) {
+          return http.Response(board([espnEvent('a', '2026-10-18T14:00Z', 'Arsenal', 'Chelsea')]), 200);
+        }
+        if (req.url.host.contains('thesportsdb')) return http.Response('{"events":null}', 200);
+        return http.Response(board([]), 200);
+      }),
+    );
+    final playing = await api.leaguesPlaying(DateTime(2026, 10, 18));
+    expect(playing, containsAll(['eng.1', 'tur.1']));
+    expect(playing, isNot(contains('esp.1')));
+    final espnLeagues = {for (final c in countries) ...c.leagues.where((l) => l.onEspn).map((l) => l.slug)};
+    final espn = urls.where((u) => u.host.contains('espn')).length;
+    expect(espn, espnLeagues.length * espnDatesFor(DateTime(2026, 10, 18)).length);
+    // Never a flood: a few requests at a time per feed.
+    expect(most, lessThanOrEqualTo(10));
   });
 
   test('reports an error only when every request fails', () async {
@@ -281,7 +312,7 @@ void main() {
     final chile = countryByCode('chi')!;
     final list = await api.matches(chile, DateTime(2026, 10, 12));
 
-    expect(urls.where((u) => u.contains('thesportsdb')), hasLength(6));
+    expect(urls.where((u) => u.contains('thesportsdb')), hasLength(2 * sportsDbDatesFor(DateTime(2026, 10, 12)).length));
     expect(list.map((m) => m.id), ['401', 'tsdb:10']);
     final u = list.first;
     expect((u.state, u.home.score, u.away.score, u.odds?.home), (MatchState.finished, '6', '0', 1.5));
