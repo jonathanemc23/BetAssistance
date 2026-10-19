@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:bank_track/data/fixtures.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -187,7 +188,9 @@ void main() {
     expect(playing, isNot(contains('esp.1')));
     final espnLeagues = {for (final c in countries) ...c.leagues.where((l) => l.onEspn).map((l) => l.slug)};
     final espn = urls.where((u) => u.host.contains('espn')).length;
-    expect(espn, espnLeagues.length * espnDatesFor(DateTime(2026, 10, 18)).length);
+    // The league that answered 503 is tried again once.
+    final dates = espnDatesFor(DateTime(2026, 10, 18)).length;
+    expect(espn, espnLeagues.length * dates + dates);
     // Never a flood: a few requests at a time per feed.
     expect(most, lessThanOrEqualTo(10));
   });
@@ -312,7 +315,8 @@ void main() {
     final chile = countryByCode('chi')!;
     final list = await api.matches(chile, DateTime(2026, 10, 12));
 
-    expect(urls.where((u) => u.contains('thesportsdb')), hasLength(2 * sportsDbDatesFor(DateTime(2026, 10, 12)).length));
+    // No rounds to read (the mock has none): the day lists instead.
+    expect(urls.where((u) => u.contains('eventsday')), hasLength(2 * sportsDbDatesFor(DateTime(2026, 10, 12)).length));
     expect(list.map((m) => m.id), ['401', 'tsdb:10']);
     final u = list.first;
     expect((u.state, u.home.score, u.away.score, u.odds?.home), (MatchState.finished, '6', '0', 1.5));
@@ -340,4 +344,104 @@ void main() {
     expect(list.single.title, 'Beerschot vs Anderlecht');
     expect(list.single.league.name, 'Belgian Cup');
   });
+
+  test('a TheSportsDB league is read by whole rounds, not the day list that stops at three', () async {
+    final urls = <Uri>[];
+    final round9 = [
+      for (var i = 0; i < 5; i++) tsdbEvent('9$i', '2026-10-18T1$i:00:00', 'Home $i', 'Away $i'),
+      tsdbEvent('99', '2026-10-16T18:00:00', 'Dynamo Kyiv', 'Shakhtar', status: 'FT', hs: '1', as: '2'),
+    ];
+    final api = FixturesApi(
+      client: MockClient((req) async {
+        urls.add(req.url);
+        final u = req.url;
+        if (u.host.contains('espn')) return http.Response(board([]), 200);
+        if (u.path.endsWith('eventspastleague.php')) {
+          return http.Response(jsonEncode({'events': [round9.last..['intRound'] = '9'..['strSeason'] = '2026-2027']}), 200);
+        }
+        if (u.path.endsWith('eventsnextleague.php')) {
+          return http.Response(
+              jsonEncode({
+                'events': [
+                  {...tsdbEvent('101', '2026-10-24T15:00:00', 'Home 1', 'Away 2'), 'intRound': '10', 'strSeason': '2026-2027'},
+                ],
+              }),
+              200);
+        }
+        if (u.path.endsWith('eventsround.php')) {
+          expect((u.queryParameters['id'], u.queryParameters['s']), ('4354', '2026-2027'));
+          return http.Response(
+              jsonEncode({
+                'events': u.queryParameters['r'] == '9'
+                    ? round9
+                    : [tsdbEvent('101', '2026-10-24T15:00:00', 'Home 1', 'Away 2')],
+              }),
+              200);
+        }
+        // The day list: three at most.
+        return http.Response(jsonEncode({'events': round9.take(3).toList()}), 200);
+      }),
+    );
+    final ukraine = countryByCode('ukr')!;
+    final day = await api.matches(ukraine, DateTime(2026, 10, 18, 12).toUtc().toLocal());
+    expect(day.where((m) => _isOn(m, 2026, 10, 18)), hasLength(5));
+    expect(urls.where((u) => u.path.endsWith('eventsday.php')), isEmpty);
+
+    // Another day of the same rounds needs no more requests; one past them
+    // reads its day list.
+    final before = urls.length;
+    await api.matches(ukraine, DateTime(2026, 10, 24, 12).toUtc().toLocal());
+    expect(urls.length, before);
+    await api.matches(ukraine, DateTime(2026, 10, 30, 12).toUtc().toLocal());
+    expect(urls.skip(before).map((u) => u.path.split('/').last), everyElement('eventsday.php'));
+  });
+
+  test('a dropped connection is tried once more', () async {
+    var calls = 0;
+    final api = FixturesApi(
+      retryDelay: Duration.zero,
+      client: MockClient((req) async {
+        if (req.url.path.contains('/eng.1/')) {
+          if (calls++ == 0) throw const SocketException('Connection closed before full header was received');
+          return http.Response(board([espnEvent('a', '2026-10-18T14:00Z', 'Arsenal', 'Chelsea')]), 200);
+        }
+        return http.Response(board([]), 200);
+      }),
+    );
+    final list = await api.matches(countryByCode('eng')!, DateTime(2026, 10, 18));
+    expect(list.map((m) => m.id), ['a']);
+  });
+
+  test('live refreshes read only the leagues with a match on', () async {
+    final now = DateTime.now().toUtc();
+    String at(Duration d) => '${now.add(d).toIso8601String().substring(0, 16)}Z';
+    final urls = <Uri>[];
+    final api = FixturesApi(
+      client: MockClient((req) async {
+        urls.add(req.url);
+        final slug = req.url.pathSegments[req.url.pathSegments.length - 2];
+        return switch (slug) {
+          'eng.1' => http.Response(
+              board([espnEvent('1', at(const Duration(minutes: -30)), 'Chelsea', 'Fulham', state: 'in', detail: "30'")]),
+              200),
+          'esp.1' => http.Response(board([espnEvent('2', at(const Duration(minutes: 5)), 'Barcelona', 'Girona')]), 200),
+          'ita.1' => http.Response(board([espnEvent('3', at(const Duration(hours: 5)), 'Inter', 'Milan')]), 200),
+          _ => http.Response(board([]), 200),
+        };
+      }),
+    );
+    expect((await api.liveMatches()).map((m) => m.title), ['Chelsea vs Fulham']);
+    int espnCount() => urls.where((u) => u.host.contains('espn')).length;
+    final full = espnCount();
+    urls.clear();
+    await api.liveMatches(refresh: true);
+    final espn = {for (final u in urls.where((u) => u.host.contains('espn'))) u.pathSegments[u.pathSegments.length - 2]};
+    expect(espn, {'eng.1', 'esp.1'});
+    expect(urls.length, lessThan(full ~/ 4));
+    urls.clear();
+    await api.liveMatches(full: true);
+    expect(espnCount(), full);
+  });
 }
+
+bool _isOn(Match m, int y, int mo, int d) => m.kickoff.year == y && m.kickoff.month == mo && m.kickoff.day == d;

@@ -40,4 +40,14 @@ void main() {
     await gate.run(urgent: true, () async => ran.add(99));
     expect(ran.last, 99);
   });
+
+  test('a pause skips background requests and holds urgent ones until it ends', () async {
+    final gate = RequestGate(2, perMinute: 25);
+    gate.pause(const Duration(milliseconds: 80));
+    expect(gate.run(() async => 1), throwsA(isA<GateFull>()));
+    final watch = Stopwatch()..start();
+    expect(await gate.run(urgent: true, () async => 2), 2);
+    expect(watch.elapsedMilliseconds, greaterThanOrEqualTo(70));
+  });
 }
+
