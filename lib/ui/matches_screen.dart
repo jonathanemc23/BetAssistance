@@ -78,9 +78,9 @@ class _LiveMatchesState extends State<LiveMatches> {
     super.dispose();
   }
 
-  Future<void> _load({bool refresh = false}) async {
+  Future<void> _load({bool refresh = false, bool full = false}) async {
     try {
-      final list = await widget.api.liveMatches(refresh: refresh);
+      final list = await widget.api.liveMatches(refresh: refresh, full: full);
       if (mounted) {
         setState(() {
           _matches = list;
@@ -121,7 +121,7 @@ class _LiveMatchesState extends State<LiveMatches> {
       ],
     );
     return RefreshIndicator(
-      onRefresh: () => _load(refresh: true),
+      onRefresh: () => _load(refresh: true, full: true),
       child: list == null
           ? (_error != null ? message(Icons.cloud_off, _error!) : const Center(child: CircularProgressIndicator()))
           : list.isEmpty
