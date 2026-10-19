@@ -8,7 +8,6 @@ import '../data/models.dart';
 import '../data/odds_history.dart';
 import '../data/store.dart';
 import '../logic/stats.dart';
-import 'match_page.dart';
 
 /// Where the money is going on one match, read from how the prices moved.
 /// Bookmakers don't publish bet counts or stakes, so this never shows them;
@@ -368,71 +367,4 @@ class _LinesPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_LinesPainter old) => old.series != series;
-}
-
-/// Bet Tools entry: pick one of the starred matches to see its money movement.
-class MoneyToolPage extends StatelessWidget {
-  const MoneyToolPage({super.key, required this.store, required this.api, required this.onOpenMatches});
-  final BankStore store;
-  final FixturesApi api;
-  final VoidCallback onOpenMatches;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Money movement')),
-      body: ListenableBuilder(
-        listenable: store,
-        builder: (context, _) {
-          final favs = store.favorites;
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-            children: [
-              Text(
-                'See which way the market is moving on a match. Pick one of your starred matches, or open any match '
-                'and go to its Money tab.',
-                style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(height: 12),
-              if (favs.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Column(
-                    children: [
-                      Icon(Icons.star_outline, size: 40, color: cs.primary),
-                      const SizedBox(height: 8),
-                      const Text('Star a match to follow its money here.', textAlign: TextAlign.center),
-                      const SizedBox(height: 12),
-                      FilledButton.tonal(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          onOpenMatches();
-                        },
-                        child: const Text('Browse matches'),
-                      ),
-                    ],
-                  ),
-                ),
-              for (final f in favs)
-                Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text('${f.home} vs ${f.away}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text('${f.leagueName} · ${DateFormat('EEE d MMM, HH:mm').format(f.kickoff.toLocal())}'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => MatchPage(match: f.toMatch(), store: store, api: api, initialTab: 1),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
-    );
-  }
 }

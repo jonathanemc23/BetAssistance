@@ -42,6 +42,19 @@ void main() {
     expect(s.units, 2);
   });
 
+  test('a cash out counts as a win only when it clearly beats the stake', () {
+    final bets = [
+      bet(BetStatus.cashout, cashout: 15), // well above the stake: win
+      bet(BetStatus.cashout, cashout: 10.2), // about the stake back: loss
+      bet(BetStatus.cashout, cashout: 6), // below the stake: loss
+      bet(BetStatus.won),
+    ];
+    expect(bets.map((b) => b.countsAsWin), [true, false, false, true]);
+    final s = Stats.compute(settings, bets, []);
+    expect(s.winRate, closeTo(2 / 4, 1e-9));
+    expect(s.profit, closeTo(5 + 0.2 - 4 + 10, 1e-9));
+  });
+
   test('empty ledger has no division by zero', () {
     final s = Stats.compute(settings, [], []);
     expect(s.roi, 0);

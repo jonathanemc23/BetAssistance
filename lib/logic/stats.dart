@@ -26,7 +26,7 @@ class Stats {
   });
 
   /// Same rules as the web version: ROI is profit over settled, non-void
-  /// stakes; win rate counts only won and lost bets.
+  /// stakes; win rate counts won, lost and cashed-out bets.
   factory Stats.compute(Settings s, List<Bet> bets, List<BankTx> txs) {
     final settled = bets.where((b) => b.isSettled).toList();
     final profit = settled.fold<double>(0, (a, b) => a + b.profit);
@@ -37,8 +37,9 @@ class Stats {
     final wd = txs.where((t) => t.kind == TxKind.withdrawal).fold<double>(0, (a, t) => a + t.amount);
     final pending = bets.where((b) => b.status == BetStatus.pending).toList();
     final exposure = pending.fold<double>(0, (a, b) => a + b.stake);
-    final wins = bets.where((b) => b.status == BetStatus.won).length;
-    final losses = bets.where((b) => b.status == BetStatus.lost).length;
+    // Cash outs count too: a win when they locked in a profit, else a loss.
+    final wins = bets.where((b) => b.countsAsWin == true).length;
+    final losses = bets.where((b) => b.countsAsWin == false).length;
     final graded = bets.where((b) => b.isGraded).toList();
     final avgOdds = graded.isEmpty ? 0.0 : graded.fold<double>(0, (a, b) => a + b.odds) / graded.length;
     final balance = s.startBankroll + dep - wd + profit;

@@ -12,9 +12,7 @@ import 'ui/bank_screens.dart';
 import 'ui/bet_form.dart';
 import 'ui/bets_screen.dart';
 import 'ui/charts_screen.dart';
-import 'ui/matchboard_screen.dart';
 import 'ui/matches_screen.dart';
-import 'ui/parlay_screens.dart';
 import 'ui/themes.dart';
 import 'ui/share_ui.dart';
 import 'ui/summary_screen.dart';
@@ -124,25 +122,13 @@ class _HomeShellState extends State<HomeShell> {
 
     return NavigationDrawer(
       selectedIndex: null,
-      onDestinationSelected: (i) => go(switch (i) {
-        0 => _openTools,
-        1 => () => _push((_) => Scaffold(
-              appBar: AppBar(title: const Text('Matchboard')),
-              body: MatchboardScreen(store: store, api: widget.fixtures, onBrowseMatches: _openMatches),
-            )),
-        2 => () => _push((_) => ParlaysPage(store: store, api: widget.fixtures)),
-        _ => _openSettings,
-      }),
+      onDestinationSelected: (i) => go(i == 0 ? _openTools : _openSettings),
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 20, 16, 12),
           child: const BrandTitle(size: 36),
         ),
         const NavigationDrawerDestination(icon: Icon(Icons.handyman_outlined), label: Text('Bet Tools')),
-        const NavigationDrawerDestination(
-            icon: Icon(Icons.space_dashboard_outlined), label: Text('Matchboard')),
-        const NavigationDrawerDestination(
-            icon: Icon(Icons.account_tree_outlined), label: Text('Parlay builder')),
         const Padding(padding: EdgeInsets.symmetric(horizontal: 28, vertical: 8), child: Divider()),
         const NavigationDrawerDestination(icon: Icon(Icons.tune), label: Text('Settings')),
       ],
