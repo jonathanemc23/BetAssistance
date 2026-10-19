@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../logic/markets.dart';
 import 'match_details.dart';
 import 'models.dart';
+import 'request_gate.dart';
 
 export 'match_details.dart';
 
@@ -684,9 +685,77 @@ String _isoDay(DateTime d) =>
 String _ymd(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
+/// The dates a feed files [day]'s matches under (the phone's midnight to
+/// midnight, seen at UTC offset [offsetHours] for that moment): one or two.
+List<DateTime> _feedDates(DateTime day, int Function(DateTime utc) offsetHours) {
+  DateTime at(DateTime local) {
+    final utc = local.toUtc();
+    final t = utc.add(Duration(hours: offsetHours(utc)));
+    return DateTime(t.year, t.month, t.day);
+  }
+
+  final a = at(DateTime(day.year, day.month, day.day));
+  final b = at(DateTime(day.year, day.month, day.day + 1).subtract(const Duration(minutes: 1)));
+  return a == b ? [a] : [a, b];
+}
+
+/// ESPN files matches under their US Eastern date.
+List<DateTime> espnDatesFor(DateTime day) => _feedDates(day, _easternOffset);
+
+/// TheSportsDB files matches under their UTC date.
+List<DateTime> sportsDbDatesFor(DateTime day) => _feedDates(day, (_) => 0);
+
+/// US Eastern offset: daylight time from the second Sunday of March to the
+/// first Sunday of November.
+int _easternOffset(DateTime utc) {
+  DateTime sunday(int month, int nth) {
+    final first = DateTime.utc(utc.year, month);
+    return DateTime.utc(utc.year, month, 1 + (7 - first.weekday) % 7 + 7 * (nth - 1));
+  }
+
+  final from = sunday(3, 2).add(const Duration(hours: 7)), to = sunday(11, 1).add(const Duration(hours: 6));
+  return !utc.isBefore(from) && utc.isBefore(to) ? -4 : -5;
+}
+
 class FixturesApi {
-  FixturesApi({http.Client? client}) : _client = client ?? http.Client();
+  FixturesApi({http.Client? client, int tsdbPerMinute = 25})
+    : _client = client ?? http.Client(),
+      _tsdbGate = RequestGate(2, perMinute: tsdbPerMinute);
   final http.Client _client;
+
+  /// A few requests at a time per feed; see [RequestGate].
+  final _espnGate = RequestGate(8);
+  final RequestGate _tsdbGate;
+
+  /// TheSportsDB answers, by URL, kept five minutes: its free feed has no
+  /// live scores and allows few requests, so the same day is read once.
+  final _tsdbBodies = <String, (DateTime, String)>{};
+  final _tsdbPending = <String, Future<String?>>{};
+
+  /// One feed request through its gate. Null when it failed; throws
+  /// [GateFull] when a background TheSportsDB request was skipped.
+  Future<String?> _get(String url, {bool urgent = false}) {
+    if (!url.startsWith(_tsdb)) return _espnGate.run(() => _fetch(url), urgent: urgent);
+    final hit = _tsdbBodies[url];
+    if (hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 5)) return Future.value(hit.$2);
+    final pending = _tsdbPending[url];
+    if (pending != null) return pending;
+    final started = _tsdbGate.run(() => _fetch(url), urgent: urgent).then((body) {
+      if (body != null) _tsdbBodies[url] = (DateTime.now(), body);
+      return body;
+    });
+    _tsdbPending[url] = started;
+    return started.whenComplete(() => _tsdbPending.remove(url));
+  }
+
+  Future<String?> _fetch(String url) async {
+    try {
+      final res = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      return res.statusCode == 200 ? utf8.decode(res.bodyBytes) : null;
+    } catch (_) {
+      return null;
+    }
+  }
   final _cache = <String, (DateTime, List<Match>)>{};
 
   static const _base = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
@@ -694,23 +763,38 @@ class FixturesApi {
   /// TheSportsDB's free feed; 123 is its public key.
   static const _tsdb = 'https://www.thesportsdb.com/api/v1/json/123';
 
-  /// Runs every (league, isTheSportsDb, url) request at once. Returns the
-  /// ESPN and TheSportsDB matches, and false when every request failed.
-  Future<(List<Match>, List<Match>, bool)> _fetchAll(List<(League, bool, String)> requests) async {
-    var failures = 0;
+  /// Runs every (league, isTheSportsDb, url) request through the gates.
+  /// Returns the ESPN and TheSportsDB matches, and false when every request
+  /// failed. [urgent] requests (what's on screen) go before background ones;
+  /// the slugs of leagues that couldn't be read (failed, or a background
+  /// request skipped) go in [unread].
+  Future<(List<Match>, List<Match>, bool)> _fetchAll(
+    List<(League, bool, String)> requests, {
+    bool urgent = false,
+    Set<String>? unread,
+  }) async {
+    var failures = 0, skips = 0;
     final results = await Future.wait([
       for (final (league, isTsdb, url) in requests)
         () async {
+          final String? body;
           try {
-            final res = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
-            if (res.statusCode != 200) {
-              failures++;
-              return (isTsdb, const <Match>[]);
-            }
-            final body = utf8.decode(res.bodyBytes);
+            body = await _get(url, urgent: urgent);
+          } on GateFull {
+            skips++;
+            unread?.add(league.slug);
+            return (isTsdb, const <Match>[]);
+          }
+          if (body == null) {
+            failures++;
+            unread?.add(league.slug);
+            return (isTsdb, const <Match>[]);
+          }
+          try {
             return (isTsdb, isTsdb ? parseSportsDb(body, league) : parseScoreboard(body, league));
           } catch (_) {
             failures++;
+            unread?.add(league.slug);
             return (isTsdb, const <Match>[]);
           }
         }(),
@@ -724,26 +808,28 @@ class FixturesApi {
         for (final (t, ms) in results)
           if (t) ...ms,
       ],
-      requests.isEmpty || failures < requests.length,
+      // Skipped requests aren't failures: all skipped is an empty answer.
+      skips == requests.length || failures < requests.length - skips,
     );
   }
 
   /// Matches kicking off on [day] in the phone's time zone, grouped feed-wide.
-  /// ESPN buckets matches by US Eastern date, so the day before and after are
-  /// fetched too and filtered locally. Throws only if every request failed.
+  /// ESPN files matches by US Eastern date and TheSportsDB by UTC date, so
+  /// each feed is read for the dates the local day overlaps and filtered
+  /// locally. Throws only if every request failed.
   Future<List<Match>> matches(Country country, DateTime day, {bool refresh = false}) async {
     final local = DateTime(day.year, day.month, day.day);
     final key = '${country.code}-${_ymd(local)}';
     final hit = _cache[key];
     if (!refresh && hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 2)) return hit.$2;
 
-    final days = [local.subtract(const Duration(days: 1)), local, local.add(const Duration(days: 1))];
-    final (espn, tsdb, ok) = await _fetchAll([
-      for (final l in country.leagues)
-        for (final d in days) ...[
-          if (l.onEspn) (l, false, '$_base/${l.slug}/scoreboard?dates=${_ymd(d)}'),
-          if (l.tsdb != null) (l, true, '$_tsdb/eventsday.php?d=${_isoDay(d)}&l=${l.tsdb}'),
-        ],
+    final (espn, tsdb, ok) = await _fetchAll(urgent: true, [
+      for (final l in country.leagues) ...[
+        if (l.onEspn)
+          for (final d in espnDatesFor(local)) (l, false, '$_base/${l.slug}/scoreboard?dates=${_ymd(d)}'),
+        if (l.tsdb != null)
+          for (final d in sportsDbDatesFor(local)) (l, true, '$_tsdb/eventsday.php?d=${_isoDay(d)}&l=${l.tsdb}'),
+      ],
     ]);
     if (!ok) {
       throw const FixturesException("Couldn't load matches. Check your connection and try again.");
@@ -793,37 +879,44 @@ class FixturesApi {
   /// plus TheSportsDB's for its leagues unless [withTsdb] is false. Cached for
   /// ten minutes. ESPN's scoreboard takes one day at a time; a date range is
   /// rejected. TheSportsDB's free key allows about 30 requests a minute, so
-  /// callers ask it for as few days as they can.
-  Future<List<Match>> _allOn(DateTime day, {bool withTsdb = true}) async {
-    final key = '${_ymd(day)}${withTsdb ? '' : '-espn'}';
+  /// callers ask it for as few days as they can. Leagues that couldn't be
+  /// read go in [unread], and then the day isn't cached.
+  Future<List<Match>> _allOn(DateTime day, {bool withEspn = true, bool withTsdb = true, Set<String>? unread}) async {
+    final key = '${_ymd(day)}${withEspn ? '-espn' : ''}${withTsdb ? '-tsdb' : ''}';
     final hit = _days[key];
     if (hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 10)) return hit.$2;
+    final missed = <String>{};
     final leagues = {
       for (final c in countries)
         for (final l in c.leagues) l.slug: l,
     }.values;
     final (espn, tsdb, ok) = await _fetchAll([
       for (final l in leagues) ...[
-        if (l.onEspn) (l, false, '$_base/${l.slug}/scoreboard?dates=${_ymd(day)}'),
+        if (withEspn && l.onEspn) (l, false, '$_base/${l.slug}/scoreboard?dates=${_ymd(day)}'),
         if (withTsdb && l.tsdb != null) (l, true, '$_tsdb/eventsday.php?d=${_isoDay(day)}&l=${l.tsdb}'),
       ],
-    ]);
+    ], unread: missed);
     if (!ok) throw const FixturesException("Couldn't load matches. Check your connection and try again.");
     final list = mergeSportsDb(espn, tsdb);
-    _days[key] = (DateTime.now(), list);
+    unread?.addAll(missed);
+    if (missed.isEmpty) _days[key] = (DateTime.now(), list);
     return list;
   }
 
   /// Slugs of the leagues with a match kicking off on [day] (the phone's
-  /// calendar day), for hiding countries with nothing to show. ESPN buckets
-  /// by US Eastern date, so its day either side is read too; TheSportsDB is
-  /// read for the day itself only.
+  /// calendar day), for hiding countries with nothing to show. ESPN is read
+  /// for the Eastern dates the day overlaps; TheSportsDB, to stay within its
+  /// limit, for the one UTC date holding most of it.
   Future<Set<String>> leaguesPlaying(DateTime day) async {
     final local = DateTime(day.year, day.month, day.day);
+    final noon = DateTime(local.year, local.month, local.day, 12).toUtc();
+    final tsdbDay = DateTime(noon.year, noon.month, noon.day);
+    final espnDays = espnDatesFor(local);
     var failed = 0;
+    final unknown = <String>{};
     final lists = await Future.wait([
-      for (final o in const [-1, 0, 1])
-        _allOn(DateTime(local.year, local.month, local.day + o), withTsdb: o == 0).catchError((Object _) {
+      for (final d in {...espnDays, tsdbDay})
+        _allOn(d, withEspn: espnDays.contains(d), withTsdb: d == tsdbDay, unread: unknown).catchError((Object _) {
           failed++;
           return const <Match>[];
         }),
@@ -834,12 +927,14 @@ class FixturesApi {
     return {
       for (final m in lists.expand((l) => l))
         if (_sameDay(m.kickoff.toLocal(), local)) m.league.slug,
+      // Couldn't be read this time: keep them listed rather than hide them.
+      ...unknown,
     };
   }
 
   /// The days searched for a pick's match, nearest first: picks are mostly
   /// for today and the next few days. TheSportsDB is only read for the
-  /// first three.
+  /// first two.
   static const _searchDays = [0, 1, -1, 2, 3, 4];
 
   /// The real match for a pick's event text ("Fiorentina vs Como", "A - B"),
@@ -852,7 +947,7 @@ class FixturesApi {
     for (final offset in _searchDays) {
       final List<Match> list;
       try {
-        list = await _allOn(DateTime(now.year, now.month, now.day + offset), withTsdb: offset.abs() <= 1);
+        list = await _allOn(DateTime(now.year, now.month, now.day + offset), withTsdb: offset == 0 || offset == 1);
         reached = true;
       } on FixturesException {
         continue;
@@ -878,15 +973,16 @@ class FixturesApi {
       for (final c in countries)
         for (final l in c.leagues) l.slug: l,
     }.values;
-    // TheSportsDB has no free live feed, so read today's and yesterday's
-    // (UTC) matches; evening kick-offs in the Americas cross midnight UTC.
+    // TheSportsDB has no free live feed, so read today's (UTC) matches, and
+    // yesterday's early in the UTC day: evening kick-offs in the Americas
+    // cross midnight UTC. Its answers are kept five minutes.
     final today = DateTime.now().toUtc();
+    final tsdbDays = [if (today.hour < 8) today.subtract(const Duration(days: 1)), today];
     final (espn, tsdb, ok) = await _fetchAll([
       for (final l in leagues) ...[
         if (l.onEspn) (l, false, '$_base/${l.slug}/scoreboard'),
         if (l.tsdb != null)
-          for (final d in [today.subtract(const Duration(days: 1)), today])
-            (l, true, '$_tsdb/eventsday.php?d=${_isoDay(d)}&l=${l.tsdb}'),
+          for (final d in tsdbDays) (l, true, '$_tsdb/eventsday.php?d=${_isoDay(d)}&l=${l.tsdb}'),
       ],
     ]);
     if (!ok) {
@@ -911,9 +1007,10 @@ class FixturesApi {
     // Matches only TheSportsDB has: just the status and score it gave.
     if (m.id.startsWith('tsdb:')) return MatchDetails.statusOf(m);
     try {
-      final res = await _client
-          .get(Uri.parse('$_base/${m.league.slug}/summary?event=${m.id}'))
-          .timeout(const Duration(seconds: 15));
+      final res = await _espnGate.run(
+        urgent: true,
+        () => _client.get(Uri.parse('$_base/${m.league.slug}/summary?event=${m.id}')).timeout(const Duration(seconds: 15)),
+      );
       if (res.statusCode != 200) throw FixturesException('ESPN answered ${res.statusCode}');
       var d = parseMatchDetails(utf8.decode(res.bodyBytes));
       // ESPN never moves some leagues past "scheduled"; trust the score
