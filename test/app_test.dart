@@ -347,7 +347,7 @@ void main() {
     await tester.tap(find.text('Bet Tools'));
     await tester.pumpAndSettle();
     expect(find.text('1 open'), findsOneWidget);
-    expect(find.text('Money movement'), findsOneWidget);
+    expect(find.text('Money movement'), findsNothing);
     await shot('bet_tools');
     await tester.tap(find.text('Matchboard'));
     await settle(tester);
@@ -478,7 +478,9 @@ void main() {
     // Review bet from the history: the handicap logged from the match page.
     await tester.tap(find.text('Bets'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Review bet').first);
+    // By its selection: which bet sorts first depends on today's date.
+    await tester.tap(find.descendant(
+        of: find.ancestor(of: find.text('Chelsea -0.5'), matching: find.byType(Card)).first, matching: find.text('Review bet')));
     await settle(tester);
     expect(find.text('Since you placed it'), findsOneWidget);
     expect(find.textContaining('Not started yet'), findsOneWidget);

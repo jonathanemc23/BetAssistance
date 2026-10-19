@@ -164,6 +164,19 @@ class Bet {
 
   double get potentialProfit => stake * (odds - 1);
 
+  /// A cash out counts as a win only when it locked in a real profit (at
+  /// least 5% over the stake); one at or near the stake counts as a loss.
+  static const cashoutWinMargin = 0.05;
+
+  /// How the bet counts in the win rate: true a win, false a loss, null not
+  /// counted (open, push or void).
+  bool? get countsAsWin => switch (status) {
+        BetStatus.won => true,
+        BetStatus.lost => false,
+        BetStatus.cashout => (cashout ?? 0) >= stake * (1 + cashoutWinMargin),
+        _ => null,
+      };
+
   Bet copyWith({int? id, BetStatus? status, double? cashout, String? date, String? created, double? stake}) => Bet(
         id: id ?? this.id, type: type, selection: selection, event: event, sport: sport, date: date ?? this.date,
         stake: stake ?? this.stake, odds: odds, book: book, status: status ?? this.status,

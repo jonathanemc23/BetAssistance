@@ -35,9 +35,12 @@ void main() {
       ParlayLeg(selection: 'Sí · Ambos equipos marcan', event: 'Everton v Chelsea', odds: 1.8),
       ParlayLeg(selection: 'Millonarios to win', event: 'Millonarios vs Nacional', odds: 2.0),
     ]);
-    // ESPN is asked once per league for the whole week.
-    expect(requests.where((u) => u.path.contains('/eng.1/scoreboard')), hasLength(1));
-    expect(requests.firstWhere((u) => u.path.contains('/eng.1/')).queryParameters['dates'], matches(r'^\d{8}-\d{8}$'));
+    // ESPN takes one day per request (a range is rejected); the found day
+    // is reused, and a pick that isn't found searches the next few days.
+    final days = requests.where((u) => u.path.contains('/eng.1/scoreboard')).map((u) => u.queryParameters['dates']);
+    expect(days, everyElement(matches(r'^\d{8}$')));
+    expect(days.toSet().length, days.length);
+    expect(days.length, 6); // Millonarios vs Nacional isn't anywhere
 
     final m = legs.first;
     expect((m.isLinked, m.matchId, m.leagueSlug, m.event), (true, '401878771', 'eng.1', 'Everton vs Chelsea'));

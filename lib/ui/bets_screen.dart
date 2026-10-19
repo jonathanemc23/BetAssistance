@@ -27,10 +27,49 @@ class BetsScreenState extends State<BetsScreen> {
   bool _matches(Bet b) => switch (_filter) {
         BetFilter.all => true,
         BetFilter.open => b.status == BetStatus.pending,
-        BetFilter.won => b.status == BetStatus.won,
-        BetFilter.lost => b.status == BetStatus.lost,
+        BetFilter.won => b.countsAsWin == true,
+        BetFilter.lost => b.countsAsWin == false,
         BetFilter.parlays => b.isParlay,
       };
+
+  /// Asks how much the bookmaker paid, then settles the bet as cashed out.
+  Future<void> _cashOut(Bet b) async {
+    final fmt = Fmt(store.settings);
+    final ctrl = TextEditingController();
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Cash out'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Stake ${fmt.money(b.stake)} · full win ${fmt.money(b.stake * b.odds)}'),
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('cashout-amount'),
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Amount received'),
+          ),
+          const SizedBox(height: 8),
+          Text('Counts as a win when it locks in a profit, as a loss when it is at or near the stake.',
+              style: Theme.of(c).textTheme.bodySmall),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final v = double.tryParse(ctrl.text.replaceAll(',', '.'));
+              if (v != null && v >= 0) Navigator.pop(c, v);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => ctrl.dispose());
+    if (amount == null) return;
+    await store.saveBet(b.copyWith(status: BetStatus.cashout, cashout: amount));
+  }
 
   Future<void> _actions(Bet b) async {
     final action = await showModalBottomSheet<String>(
@@ -113,7 +152,7 @@ class BetsScreenState extends State<BetsScreen> {
             fmt: fmt,
             onTap: () => openBetForm(context, store, bet: list[i]),
             onLongPress: () => _actions(list[i]),
-            onSettle: (st) => store.settle(list[i], st),
+            onSettle: (st) => st == BetStatus.cashout ? _cashOut(list[i]) : store.settle(list[i], st),
             onReview: () => openBetReview(context, store: store, api: widget.api, bet: list[i]),
           ),
         ),
@@ -190,10 +229,17 @@ class _BetTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 if (pending)
-                  Row(mainAxisSize: MainAxisSize.min, children: [
-                    _SettleButton(label: 'Won', color: BankColors.win(context), onTap: () => onSettle(BetStatus.won)),
-                    const SizedBox(width: 6),
-                    _SettleButton(label: 'Lost', color: BankColors.loss(context), onTap: () => onSettle(BetStatus.lost)),
+                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      _SettleButton(label: 'Won', color: BankColors.win(context), onTap: () => onSettle(BetStatus.won)),
+                      const SizedBox(width: 6),
+                      _SettleButton(label: 'Lost', color: BankColors.loss(context), onTap: () => onSettle(BetStatus.lost)),
+                    ]),
+                    const SizedBox(height: 6),
+                    _SettleButton(
+                        label: 'Cash out',
+                        color: BankColors.forStatus(context, BetStatus.cashout),
+                        onTap: () => onSettle(BetStatus.cashout)),
                   ])
                 else
                   Text(fmt.money(bet.profit, sign: true),
