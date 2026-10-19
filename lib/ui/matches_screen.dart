@@ -289,7 +289,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _CountryPicker(selected: _country, day: _day, playing: widget.api.leaguesPlaying(_day)),
+      builder: (_) => _CountryPicker(selected: _country),
     );
     if (c == null || !mounted) return;
     setState(() => _country = c);
@@ -905,30 +905,14 @@ class OddsRow extends StatelessWidget {
 }
 
 class _CountryPicker extends StatefulWidget {
-  const _CountryPicker({required this.selected, required this.day, required this.playing});
+  const _CountryPicker({required this.selected});
   final Country? selected;
-  final DateTime day;
-
-  /// Leagues with matches on [day]; countries without any are hidden.
-  final Future<Set<String>> playing;
   @override
   State<_CountryPicker> createState() => _CountryPickerState();
 }
 
 class _CountryPickerState extends State<_CountryPicker> {
   String _q = '';
-  Set<String>? _playing;
-  bool _failed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.playing.then((p) {
-      if (mounted) setState(() => _playing = p);
-    }, onError: (Object _) {
-      if (mounted) setState(() => _failed = true);
-    });
-  }
 
   /// Where the list was when a country was last picked, so it reopens there.
   static double? _lastOffset;
@@ -949,20 +933,8 @@ class _CountryPickerState extends State<_CountryPicker> {
 
   @override
   Widget build(BuildContext context) {
-    final playing = _playing;
-    final list = countries
-        .where((c) => c.name.toLowerCase().contains(_q.toLowerCase()))
-        .where((c) => playing == null || c.leagues.any((l) => playing.contains(l.slug)))
-        .toList();
-    final theme = Theme.of(context);
-    final day = DateFormat.MMMEd().format(widget.day);
-    final note = _failed
-        ? "Couldn't check which countries play on $day, so all are listed."
-        : playing == null
-            ? 'Finding the countries that play on $day…'
-            : playing.isEmpty
-                ? 'No matches found on $day.'
-                : 'Countries with matches on $day.';
+    // Every country is listed; its matches load once it's picked.
+    final list = countries.where((c) => c.name.toLowerCase().contains(_q.toLowerCase())).toList();
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.75,
       child: Column(
@@ -981,18 +953,6 @@ class _CountryPickerState extends State<_CountryPicker> {
                 });
               },
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
-            child: Row(children: [
-              if (playing == null && !_failed) ...[
-                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: Text(note, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-              ),
-            ]),
           ),
           Expanded(
             child: ListView.builder(
