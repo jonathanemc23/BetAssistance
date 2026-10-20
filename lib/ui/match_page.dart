@@ -98,7 +98,7 @@ class _MatchPageState extends State<MatchPage> {
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => openBetForm(context, widget.store, template: m.toBetTemplate()),
+          onPressed: () => openBetForm(context, widget.store, template: m.toBetTemplate(), api: widget.api),
           icon: const Icon(Icons.add),
           label: const Text('Log a bet'),
         ),
@@ -331,7 +331,7 @@ class _OddsTab extends StatelessWidget {
             ],
             if (o.totalLine != null && (o.over != null || o.under != null)) ...[
               const SizedBox(height: 12),
-              Text('Total goals ${_num(o.totalLine!)}', style: theme.textTheme.labelLarge),
+              Text('Total ${m.league.knownSport.scoreUnit} ${_num(o.totalLine!)}', style: theme.textTheme.labelLarge),
               const SizedBox(height: 6),
               Row(children: [
                 if (o.over != null)
@@ -340,7 +340,7 @@ class _OddsTab extends StatelessWidget {
                       label: 'Over',
                       price: o.over!,
                       format: format,
-                      onTap: () => onPick('Over ${_num(o.totalLine!)} goals', o.over!),
+                      onTap: () => onPick('Over ${_num(o.totalLine!)} ${m.league.knownSport.scoreUnit}', o.over!),
                     ),
                   ),
                 if (o.over != null && o.under != null) const SizedBox(width: 8),
@@ -350,7 +350,7 @@ class _OddsTab extends StatelessWidget {
                       label: 'Under',
                       price: o.under!,
                       format: format,
-                      onTap: () => onPick('Under ${_num(o.totalLine!)} goals', o.under!),
+                      onTap: () => onPick('Under ${_num(o.totalLine!)} ${m.league.knownSport.scoreUnit}', o.under!),
                     ),
                   ),
               ]),

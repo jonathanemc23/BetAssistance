@@ -94,7 +94,7 @@ class _HomeShellState extends State<HomeShell> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't read that bet link")));
       return;
     }
-    openBetForm(context, store, template: bet);
+    openBetForm(context, store, template: bet, api: widget.fixtures);
   }
 
   void _push(Widget Function(BuildContext) page) =>
@@ -140,7 +140,7 @@ class _HomeShellState extends State<HomeShell> {
 
   Future<void> _pasteLink() async {
     final bet = await showPasteLink(context);
-    if (bet != null && mounted) await openBetForm(context, store, template: bet);
+    if (bet != null && mounted) await openBetForm(context, store, template: bet, api: widget.fixtures);
   }
 
   @override
@@ -163,7 +163,7 @@ class _HomeShellState extends State<HomeShell> {
         body: IndexedStack(index: _tab, children: [
           SummaryScreen(
             store: store,
-            onLogBet: () => openBetForm(context, store),
+            onLogBet: () => openBetForm(context, store, api: widget.fixtures),
             onOpenBets: () => setState(() => _tab = 1),
           ),
           BetsScreen(store: store, api: widget.fixtures),
@@ -175,7 +175,7 @@ class _HomeShellState extends State<HomeShell> {
         ]),
         floatingActionButton: _tab == 1
             ? FloatingActionButton.extended(
-                onPressed: () => openBetForm(context, store),
+                onPressed: () => openBetForm(context, store, api: widget.fixtures),
                 icon: const Icon(Icons.add),
                 label: const Text('Log bet'),
               )

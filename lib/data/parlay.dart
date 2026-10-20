@@ -119,6 +119,7 @@ class ParlayLeg {
   factory ParlayLeg.fromMatch(Match m, String selection, double odds) => ParlayLeg(
         selection: selection,
         event: m.title,
+        sport: m.league.knownSport.label,
         odds: odds,
         matchId: m.id,
         leagueSlug: m.league.slug,

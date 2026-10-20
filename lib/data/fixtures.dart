@@ -9,14 +9,38 @@ import 'request_gate.dart';
 
 export 'match_details.dart';
 
-/// Football fixtures from ESPN's public scoreboard feed
-/// (site.api.espn.com, free and keyless). One request per league and day.
-/// Leagues ESPN lacks or doesn't keep up to date also read TheSportsDB's free
-/// feed (thesportsdb.com), see [League.tsdb].
+/// Sports the Matches tab lists. [espn] is the sport in ESPN's feed paths,
+/// [label] the sport as bets name it (see `sports`).
+enum Sport {
+  soccer('soccer', 'Soccer', 'Football', '⚽'),
+  basketball('basketball', 'Basketball', 'Basketball', '🏀'),
+  baseball('baseball', 'Baseball', 'Baseball', '⚾');
+
+  const Sport(this.espn, this.label, this.title, this.emoji);
+  final String espn;
+  final String label;
+  final String title;
+  final String emoji;
+
+  /// What the totals line counts in this sport: "Over 2.5 goals".
+  String get scoreUnit => switch (this) {
+    Sport.soccer => 'goals',
+    Sport.basketball => 'points',
+    Sport.baseball => 'runs',
+  };
+
+  static Sport byName(String? name) => Sport.values.firstWhere((s) => s.name == name, orElse: () => Sport.soccer);
+}
+
+/// Fixtures from ESPN's public scoreboard feed (site.api.espn.com, free and
+/// keyless). One request per league and day. Leagues ESPN lacks or doesn't
+/// keep up to date also read TheSportsDB's free feed (thesportsdb.com), see
+/// [League.tsdb].
 class League {
-  const League(this.slug, this.name, {this.tsdb});
+  const League(this.slug, this.name, {this.tsdb, this.sport = Sport.soccer});
   final String slug;
   final String name;
+  final Sport sport;
 
   /// TheSportsDB league id. Its results fill in scores ESPN never updates
   /// (Chile), and leagues with a `tsdb.` slug come only from there
@@ -24,6 +48,10 @@ class League {
   final int? tsdb;
 
   bool get onEspn => !slug.startsWith('tsdb.');
+
+  /// The sport as the app lists it: a league rebuilt from a saved slug
+  /// (a parlay leg, a bet) doesn't carry it.
+  Sport get knownSport => leagueBySlug(slug)?.sport ?? sport;
 }
 
 class Country {
@@ -32,7 +60,14 @@ class Country {
   final String name;
   final String flag;
   final List<League> leagues;
+
+  /// This country's leagues in [sport]; every league when null.
+  List<League> leaguesIn(Sport? sport) => sport == null ? leagues : [for (final l in leagues) if (l.sport == sport) l];
+
+  bool has(Sport sport) => leagues.any((l) => l.sport == sport);
 }
+
+const _bb = Sport.basketball, _bsb = Sport.baseball;
 
 const countries = <Country>[
   Country('int', 'International', '🌍', [
@@ -49,15 +84,36 @@ const countries = <Country>[
     League('uefa.weuro', "Women's Euro"),
     League('conmebol.america.femenina', 'Copa América Femenina'),
     League('fifa.friendly.w', "Women's friendlies"),
+    League('uefa.w.europa', "Women's Europa Cup"),
+    League('uefa.w.nations', "Women's Nations League"),
+    League('concacaf.w.champions_cup', 'CONCACAF W Champions Cup'),
+    League('tsdb.4546', 'EuroLeague', tsdb: 4546, sport: _bb),
+    League('tsdb.4547', 'EuroCup', tsdb: 4547, sport: _bb),
+    League('tsdb.4548', 'Basketball Champions League', tsdb: 4548, sport: _bb),
+    League('tsdb.4477', 'ABA League', tsdb: 4477, sport: _bb),
+    League('fiba', 'FIBA World Cup', sport: _bb),
+    League('world-baseball-classic', 'World Baseball Classic', sport: _bsb),
+    League('caribbean-series', 'Caribbean Series', sport: _bsb),
   ]),
   Country('arg', 'Argentina', '🇦🇷', [
     League('arg.1', 'Liga Profesional'),
     League('arg.2', 'Primera Nacional'),
     League('arg.copa', 'Copa Argentina'),
+    League('tsdb.4734', 'Liga Nacional', tsdb: 4734, sport: _bb),
   ]),
-  Country('aus', 'Australia', '🇦🇺', [League('aus.1', 'A-League')]),
+  Country('aus', 'Australia', '🇦🇺', [
+    League('aus.1', 'A-League'),
+    League('aus.w.1', 'A-League Women'),
+    League('nbl', 'NBL', sport: _bb),
+    League('tsdb.5113', 'WNBL', tsdb: 5113, sport: _bb),
+    League('tsdb.5107', 'Australian Baseball League', tsdb: 5107, sport: _bsb),
+  ]),
   Country('aut', 'Austria', '🇦🇹', [League('aut.1', 'Bundesliga')]),
-  Country('bel', 'Belgium', '🇧🇪', [League('bel.1', 'Pro League'), League('tsdb.5831', 'Belgian Cup', tsdb: 5831)]),
+  Country('bel', 'Belgium', '🇧🇪', [
+    League('bel.1', 'Pro League'),
+    League('tsdb.5831', 'Belgian Cup', tsdb: 5831),
+    League('tsdb.5942', "Women's Super League", tsdb: 5942),
+  ]),
   Country('bol', 'Bolivia', '🇧🇴', [League('bol.1', 'División Profesional')]),
   Country('bra', 'Brazil', '🇧🇷', [
     League('bra.1', 'Série A'),
@@ -74,7 +130,8 @@ const countries = <Country>[
     League('chi.1', 'Primera División', tsdb: 4627),
     League('chi.copa_chi', 'Copa Chile', tsdb: 5378),
   ]),
-  Country('chn', 'China', '🇨🇳', [League('chn.1', 'Super League')]),
+  Country('can', 'Canada', '🇨🇦', [League('can.w.nsl', 'Northern Super League (women)')]),
+  Country('chn', 'China', '🇨🇳', [League('chn.1', 'Super League'), League('tsdb.4442', 'CBA', tsdb: 4442, sport: _bb)]),
   // ESPN's Primera B feed (col.2) has had no fixtures since 2025, so it
   // comes from TheSportsDB.
   Country('col', 'Colombia', '🇨🇴', [
@@ -83,8 +140,13 @@ const countries = <Country>[
     League('col.copa', 'Copa Colombia'),
   ]),
   Country('crc', 'Costa Rica', '🇨🇷', [League('crc.1', 'Primera División')]),
+  Country('cro', 'Croatia', '🇭🇷', [
+    League('tsdb.4629', 'HNL', tsdb: 4629),
+    League('tsdb.5910', 'Prva NL', tsdb: 5910),
+  ]),
+  Country('cub', 'Cuba', '🇨🇺', [League('tsdb.5108', 'Serie Nacional', tsdb: 5108, sport: _bsb)]),
   Country('cyp', 'Cyprus', '🇨🇾', [League('tsdb.4630', 'First Division', tsdb: 4630)]),
-  Country('den', 'Denmark', '🇩🇰', [League('den.1', 'Superliga')]),
+  Country('den', 'Denmark', '🇩🇰', [League('den.1', 'Superliga'), League('tsdb.5202', 'Kvindeliga', tsdb: 5202)]),
   Country('ecu', 'Ecuador', '🇪🇨', [League('ecu.1', 'LigaPro'), League('tsdb.4957', 'Serie B', tsdb: 4957)]),
   Country('egy', 'Egypt', '🇪🇬', [League('tsdb.4829', 'Premier League', tsdb: 4829)]),
   Country('eng', 'England', '🏴󠁧󠁢󠁥󠁮󠁧󠁿', [
@@ -96,36 +158,56 @@ const countries = <Country>[
     League('eng.fa', 'FA Cup'),
     League('eng.league_cup', 'EFL Cup'),
     League('eng.w.1', "Women's Super League"),
+    League('eng.w.fa', "Women's FA Cup"),
   ]),
   Country('fra', 'France', '🇫🇷', [
     League('fra.1', 'Ligue 1'),
     League('fra.2', 'Ligue 2'),
     League('fra.coupe_de_france', 'Coupe de France'),
     League('fra.w.1', 'Première Ligue (women)'),
+    League('tsdb.4423', 'LNB Élite', tsdb: 4423, sport: _bb),
   ]),
   Country('ger', 'Germany', '🇩🇪', [
     League('ger.1', 'Bundesliga'),
     League('ger.2', '2. Bundesliga'),
     League('tsdb.4639', '3. Liga', tsdb: 4639),
     League('ger.dfb_pokal', 'DFB-Pokal'),
+    League('tsdb.5204', 'Frauen-Bundesliga', tsdb: 5204),
+    League('tsdb.4441', 'BBL', tsdb: 4441, sport: _bb),
   ]),
-  Country('gre', 'Greece', '🇬🇷', [League('gre.1', 'Super League')]),
+  Country('gre', 'Greece', '🇬🇷', [
+    League('gre.1', 'Super League'),
+    League('tsdb.4452', 'Basket League', tsdb: 4452, sport: _bb),
+  ]),
   Country('gua', 'Guatemala', '🇬🇹', [League('gua.1', 'Liga Nacional')]),
   Country('hon', 'Honduras', '🇭🇳', [League('hon.1', 'Liga Nacional')]),
   Country('hun', 'Hungary', '🇭🇺', [League('tsdb.4690', 'NB I', tsdb: 4690)]),
   Country('irn', 'Iran', '🇮🇷', [League('tsdb.4742', 'Persian Gulf Pro League', tsdb: 4742)]),
   Country('irl', 'Ireland', '🇮🇪', [League('tsdb.4643', 'Premier Division', tsdb: 4643)]),
+  Country('isr', 'Israel', '🇮🇱', [League('tsdb.4474', 'Basketball Premier League', tsdb: 4474, sport: _bb)]),
   Country('ita', 'Italy', '🇮🇹', [
     League('ita.1', 'Serie A'),
     League('ita.2', 'Serie B'),
     League('ita.coppa_italia', 'Coppa Italia'),
+    League('tsdb.5205', 'Serie A Women', tsdb: 5205),
+    League('tsdb.4433', 'Lega Basket Serie A', tsdb: 4433, sport: _bb),
   ]),
-  Country('jpn', 'Japan', '🇯🇵', [League('jpn.1', 'J1 League')]),
-  Country('ltu', 'Lithuania', '🇱🇹', [League('tsdb.4651', 'TOPLYGA', tsdb: 4651)]),
+  Country('jpn', 'Japan', '🇯🇵', [
+    League('jpn.1', 'J1 League'),
+    League('tsdb.4977', 'B.League B1', tsdb: 4977, sport: _bb),
+    League('tsdb.4591', 'NPB', tsdb: 4591, sport: _bsb),
+  ]),
+  Country('ltu', 'Lithuania', '🇱🇹', [
+    League('tsdb.4651', 'TOPLYGA', tsdb: 4651),
+    League('tsdb.4478', 'LKL', tsdb: 4478, sport: _bb),
+  ]),
   Country('mex', 'Mexico', '🇲🇽', [
     League('mex.1', 'Liga MX'),
     League('mex.2', 'Liga de Expansión'),
     League('tsdb.5206', 'Liga MX Femenil', tsdb: 5206),
+    League('tsdb.5119', 'LNBP', tsdb: 5119, sport: _bb),
+    League('tsdb.5064', 'Liga Mexicana de Béisbol', tsdb: 5064, sport: _bsb),
+    League('tsdb.5109', 'Liga Mexicana del Pacífico', tsdb: 5109, sport: _bsb),
   ]),
   Country('ned', 'Netherlands', '🇳🇱', [
     League('ned.1', 'Eredivisie'),
@@ -133,37 +215,70 @@ const countries = <Country>[
     League('ned.cup', 'KNVB Cup'),
     League('ned.w.1', 'Vrouwen Eredivisie'),
   ]),
-  Country('nor', 'Norway', '🇳🇴', [League('nor.1', 'Eliteserien')]),
+  Country('nor', 'Norway', '🇳🇴', [League('nor.1', 'Eliteserien'), League('tsdb.5208', 'Toppserien', tsdb: 5208)]),
   Country('par', 'Paraguay', '🇵🇾', [League('par.1', 'Primera División')]),
   Country('per', 'Peru', '🇵🇪', [League('per.1', 'Liga 1')]),
   Country('pol', 'Poland', '🇵🇱', [League('tsdb.4422', 'Ekstraklasa', tsdb: 4422)]),
   Country('por', 'Portugal', '🇵🇹', [
     League('por.1', 'Primeira Liga'),
     League('por.taca.portugal', 'Taça de Portugal'),
+    League('tsdb.5404', 'Campeonato Nacional Feminino', tsdb: 5404),
   ]),
+  Country('pur', 'Puerto Rico', '🇵🇷', [League('tsdb.5832', 'LBPRC', tsdb: 5832, sport: _bsb)]),
   Country('rou', 'Romania', '🇷🇴', [League('tsdb.4691', 'Liga I', tsdb: 4691), League('tsdb.5946', 'Liga I Feminin', tsdb: 5946)]),
   Country('ksa', 'Saudi Arabia', '🇸🇦', [League('ksa.1', 'Pro League')]),
   Country('sco', 'Scotland', '🏴󠁧󠁢󠁳󠁣󠁴󠁿', [League('sco.1', 'Premiership'), League('sco.2', 'Championship')]),
-  Country('srb', 'Serbia', '🇷🇸', [League('tsdb.4671', 'SuperLiga', tsdb: 4671)]),
+  Country('srb', 'Serbia', '🇷🇸', [
+    League('tsdb.4671', 'SuperLiga', tsdb: 4671),
+    League('tsdb.5121', 'KLS', tsdb: 5121, sport: _bb),
+  ]),
   Country('svk', 'Slovakia', '🇸🇰', [League('tsdb.4672', 'Niké Liga', tsdb: 4672)]),
+  Country('kor', 'South Korea', '🇰🇷', [
+    League('tsdb.5124', 'KBL', tsdb: 5124, sport: _bb),
+    League('tsdb.4830', 'KBO League', tsdb: 4830, sport: _bsb),
+  ]),
   Country('esp', 'Spain', '🇪🇸', [
     League('esp.1', 'LaLiga'),
     League('esp.2', 'LaLiga 2'),
     League('esp.copa_del_rey', 'Copa del Rey'),
     League('esp.w.1', 'Liga F'),
+    League('tsdb.4408', 'Liga ACB', tsdb: 4408, sport: _bb),
+    League('tsdb.5486', 'Liga Femenina', tsdb: 5486, sport: _bb),
   ]),
-  Country('swe', 'Sweden', '🇸🇪', [League('swe.1', 'Allsvenskan'), League('tsdb.5209', 'Damallsvenskan', tsdb: 5209)]),
-  Country('sui', 'Switzerland', '🇨🇭', [League('tsdb.4675', 'Super League', tsdb: 4675)]),
-  Country('tur', 'Turkey', '🇹🇷', [League('tur.1', 'Süper Lig')]),
+  // ESPN's Superettan feed (swe.2) has no fixtures.
+  Country('swe', 'Sweden', '🇸🇪', [
+    League('swe.1', 'Allsvenskan'),
+    League('tsdb.4403', 'Superettan', tsdb: 4403),
+    League('tsdb.5209', 'Damallsvenskan', tsdb: 5209),
+  ]),
+  Country('sui', 'Switzerland', '🇨🇭', [
+    League('tsdb.4675', 'Super League', tsdb: 4675),
+    League('tsdb.5940', "Women's Super League", tsdb: 5940),
+  ]),
+  Country('twn', 'Taiwan', '🇹🇼', [League('tsdb.5111', 'CPBL', tsdb: 5111, sport: _bsb)]),
+  Country('tur', 'Turkey', '🇹🇷', [
+    League('tur.1', 'Süper Lig'),
+    League('tsdb.4475', 'Basketbol Süper Ligi', tsdb: 4475, sport: _bb),
+  ]),
   Country('ukr', 'Ukraine', '🇺🇦', [League('tsdb.4354', 'Premier League', tsdb: 4354)]),
   Country('usa', 'United States', '🇺🇸', [
     League('usa.1', 'MLS'),
     League('usa.usl.1', 'USL Championship'),
     League('usa.open', 'U.S. Open Cup'),
     League('usa.nwsl', 'NWSL'),
+    League('usa.w.usl.1', 'USL Super League (women)'),
+    League('nba', 'NBA', sport: _bb),
+    League('wnba', 'WNBA', sport: _bb),
+    League('mens-college-basketball', 'NCAA Men', sport: _bb),
+    League('womens-college-basketball', 'NCAA Women', sport: _bb),
+    League('mlb', 'MLB', sport: _bsb),
+    League('college-baseball', 'NCAA Baseball', sport: _bsb),
   ]),
   Country('uru', 'Uruguay', '🇺🇾', [League('uru.1', 'Primera División')]),
-  Country('ven', 'Venezuela', '🇻🇪', [League('ven.1', 'Liga FUTVE')]),
+  Country('ven', 'Venezuela', '🇻🇪', [
+    League('ven.1', 'Liga FUTVE'),
+    League('tsdb.5112', 'LVBP', tsdb: 5112, sport: _bsb),
+  ]),
 ];
 
 /// The country a league belongs to (the first one listing it).
@@ -205,6 +320,13 @@ Country defaultCountry(String? region) {
     'CR': 'crc',
     'BG': 'bul',
     'CY': 'cyp',
+    'HR': 'cro',
+    'CA': 'can',
+    'CU': 'cub',
+    'IL': 'isr',
+    'KR': 'kor',
+    'PR': 'pur',
+    'TW': 'twn',
     'EG': 'egy',
     'HU': 'hun',
     'IR': 'irn',
@@ -330,7 +452,7 @@ class Match {
   Bet toBetTemplate({String selection = '', double odds = 0, String? market}) => Bet(
     selection: selection,
     event: title,
-    sport: 'Soccer',
+    sport: league.knownSport.label,
     date: isoDate(kickoff.toLocal()),
     stake: 0,
     odds: odds,
@@ -445,6 +567,10 @@ List<Match> parseSportsDb(String body, League league) {
     'CANC' || 'CANCELLED' => (MatchState.other, 'Cancelled'),
     'ABD' || 'ABANDONED' => (MatchState.other, 'Abandoned'),
     'SUSP' => (MatchState.other, 'Suspended'),
+    // Basketball quarters and overtime, baseball innings.
+    'Q1' || 'Q2' || 'Q3' || 'Q4' || 'OT' => (MatchState.live, s),
+    'AOT' => (MatchState.finished, 'AOT'),
+    _ when RegExp(r'^(IN|TOP|BOT)\s?\d+$').hasMatch(s) => (MatchState.live, s),
     _ => hasScore ? (MatchState.finished, 'FT') : (MatchState.other, raw.trim()),
   };
 }
@@ -814,7 +940,10 @@ class FixturesApi {
 
   final _cache = <String, (DateTime, List<Match>)>{};
 
-  static const _base = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
+  static const _espn = 'https://site.api.espn.com/apis/site/v2/sports';
+
+  /// [league]'s ESPN feed, e.g. `.../sports/soccer/eng.1`.
+  static String _feed(League league) => '$_espn/${league.knownSport.espn}/${league.slug}';
 
   /// TheSportsDB's free feed; 123 is its public key.
   static const _tsdb = 'https://www.thesportsdb.com/api/v1/json/123';
@@ -949,22 +1078,24 @@ class FixturesApi {
   /// Matches kicking off on [day] in the phone's time zone, grouped feed-wide.
   /// ESPN files matches by US Eastern date and TheSportsDB by UTC date, so
   /// each feed is read for the dates the local day overlaps and filtered
-  /// locally. Throws only if every request failed.
-  Future<List<Match>> matches(Country country, DateTime day, {bool refresh = false}) async {
+  /// locally. Only [country]'s leagues in [sport] are read (all of them
+  /// when null). Throws only if every request failed.
+  Future<List<Match>> matches(Country country, DateTime day, {Sport? sport, bool refresh = false}) async {
     final local = DateTime(day.year, day.month, day.day);
-    final key = '${country.code}-${_ymd(local)}';
+    final leagues = country.leaguesIn(sport);
+    final key = '${country.code}-${sport?.name ?? 'all'}-${_ymd(local)}';
     final hit = _cache[key];
     if (!refresh && hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 2)) return hit.$2;
 
     final (espn, tsdb, ok) = await _fetchAll(
       urgent: true,
       [
-        for (final l in country.leagues)
+        for (final l in leagues)
           if (l.onEspn)
-            for (final d in espnDatesFor(local)) (l, '$_base/${l.slug}/scoreboard?dates=${_ymd(d)}'),
+            for (final d in espnDatesFor(local)) (l, '${_feed(l)}/scoreboard?dates=${_ymd(d)}'),
       ],
       tsdb: [
-        for (final l in country.leagues)
+        for (final l in leagues)
           if (l.tsdb != null) (l, sportsDbDatesFor(local)),
       ],
     );
@@ -1018,8 +1149,14 @@ class FixturesApi {
   /// rejected. TheSportsDB's free key allows about 30 requests a minute, so
   /// callers ask it for as few days as they can. Leagues that couldn't be
   /// read go in [unread], and then the day is kept only a minute.
-  Future<List<Match>> _allOn(DateTime day, {bool withEspn = true, bool withTsdb = true, Set<String>? unread}) async {
-    final key = '${_ymd(day)}${withEspn ? '-espn' : ''}${withTsdb ? '-tsdb' : ''}';
+  Future<List<Match>> _allOn(
+    DateTime day, {
+    Sport sport = Sport.soccer,
+    bool withEspn = true,
+    bool withTsdb = true,
+    Set<String>? unread,
+  }) async {
+    final key = '${sport.name}-${_ymd(day)}${withEspn ? '-espn' : ''}${withTsdb ? '-tsdb' : ''}';
     final hit = _days[key];
     if (hit != null &&
         DateTime.now().difference(hit.$1) < (hit.$3.isEmpty ? const Duration(minutes: 10) : const Duration(minutes: 1))) {
@@ -1029,12 +1166,12 @@ class FixturesApi {
     final missed = <String>{};
     final leagues = {
       for (final c in countries)
-        for (final l in c.leagues) l.slug: l,
+        for (final l in c.leaguesIn(sport)) l.slug: l,
     }.values;
     final (espn, tsdb, ok) = await _fetchAll(
       [
         for (final l in leagues)
-          if (withEspn && l.onEspn) (l, '$_base/${l.slug}/scoreboard?dates=${_ymd(day)}'),
+          if (withEspn && l.onEspn) (l, '${_feed(l)}/scoreboard?dates=${_ymd(day)}'),
       ],
       tsdb: [
         for (final l in leagues)
@@ -1079,33 +1216,27 @@ class FixturesApi {
     return null;
   }
 
-  (DateTime, List<Match>)? _live;
+  final _live = <Sport, _LiveState>{};
 
-  /// When every league was last read for [liveMatches], the leagues that
-  /// could have a match live until the next full read, and each league's
-  /// matches as last read.
-  DateTime? _liveFull;
-  var _liveLeagues = <String>{};
-  final _liveByLeague = <String, List<Match>>{};
-
-  /// Every match being played right now across all the leagues the app
-  /// knows, sorted alphabetically. Cached for 30 seconds. Every league is
+  /// Every [sport] match being played right now across all the leagues the
+  /// app knows, sorted alphabetically. Cached for 30 seconds. Every league is
   /// read once every ten minutes (or when [full]); in between, only the
   /// leagues with a match live or about to kick off, so refreshing every
   /// minute stays a handful of requests. A league that can't be read keeps
   /// the matches it had, so a dropped request never empties part of the list.
-  Future<List<Match>> liveMatches({bool refresh = false, bool full = false}) async {
-    final hit = _live;
+  Future<List<Match>> liveMatches({Sport sport = Sport.soccer, bool refresh = false, bool full = false}) async {
+    final st = _live.putIfAbsent(sport, _LiveState.new);
+    final hit = st.list;
     if (!refresh && !full && hit != null && DateTime.now().difference(hit.$1) < const Duration(seconds: 30)) {
       return hit.$2;
     }
     final now = DateTime.now();
-    final last = _liveFull;
+    final last = st.full;
     final everything = full || last == null || now.difference(last) >= const Duration(minutes: 10);
     final leagues = {
       for (final c in countries)
-        for (final l in c.leagues)
-          if (everything || _liveLeagues.contains(l.slug)) l.slug: l,
+        for (final l in c.leaguesIn(sport))
+          if (everything || st.leagues.contains(l.slug)) l.slug: l,
     }.values;
     // TheSportsDB has no free live feed, so read today's (UTC) matches, and
     // yesterday's early in the UTC day: evening kick-offs in the Americas
@@ -1116,7 +1247,7 @@ class FixturesApi {
     final (espn, tsdb, ok) = await _fetchAll(
       [
         for (final l in leagues)
-          if (l.onEspn) (l, '$_base/${l.slug}/scoreboard'),
+          if (l.onEspn) (l, '${_feed(l)}/scoreboard'),
       ],
       tsdb: [
         for (final l in leagues)
@@ -1124,10 +1255,10 @@ class FixturesApi {
       ],
       unread: unread,
     );
-    if (!ok && _liveByLeague.isEmpty) {
+    if (!ok && st.byLeague.isEmpty) {
       throw const FixturesException("Couldn't load live matches. Check your connection and try again.");
     }
-    if (everything && ok) _liveFull = now;
+    if (everything && ok) st.full = now;
     final fresh = <String, List<Match>>{
       for (final l in leagues)
         if (!unread.contains(l.slug)) l.slug: [],
@@ -1135,10 +1266,10 @@ class FixturesApi {
     for (final m in mergeSportsDb(espn, tsdb)) {
       fresh[m.league.slug]?.add(m);
     }
-    _liveByLeague.addAll(fresh);
-    final all = _liveByLeague.values.expand((ms) => ms);
+    st.byLeague.addAll(fresh);
+    final all = st.byLeague.values.expand((ms) => ms);
     final soon = now.add(const Duration(minutes: 15)), started = now.subtract(const Duration(hours: 4));
-    _liveLeagues = {
+    st.leagues = {
       // Couldn't be read: try again on the next refresh.
       ...unread,
       for (final m in all)
@@ -1151,7 +1282,7 @@ class FixturesApi {
       for (final m in all)
         if (m.state == MatchState.live && seen.add(m.id)) m,
     ]..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
-    _live = (DateTime.now(), list);
+    st.list = (DateTime.now(), list);
     return list;
   }
 
@@ -1166,7 +1297,7 @@ class FixturesApi {
     try {
       final res = await _espnGate.run(
         urgent: true,
-        () => _client.get(Uri.parse('$_base/${m.league.slug}/summary?event=${m.id}')).timeout(const Duration(seconds: 15)),
+        () => _client.get(Uri.parse('${_feed(m.league)}/summary?event=${m.id}')).timeout(const Duration(seconds: 15)),
       );
       if (res.statusCode != 200) throw FixturesException('ESPN answered ${res.statusCode}');
       var d = parseMatchDetails(utf8.decode(res.bodyBytes));
@@ -1185,6 +1316,16 @@ class FixturesApi {
   }
 
   static bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+/// What [FixturesApi.liveMatches] knows about one sport: when every league
+/// was last read, the leagues that could have a match live until the next
+/// full read, each league's matches as last read, and the last answer.
+class _LiveState {
+  DateTime? full;
+  var leagues = <String>{};
+  final byLeague = <String, List<Match>>{};
+  (DateTime, List<Match>)? list;
 }
 
 /// A request worth trying again.
