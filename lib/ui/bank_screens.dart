@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/live_alert_service.dart';
 import '../data/models.dart';
 import '../data/store.dart';
 import '../logic/claude_assistant.dart';
@@ -179,6 +180,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late String _currency, _startDate;
   late OddsFormat _odds;
   bool _showKey = false;
+  bool _alerts = true;
 
   @override
   void initState() {
@@ -192,6 +194,16 @@ class _SettingsPageState extends State<SettingsPage> {
     widget.store.pref(aiKeyPref).then((k) {
       if (mounted && k != null) _aiKey.text = k;
     });
+    widget.store.pref(alertsEnabledPref).then((v) {
+      if (mounted) setState(() => _alerts = v != '0');
+    });
+  }
+
+  /// Applies straight away, like the theme.
+  Future<void> _setAlerts(bool on) async {
+    setState(() => _alerts = on);
+    await widget.store.setPref(alertsEnabledPref, on ? '1' : '0');
+    if (on) await NotificationSink().requestPermission();
   }
 
   @override
@@ -276,6 +288,17 @@ class _SettingsPageState extends State<SettingsPage> {
             DropdownMenuItem(value: OddsFormat.american, child: Text('American (+150)')),
           ],
           onChanged: (v) => setState(() => _odds = v ?? _odds),
+        ),
+        const SizedBox(height: 24),
+        Text('Live alerts', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        SwitchListTile(
+          key: const Key('alerts-switch'),
+          contentPadding: EdgeInsets.zero,
+          value: _alerts,
+          onChanged: _setAlerts,
+          title: const Text('Alerts for matches in open bets'),
+          subtitle: const Text('Kick-off, every goal and the final score for matches in your pending bets and open '
+              'parlays. Checked every minute while BetPilot is open or running in the background.'),
         ),
         const SizedBox(height: 24),
         Text('AI chat', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),

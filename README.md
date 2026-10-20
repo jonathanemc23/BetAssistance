@@ -23,6 +23,12 @@ target iOS later.
   `banktrack://bet?d=<code>` links and pasted links (link icon on the Bets tab).
   The page is published by `.github/workflows/pages.yml` from `web/`; GitHub
   Pages must be enabled with source "GitHub Actions".
+- **Live alerts**: Android notifications on kick-off, every goal (score
+  change) and full time for matches in pending bets picked from Matches and
+  in open parlays' linked legs. `lib/data/live_alert_service.dart` reads
+  those matches from the feed once a minute while the app runs (open or in
+  the background until Android stops it); `lib/logic/live_alerts.dart`
+  decides what to say. Switch it off in Settings.
 - **Charts screen**: bankroll over time, profit by month, results breakdown,
   profit and ROI by sport.
 - **Settings**: starting bankroll and date, unit size, currency, decimal or
