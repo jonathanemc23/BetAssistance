@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'data/database.dart';
 import 'data/fixtures.dart';
+import 'data/live_alert_service.dart';
 import 'data/models.dart';
 import 'data/store.dart';
 import 'logic/share.dart';
@@ -23,7 +24,9 @@ Future<void> main() async {
   final db = await AppDatabase.open();
   final store = BankStore(db);
   await store.load();
-  runApp(BankTrackApp(store: store, links: AppLinks().uriLinkStream));
+  final fixtures = FixturesApi();
+  LiveAlertService(store: store, api: fixtures, sink: NotificationSink()).start();
+  runApp(BankTrackApp(store: store, fixtures: fixtures, links: AppLinks().uriLinkStream));
 }
 
 class BankTrackApp extends StatelessWidget {
