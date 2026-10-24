@@ -5,6 +5,7 @@ import '../data/models.dart';
 import '../data/store.dart';
 import '../logic/claude_assistant.dart';
 import 'format.dart';
+import 'profile.dart';
 import 'themes.dart';
 
 /// Bottom sheet to record a deposit or withdrawal.
@@ -177,6 +178,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _start, _unit;
   final _aiKey = TextEditingController();
+  late final _name = TextEditingController(text: widget.store.profileName);
   late String _currency, _startDate;
   late OddsFormat _odds;
   bool _showKey = false;
@@ -211,6 +213,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _start.dispose();
     _unit.dispose();
     _aiKey.dispose();
+    _name.dispose();
     super.dispose();
   }
 
@@ -223,6 +226,7 @@ class _SettingsPageState extends State<SettingsPage> {
       oddsFormat: _odds,
     );
     await widget.store.setPref(aiKeyPref, _aiKey.text.trim());
+    await widget.store.setProfileName(_name.text);
     await widget.store.saveSettings(s);
     if (mounted) Navigator.pop(context, 'Settings saved');
   }
@@ -233,6 +237,34 @@ class _SettingsPageState extends State<SettingsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
+        Text('Profile', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 10),
+        Row(children: [
+          InkWell(
+            key: const Key('avatar-button'),
+            customBorder: const CircleBorder(),
+            onTap: () => showAvatarPicker(context, widget.store),
+            child: ListenableBuilder(
+              listenable: widget.store,
+              builder: (context, _) => ProfileAvatar(store: widget.store, size: 64),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              TextField(
+                controller: _name,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Your name'),
+              ),
+              TextButton(
+                onPressed: () => showAvatarPicker(context, widget.store),
+                child: const Text('Change avatar'),
+              ),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 24),
         Text('Theme', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 10),
         ListenableBuilder(

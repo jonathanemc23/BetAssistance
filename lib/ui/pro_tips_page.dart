@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../data/fixtures.dart';
 import '../data/store.dart';
 import '../logic/pro_tips.dart';
+import '../logic/stats.dart';
 import 'format.dart';
 import 'matches_screen.dart';
 
@@ -49,29 +50,37 @@ class ProTipsButton extends StatelessWidget {
   }
 }
 
-/// Opens the Pro tips page for [match].
+/// Opens the Pro tips page for [match]. With [api] the page reads the
+/// match's details itself when [details] is missing.
 Future<void> openProTips(BuildContext context,
-        {required BankStore store, required Match match, required MatchDetails? details}) =>
+        {required BankStore store, required Match match, MatchDetails? details, FixturesApi? api, int tab = 0}) =>
     Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => ProTipsPage(store: store, match: match, details: details ?? MatchDetails.statusOf(match)),
+      builder: (_) => ProTipsPage(store: store, match: match, details: details, api: api, initialTab: tab),
     ));
+
+/// The tips for [m] as the app shows them everywhere: the simulated ones,
+/// with the Pro tips already bought in their place.
+MatchTips tipsFor(BankStore store, Match m, [MatchDetails? details]) =>
+    simulateTips(m, details ?? MatchDetails.statusOf(m)).withBought(store.boughtTips(m.id));
 
 /// The match's predictions: free Daily tips, and Pro tips unlocked with tokens.
 class ProTipsPage extends StatefulWidget {
-  const ProTipsPage({super.key, required this.store, required this.match, required this.details});
+  const ProTipsPage({super.key, required this.store, required this.match, this.details, this.api, this.initialTab = 0});
   final BankStore store;
   final Match match;
-  final MatchDetails details;
+  final MatchDetails? details;
+  final FixturesApi? api;
+  final int initialTab;
 
   @override
   State<ProTipsPage> createState() => _ProTipsPageState();
 }
 
 class _ProTipsPageState extends State<ProTipsPage> {
-  late final MatchTips _tips = simulateTips(widget.match, widget.details);
+  late MatchDetails _details = widget.details ?? MatchDetails.statusOf(widget.match);
 
   (int, int)? get _score {
-    final d = widget.details, m = widget.match;
+    final d = _details, m = widget.match;
     if ((d.state == MatchState.finished || m.state == MatchState.finished)) {
       final h = d.homeScore ?? int.tryParse(m.home.score ?? ''), a = d.awayScore ?? int.tryParse(m.away.score ?? '');
       if (h != null && a != null) return (h, a);
@@ -80,57 +89,81 @@ class _ProTipsPageState extends State<ProTipsPage> {
   }
 
   /// Tips can be bought until kick-off.
-  bool get _open => widget.match.state == MatchState.scheduled && widget.details.state != MatchState.live;
+  bool get _open => widget.match.state == MatchState.scheduled && _details.state != MatchState.live;
 
   @override
   void initState() {
     super.initState();
-    if (_score case (final h, final a)) widget.store.settleTips(_tips.pro, h, a);
+    _settle();
+    final api = widget.api;
+    if (widget.details == null && api != null) {
+      // The form and table behind each tip; the tips themselves don't change.
+      api.details(widget.match).then((d) {
+        if (!mounted) return;
+        setState(() => _details = d);
+        _settle();
+      }, onError: (Object _) {});
+    }
+  }
+
+  void _settle() {
+    if (_score case (final h, final a)) widget.store.settleTips(tipsFor(widget.store, widget.match, _details).pro, h, a);
   }
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
+      initialIndex: widget.initialTab,
       child: ListenableBuilder(
         listenable: widget.store,
-        builder: (context, _) => Scaffold(
-          appBar: AppBar(
-            title: const Text('Pro tips'),
-            actions: [
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: _TokenChip(tokens: widget.store.tokens, onTap: () => showTokensSheet(context, widget.store)),
-              ),
-            ],
-          ),
-          body: Column(children: [
-            _Teams(match: widget.match, score: _score),
-            const TabBar(tabs: [
-              Tab(text: 'Daily tips'),
-              Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.workspace_premium, size: 18),
-                SizedBox(width: 6),
-                Text('Pro tips'),
-              ])),
-            ]),
-            Expanded(
-              child: TabBarView(children: [
-                _DailyTab(tips: _tips, score: _score),
-                _ProTab(store: widget.store, tips: _tips, score: _score, open: _open),
-              ]),
+        builder: (context, _) {
+          final tips = tipsFor(widget.store, widget.match, _details);
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Pro tips'),
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: TokenChip(store: widget.store),
+                ),
+              ],
             ),
-          ]),
-        ),
+            body: Column(children: [
+              _Teams(match: widget.match, score: _score),
+              const _ProTabBar(),
+              Expanded(
+                child: TabBarView(children: [
+                  _DailyTab(store: widget.store, tips: tips, score: _score),
+                  _ProTab(store: widget.store, tips: tips, score: _score, open: _open),
+                ]),
+              ),
+            ]),
+          );
+        },
       ),
     );
   }
 }
 
-class _TokenChip extends StatelessWidget {
-  const _TokenChip({required this.tokens, required this.onTap});
-  final int tokens;
-  final VoidCallback onTap;
+class _ProTabBar extends StatelessWidget {
+  const _ProTabBar();
+
+  @override
+  Widget build(BuildContext context) => const TabBar(tabs: [
+        Tab(text: 'Daily tips'),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.workspace_premium, size: 18),
+          SizedBox(width: 6),
+          Text('Pro tips'),
+        ])),
+      ]);
+}
+
+/// The token balance; opens the wallet.
+class TokenChip extends StatelessWidget {
+  const TokenChip({super.key, required this.store});
+  final BankStore store;
 
   @override
   Widget build(BuildContext context) {
@@ -140,13 +173,13 @@ class _TokenChip extends StatelessWidget {
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
+        onTap: () => showTokensSheet(context, store),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(6, 5, 12, 5),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const _Coin(size: 20),
+            const TokenCoin(size: 20),
             const SizedBox(width: 6),
-            Text('$tokens', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+            Text('${store.tokens}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
           ]),
         ),
       ),
@@ -155,8 +188,8 @@ class _TokenChip extends StatelessWidget {
 }
 
 /// A gold token.
-class _Coin extends StatelessWidget {
-  const _Coin({this.size = 18});
+class TokenCoin extends StatelessWidget {
+  const TokenCoin({super.key, this.size = 18});
   final double size;
 
   @override
@@ -243,10 +276,53 @@ class _Teams extends StatelessWidget {
   }
 }
 
+/// One line naming a tip's match: crests, teams, kick-off and league. Opens
+/// the match's own tips when tapped.
+class TipMatchLine extends StatelessWidget {
+  const TipMatchLine({super.key, required this.match, this.onTap});
+  final Match match;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final m = match;
+    final when = m.state == MatchState.live ? 'Live' : DateFormat.Hm().format(m.kickoff.toLocal());
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(children: [
+          TeamLogo(url: m.home.logo, name: m.home.name, size: 20),
+          const SizedBox(width: 2),
+          TeamLogo(url: m.away.logo, name: m.away.name, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(m.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text('$when · ${m.league.name}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            ]),
+          ),
+          if (onTap != null) Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+        ]),
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------- Daily tips
 
 class _DailyTab extends StatelessWidget {
-  const _DailyTab({required this.tips, required this.score});
+  const _DailyTab({required this.store, required this.tips, required this.score});
+  final BankStore store;
   final MatchTips tips;
   final (int, int)? score;
 
@@ -254,8 +330,13 @@ class _DailyTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final n = tips.pro.length;
     return ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 32), children: [
-      _Promo(count: tips.pro.length, onTap: () => DefaultTabController.of(context).animateTo(1)),
+      ProTipsPromo(
+        text: '$n expert pick${n == 1 ? '' : 's'} for this match with the reasons behind them. '
+            'If a Pro tip loses, your tokens come back.',
+        onTap: () => DefaultTabController.of(context).animateTo(1),
+      ),
       const SizedBox(height: 18),
       Padding(
         padding: const EdgeInsets.only(left: 4, bottom: 8),
@@ -267,16 +348,17 @@ class _DailyTab extends StatelessWidget {
           child: Text('No free tips for this match.',
               textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
         ),
-      for (final t in tips.daily) _TipCard(tip: t, unlocked: true, score: score),
+      for (final t in tips.daily) TipCard(tip: t, store: store, score: score),
       const _PreviewNote(),
     ]);
   }
 }
 
-/// The banner at the top of Daily tips that sells the Pro tips tab.
-class _Promo extends StatelessWidget {
-  const _Promo({required this.count, required this.onTap});
-  final int count;
+/// The banner that sells Pro tips, on the Daily tips tabs and Home.
+class ProTipsPromo extends StatelessWidget {
+  const ProTipsPromo({super.key, required this.text, required this.onTap, this.title = 'Get our full bet analysis'});
+  final String title;
+  final String text;
   final VoidCallback onTap;
 
   @override
@@ -315,17 +397,12 @@ class _Promo extends StatelessWidget {
                       style: TextStyle(color: _onGold, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1)),
                 ),
                 const SizedBox(height: 10),
-                Text('Get our full bet analysis',
-                    style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w900)),
+                Text(title, style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 4),
-                Text(
-                  '$count expert pick${count == 1 ? '' : 's'} for this match with the reasons behind them. '
-                  "If a Pro tip loses, your tokens come back.",
-                  style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: 0.85)),
-                ),
+                Text(text, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: 0.85))),
                 const SizedBox(height: 12),
                 Wrap(spacing: 6, runSpacing: 6, children: [
-                  for (final c in Confidence.values) _LevelPill(level: c, dark: true),
+                  for (final c in Confidence.values) LevelPill(level: c, dark: true),
                 ]),
                 const SizedBox(height: 14),
                 Container(
@@ -368,6 +445,43 @@ class _PreviewNote extends StatelessWidget {
 
 // ---------------------------------------------------------------- Pro tips
 
+/// How Pro tips are priced, under the token balance.
+const proRulesText = 'Every Pro tip is a value bet: Max singles at odds of 1.80 or more, '
+    'High and Medium at 1.90 or more, and bet builders of two selections above 2.00. '
+    'Max costs 3 tokens, High 2 and Medium 1. If the tip loses, the tokens go back to your balance.';
+
+/// The token balance with the Get tokens button and the pricing rules.
+class _Wallet extends StatelessWidget {
+  const _Wallet({required this.store});
+  final BankStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(18)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const TokenCoin(size: 30),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${store.tokens} token${store.tokens == 1 ? '' : 's'}',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+              Text('Your balance', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            ]),
+          ),
+          FilledButton.tonal(onPressed: () => showTokensSheet(context, store), child: const Text('Get tokens')),
+        ]),
+        const SizedBox(height: 12),
+        Text(proRulesText, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+      ]),
+    );
+  }
+}
+
 class _ProTab extends StatelessWidget {
   const _ProTab({required this.store, required this.tips, required this.score, required this.open});
   final BankStore store;
@@ -377,34 +491,9 @@ class _ProTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
+    final cs = Theme.of(context).colorScheme;
     return ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 32), children: [
-      Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(18)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const _Coin(size: 30),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('${store.tokens} token${store.tokens == 1 ? '' : 's'}',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-                Text('Your balance', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-              ]),
-            ),
-            FilledButton.tonal(onPressed: () => showTokensSheet(context, store), child: const Text('Get tokens')),
-          ]),
-          const SizedBox(height: 12),
-          Text(
-            'Each Pro tip costs tokens by how sure we are: '
-            '${[for (final c in Confidence.values) '${c.label} ${c.cost}'].join(', ')}. '
-            'If the tip loses, the tokens go back to your balance.',
-            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-          ),
-        ]),
-      ),
+      _Wallet(store: store),
       const SizedBox(height: 16),
       if (tips.pro.isEmpty)
         Padding(
@@ -412,59 +501,54 @@ class _ProTab extends StatelessWidget {
           child: Text('No Pro tips for this match yet.',
               textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
         ),
-      for (final t in tips.pro)
-        _TipCard(
-          tip: t,
-          unlocked: store.isUnlocked(t),
-          score: score,
-          settled: store.unlockedTips[t.id]?.result,
-          onBuy: open ? () => _buy(context, t) : null,
-        ),
+      for (final t in tips.pro) TipCard(tip: t, store: store, score: score, onBuy: open ? () => buyTip(context, store, t) : null),
       const _PreviewNote(),
     ]);
   }
+}
 
-  Future<void> _buy(BuildContext context, Tip t) async {
-    if (store.tokens < t.cost) {
-      await showTokensSheet(context, store, need: t.cost);
-      return;
-    }
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const _Coin(size: 36),
-        title: Text('Buy this ${t.confidence.label} tip?'),
-        content: Text('It costs ${t.cost} token${t.cost == 1 ? '' : 's'} of your ${store.tokens}. '
-            'If the tip loses, you get ${t.cost == 1 ? 'it' : 'them'} back.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Buy prediction')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    if (await store.unlockTip(t) && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unlocked: ${t.pick}')));
-    }
+/// Asks, then spends tokens on [t]; opens the wallet when there aren't enough.
+Future<void> buyTip(BuildContext context, BankStore store, Tip t) async {
+  if (store.tokens < t.cost) {
+    await showTokensSheet(context, store, need: t.cost);
+    return;
+  }
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      icon: const TokenCoin(size: 36),
+      title: Text('Buy this ${t.level.label} tip?'),
+      content: Text('It costs ${t.cost} token${t.cost == 1 ? '' : 's'} of your ${store.tokens}. '
+          'If the tip loses, you get ${t.cost == 1 ? 'it' : 'them'} back.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Buy prediction')),
+      ],
+    ),
+  );
+  if (ok != true) return;
+  if (await store.unlockTip(t) && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unlocked: ${t.pick}')));
   }
 }
 
+/// The colour of a confidence level.
+Color levelColor(Confidence c) => switch (c) {
+      Confidence.max => const Color(0xFFE0A93B),
+      Confidence.high => const Color(0xFF4FB286),
+      Confidence.medium => const Color(0xFF5E9BD6),
+    };
+
 /// Small label for a confidence level with its price.
-class _LevelPill extends StatelessWidget {
-  const _LevelPill({required this.level, this.dark = false, this.showCost = true});
+class LevelPill extends StatelessWidget {
+  const LevelPill({super.key, required this.level, this.dark = false, this.showCost = true});
   final Confidence level;
   final bool dark;
   final bool showCost;
 
-  static Color colorOf(Confidence c) => switch (c) {
-        Confidence.max => const Color(0xFFE0A93B),
-        Confidence.high => const Color(0xFF4FB286),
-        Confidence.medium => const Color(0xFF5E9BD6),
-      };
-
   @override
   Widget build(BuildContext context) {
-    final c = colorOf(level);
+    final c = levelColor(level);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -485,26 +569,89 @@ class _LevelPill extends StatelessWidget {
   }
 }
 
-/// One prediction. Locked Pro tips keep the pick blurred behind a buy button.
-class _TipCard extends StatelessWidget {
-  const _TipCard({required this.tip, required this.unlocked, required this.score, this.settled, this.onBuy});
-  final Tip tip;
-  final bool unlocked;
-  final (int, int)? score;
+class _FreePill extends StatelessWidget {
+  const _FreePill();
 
-  /// 'won' or 'refunded' for a paid tip once the match is over.
-  final String? settled;
-  final VoidCallback? onBuy;
+  @override
+  Widget build(BuildContext context) {
+    final c = BankColors.win(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: c.withValues(alpha: 0.7)),
+      ),
+      child: Text('FREE', style: TextStyle(color: c, fontSize: 10.5, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+    );
+  }
+}
+
+/// A small fact about a tip, such as its odds.
+class _Fact extends StatelessWidget {
+  const _Fact(this.label, this.value, {this.color});
+  final String label;
+  final String value;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final level = _LevelPill.colorOf(tip.confidence);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(10)),
+      child: Text.rich(TextSpan(children: [
+        TextSpan(text: '$label ', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+        TextSpan(
+            text: value,
+            style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900, color: color)),
+      ])),
+    );
+  }
+}
+
+/// One prediction. Locked Pro tips show their odds and value but keep the
+/// pick blurred behind a buy button. With [match] the card names the match
+/// and opens its tips from that line.
+class TipCard extends StatelessWidget {
+  const TipCard({super.key, required this.tip, required this.store, this.score, this.onBuy, this.match, this.onOpenMatch});
+  final Tip tip;
+  final BankStore store;
+  final (int, int)? score;
+  final VoidCallback? onBuy;
+  final Match? match;
+  final VoidCallback? onOpenMatch;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final level = levelColor(tip.level);
+    final unlocked = store.isUnlocked(tip);
+    final settled = store.unlockedTips[tip.id]?.result;
     final won = tip.result(score?.$1, score?.$2);
+    final format = store.settings.oddsFormat;
+
+    final facts = Wrap(spacing: 6, runSpacing: 6, children: [
+      _Fact(tip.isCombo ? 'Combined odds' : 'Odds', formatOdds(tip.odds, format)),
+      _Fact('Value', '+${(tip.value * 100).round()}%', color: BankColors.win(context)),
+    ]);
 
     final pick = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(tip.pick, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+      Text(tip.isCombo ? 'Bet builder' : tip.pick,
+          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+      if (tip.isCombo)
+        for (final l in tip.legs)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(children: [
+              Icon(Icons.check_circle_outline, size: 16, color: level),
+              const SizedBox(width: 6),
+              Expanded(child: Text(l.pick, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+              Text(formatOdds(l.odds, format), style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant)),
+            ]),
+          ),
       const SizedBox(height: 10),
       Row(children: [
         Expanded(
@@ -521,9 +668,8 @@ class _TipCard extends StatelessWidget {
         const SizedBox(width: 10),
         Text('${tip.percent}%', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900, color: level)),
       ]),
-      const SizedBox(height: 4),
-      Text('Fair odds ${tip.fairOdds.toStringAsFixed(2)}',
-          style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+      const SizedBox(height: 8),
+      facts,
       const SizedBox(height: 10),
       for (final r in tip.reasons)
         Padding(
@@ -539,38 +685,42 @@ class _TipCard extends StatelessWidget {
     ]);
 
     // Placeholder text under the blur, so the real pick is never on screen.
-    final locked = Stack(alignment: Alignment.center, children: [
-      ImageFiltered(
-        imageFilter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Locked prediction pick', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-          const SizedBox(height: 10),
-          Container(height: 8, decoration: BoxDecoration(color: level, borderRadius: BorderRadius.circular(6))),
-          const SizedBox(height: 10),
-          const Text('Analysis of form, table and prices behind this pick for the match.'),
-          const Text('More reasons from our model.'),
-        ]),
-      ),
-      if (onBuy != null)
-        DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [BoxShadow(color: _gold[1].withValues(alpha: 0.4), blurRadius: 12)],
-          ),
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: _gold[1], foregroundColor: _onGold),
-            onPressed: onBuy,
-            icon: const Icon(Icons.lock_open, size: 18),
-            label: Text('Buy prediction · ${tip.cost} token${tip.cost == 1 ? '' : 's'}',
-                style: const TextStyle(fontWeight: FontWeight.w900)),
-          ),
-        )
-      else
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(20)),
-          child: const Text('Sales closed at kick-off', style: TextStyle(fontWeight: FontWeight.w700)),
+    final locked = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      facts,
+      const SizedBox(height: 10),
+      Stack(alignment: Alignment.center, children: [
+        ImageFiltered(
+          imageFilter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Locked prediction pick', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 10),
+            Container(height: 8, decoration: BoxDecoration(color: level, borderRadius: BorderRadius.circular(6))),
+            const SizedBox(height: 10),
+            const Text('Analysis of form, table and prices behind this pick for the match.'),
+            const Text('More reasons from our model.'),
+          ]),
         ),
+        if (onBuy != null)
+          DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [BoxShadow(color: _gold[1].withValues(alpha: 0.4), blurRadius: 12)],
+            ),
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: _gold[1], foregroundColor: _onGold),
+              onPressed: onBuy,
+              icon: const Icon(Icons.lock_open, size: 18),
+              label: Text('Buy prediction · ${tip.cost} token${tip.cost == 1 ? '' : 's'}',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+            ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(20)),
+            child: const Text('Sales closed at kick-off', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+      ]),
     ]);
 
     return Container(
@@ -582,19 +732,22 @@ class _TipCard extends StatelessWidget {
         border: Border(left: BorderSide(color: level, width: 4)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (match != null) ...[
+          TipMatchLine(match: match!, onTap: onOpenMatch),
+          Divider(height: 14, color: cs.outlineVariant),
+        ],
         Row(children: [
           Expanded(
-            child: Text(tip.market.group.toUpperCase(),
+            // The market stays hidden on a locked tip: with the odds it would
+            // give the pick away.
+            child: Text(unlocked ? tip.group.toUpperCase() : 'PRO TIP',
                 style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1, color: cs.onSurfaceVariant)),
           ),
           if (unlocked && won != null) ...[
             _Result(won: won, refunded: settled == 'refunded', cost: tip.cost),
             const SizedBox(width: 6),
           ],
-          if (tip.free)
-            _LevelPill(level: tip.confidence, showCost: false)
-          else
-            _LevelPill(level: tip.confidence),
+          if (tip.free) const _FreePill() else LevelPill(level: tip.level),
         ]),
         const SizedBox(height: 8),
         if (unlocked) pick else locked,
@@ -639,7 +792,7 @@ Future<void> showTokensSheet(BuildContext context, BankStore store, {int? need})
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const _Coin(size: 56),
+                const TokenCoin(size: 56),
                 const SizedBox(height: 10),
                 Text('${store.tokens} token${store.tokens == 1 ? '' : 's'}',
                     style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
@@ -674,3 +827,353 @@ Future<void> showTokensSheet(BuildContext context, BankStore store, {int? need})
         },
       ),
     );
+
+// ---------------------------------------------------------------- Pro tips hub
+
+/// Opens the Pro tips page for the whole day, on [tab] (1 is Pro tips).
+Future<void> openProTipsHub(BuildContext context,
+        {required BankStore store, required FixturesApi api, DateTime? today, int tab = 0}) =>
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => ProTipsHub(store: store, api: api, today: today, initialTab: tab),
+    ));
+
+/// Pro tips for the day, from Bet Tools and Home: free tips and Pro tips for
+/// the important matches, and a search for any other match.
+class ProTipsHub extends StatefulWidget {
+  const ProTipsHub({super.key, required this.store, required this.api, this.today, this.initialTab = 0});
+  final BankStore store;
+  final FixturesApi api;
+  final DateTime? today;
+  final int initialTab;
+
+  @override
+  State<ProTipsHub> createState() => _ProTipsHubState();
+}
+
+class _ProTipsHubState extends State<ProTipsHub> {
+  List<Match>? _matches;
+  String? _error;
+
+  DateTime get _today => widget.today ?? DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load({bool refresh = false}) async {
+    setState(() => _error = null);
+    try {
+      final list = await widget.api.featuredMatches(_today, refresh: refresh);
+      if (mounted) setState(() => _matches = list);
+    } on FixturesException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    }
+  }
+
+  void _open(Match m, {int tab = 0}) =>
+      openProTips(context, store: widget.store, match: m, api: widget.api, tab: tab);
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      initialIndex: widget.initialTab,
+      child: ListenableBuilder(
+        listenable: widget.store,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(
+            title: const Text('Pro tips'),
+            actions: [Padding(padding: const EdgeInsets.only(right: 12), child: TokenChip(store: widget.store))],
+          ),
+          body: Column(children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: _SearchButton(
+                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => _MatchSearch(store: widget.store, api: widget.api, day: _today, onOpen: _open),
+                )),
+              ),
+            ),
+            const _ProTabBar(),
+            Expanded(child: _body()),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _body() {
+    final list = _matches;
+    if (list == null) {
+      if (_error == null) return const Center(child: CircularProgressIndicator());
+      return _HubMessage(
+        icon: Icons.cloud_off,
+        text: _error!,
+        action: FilledButton.tonal(onPressed: _load, child: const Text('Try again')),
+      );
+    }
+    // Tips are sold until kick-off.
+    final open = [for (final m in list) if (m.state == MatchState.scheduled) m];
+    final tips = {for (final m in open) m: tipsFor(widget.store, m)};
+    return TabBarView(children: [
+      RefreshIndicator(
+        onRefresh: () => _load(refresh: true),
+        child: _HubDaily(store: widget.store, tips: tips, onOpen: _open),
+      ),
+      RefreshIndicator(
+        onRefresh: () => _load(refresh: true),
+        child: _HubPro(store: widget.store, tips: tips, onOpen: (m) => _open(m, tab: 1)),
+      ),
+    ]);
+  }
+}
+
+class _SearchButton extends StatelessWidget {
+  const _SearchButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Material(
+      color: cs.surfaceContainerHigh,
+      borderRadius: BorderRadius.circular(28),
+      child: InkWell(
+        key: const Key('search-match'),
+        borderRadius: BorderRadius.circular(28),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: Row(children: [
+            Icon(Icons.search, color: cs.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text('Search a match',
+                  style: theme.textTheme.bodyLarge?.copyWith(color: cs.onSurfaceVariant)),
+            ),
+            Icon(Icons.auto_awesome, size: 18, color: _gold[1]),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _HubMessage extends StatelessWidget {
+  const _HubMessage({required this.icon, required this.text, this.action});
+  final IconData icon;
+  final String text;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 40, color: cs.onSurfaceVariant),
+          const SizedBox(height: 12),
+          Text(text, textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
+          if (action != null) ...[const SizedBox(height: 16), action!],
+        ]),
+      ),
+    );
+  }
+}
+
+/// Free tips for the day's important matches, under the Pro tips promo.
+class _HubDaily extends StatelessWidget {
+  const _HubDaily({required this.store, required this.tips, required this.onOpen});
+  final BankStore store;
+  final Map<Match, MatchTips> tips;
+  final void Function(Match) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final pro = tips.values.fold<int>(0, (n, t) => n + t.pro.length);
+    final free = [
+      for (final e in tips.entries)
+        if (e.value.daily.isNotEmpty) (e.key, e.value.daily.first),
+    ];
+    return ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 32), children: [
+      ProTipsPromo(
+        title: "Today's best value bets",
+        text: '$pro expert pick${pro == 1 ? '' : 's'} for ${tips.length} of today\'s big matches. '
+            'If a Pro tip loses, your tokens come back.',
+        onTap: () => DefaultTabController.of(context).animateTo(1),
+      ),
+      const SizedBox(height: 18),
+      Padding(
+        padding: const EdgeInsets.only(left: 4, bottom: 8),
+        child: Text("RECOMMENDED FOR TODAY'S BIG MATCHES",
+            style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: cs.primary)),
+      ),
+      if (free.isEmpty)
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('No big matches left today. Search a match to see its tips.',
+              textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
+        ),
+      for (final (m, t) in free) TipCard(tip: t, store: store, match: m, onOpenMatch: () => onOpen(m)),
+      const _PreviewNote(),
+    ]);
+  }
+}
+
+/// Pro tips for the day's important matches, match by match.
+class _HubPro extends StatelessWidget {
+  const _HubPro({required this.store, required this.tips, required this.onOpen});
+  final BankStore store;
+  final Map<Match, MatchTips> tips;
+  final void Function(Match) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final withPro = [for (final e in tips.entries) if (e.value.pro.isNotEmpty) e];
+    return ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 32), children: [
+      _Wallet(store: store),
+      const SizedBox(height: 16),
+      if (withPro.isEmpty)
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('No Pro tips left for today. Search a match to see its tips.',
+              textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
+        ),
+      for (final e in withPro)
+        for (final t in e.value.pro)
+          TipCard(
+            tip: t,
+            store: store,
+            match: e.key,
+            onOpenMatch: () => onOpen(e.key),
+            onBuy: () => buyTip(context, store, t),
+          ),
+      const _PreviewNote(),
+    ]);
+  }
+}
+
+/// Every match of the day, filtered as you type; a match opens its tips.
+class _MatchSearch extends StatefulWidget {
+  const _MatchSearch({required this.store, required this.api, required this.day, required this.onOpen});
+  final BankStore store;
+  final FixturesApi api;
+  final DateTime day;
+  final void Function(Match) onOpen;
+
+  @override
+  State<_MatchSearch> createState() => _MatchSearchState();
+}
+
+class _MatchSearchState extends State<_MatchSearch> {
+  final _query = TextEditingController();
+  var _sport = Sport.soccer;
+  List<Match>? _all;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _all = null;
+      _error = null;
+    });
+    final sport = _sport;
+    try {
+      final list = await widget.api.matchesOn(widget.day, sport: sport);
+      if (mounted && sport == _sport) setState(() => _all = list);
+    } on FixturesException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    }
+  }
+
+  static String _plain(String s) => plainText(s).trim();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final q = _plain(_query.text);
+    final list = [
+      for (final m in _all ?? const <Match>[])
+        if (q.isEmpty || _plain('${m.home.name} ${m.away.name} ${m.league.name}').contains(q)) m,
+    ];
+    return Scaffold(
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: TextField(
+          controller: _query,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Search a team or league', border: InputBorder.none),
+          onChanged: (_) => setState(() {}),
+        ),
+        actions: [
+          if (_query.text.isNotEmpty)
+            IconButton(
+              tooltip: 'Clear',
+              icon: const Icon(Icons.close),
+              onPressed: () => setState(_query.clear),
+            ),
+        ],
+      ),
+      body: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<Sport>(
+              showSelectedIcon: false,
+              segments: [
+                for (final s in Sport.values)
+                  ButtonSegment(value: s, label: FittedBox(fit: BoxFit.scaleDown, child: Text('${s.emoji} ${s.title}'))),
+              ],
+              selected: {_sport},
+              onSelectionChanged: (v) {
+                setState(() => _sport = v.first);
+                _load();
+              },
+            ),
+          ),
+        ),
+        Expanded(
+          child: _all == null
+              ? (_error == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : _HubMessage(
+                      icon: Icons.cloud_off,
+                      text: _error!,
+                      action: FilledButton.tonal(onPressed: _load, child: const Text('Try again')),
+                    ))
+              : list.isEmpty
+                  ? _HubMessage(
+                      icon: Icons.search_off,
+                      text: q.isEmpty ? 'No matches today.' : 'No match today for "${_query.text}".',
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                      itemCount: list.length,
+                      separatorBuilder: (_, _) => Divider(height: 1, color: cs.outlineVariant),
+                      itemBuilder: (context, i) => TipMatchLine(match: list[i], onTap: () => widget.onOpen(list[i])),
+                    ),
+        ),
+      ]),
+    );
+  }
+}

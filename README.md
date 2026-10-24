@@ -5,7 +5,16 @@ target iOS later.
 
 ## What's in it
 
-- **Summary** (main page): bankroll card (balance, available after open bets,
+- **Home** (main page): avatar and name (picked in Settings or by tapping
+  the avatar), the bank with highlights (open bets, money at risk, profit,
+  ROI), the day's important matches in a sideways strip, Pro tips and free
+  tips for those matches. "See summary" opens the full summary.
+- **Pro tips** (Bet Tools, Home, or a match page): simulated predictions.
+  Free tips are priced 1.40-2.00; paid tips are value bets only: Max
+  (3 tokens) at 1.80+, High (2) and Medium (1) at 1.90+, or two selections
+  together above 2.00 (`followsOddsRules` in `lib/logic/pro_tips.dart`).
+  The day's page lists tips for the important matches and has a match search.
+- **Summary**: bankroll card (balance, available after open bets,
   deposit and withdraw, history), stat tiles (profit/loss and units, ROI, win
   rate, number of bets, average odds, money at risk) and bets per type.
 - **Bets**: the bet register with filters, one-tap Won/Lost settling, and a

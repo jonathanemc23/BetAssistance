@@ -13,10 +13,10 @@ import 'ui/bank_screens.dart';
 import 'ui/bet_form.dart';
 import 'ui/bets_screen.dart';
 import 'ui/charts_screen.dart';
+import 'ui/home_screen.dart';
 import 'ui/matches_screen.dart';
 import 'ui/themes.dart';
 import 'ui/share_ui.dart';
-import 'ui/summary_screen.dart';
 import 'ui/tools_screen.dart';
 
 Future<void> main() async {
@@ -109,7 +109,7 @@ class _HomeShellState extends State<HomeShell> {
 
   void _openTools() => _push((_) => Scaffold(
         appBar: AppBar(title: const Text('Bet Tools')),
-        body: BetToolsScreen(store: store, api: widget.fixtures, onOpenMatches: _openMatches),
+        body: BetToolsScreen(store: store, api: widget.fixtures, today: widget.today),
       ));
 
   Future<void> _openSettings() async {
@@ -161,10 +161,13 @@ class _HomeShellState extends State<HomeShell> {
           ],
         ),
         body: IndexedStack(index: _tab, children: [
-          SummaryScreen(
+          HomeScreen(
             store: store,
+            api: widget.fixtures,
+            today: widget.today,
             onLogBet: () => openBetForm(context, store, api: widget.fixtures),
             onOpenBets: () => setState(() => _tab = 1),
+            onOpenMatches: _openMatches,
           ),
           BetsScreen(store: store, api: widget.fixtures),
           if (_tab == 2 || _matchesShown)
@@ -187,7 +190,7 @@ class _HomeShellState extends State<HomeShell> {
             if (i == 2) _matchesShown = true;
           }),
           destinations: const [
-            NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Summary'),
+            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
             NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Bets'),
             NavigationDestination(
                 icon: Icon(Icons.sports_soccer_outlined), selectedIcon: Icon(Icons.sports_soccer), label: 'Matches'),

@@ -2,17 +2,14 @@ import 'dart:math' as math;
 
 import '../data/fixtures.dart';
 
-/// How sure a tip is. The price of a Pro tip follows from it.
+/// How sure a tip is, and the price of a Pro tip at that level.
 enum Confidence {
-  max('Max', 75),
-  high('High', 62),
-  medium('Medium', 0);
+  max('Max'),
+  high('High'),
+  medium('Medium');
 
-  const Confidence(this.label, this.from);
+  const Confidence(this.label);
   final String label;
-
-  /// Lowest chance, in percent, for this level.
-  final int from;
 
   /// Tokens to unlock a Pro tip at this level. Safer tips cost more; a tip
   /// that loses gives its tokens back.
@@ -22,9 +19,28 @@ enum Confidence {
         Confidence.medium => 1,
       };
 
-  static Confidence of(double chance) =>
-      Confidence.values.firstWhere((c) => chance * 100 >= c.from, orElse: () => Confidence.medium);
+  /// Lowest decimal odds a single Pro tip at this level may have: paid tips
+  /// are value bets, never short prices.
+  double get minOdds => this == Confidence.max ? 1.8 : 1.9;
+
+  /// The level for a free tip, from its chance.
+  static Confidence of(double chance) => chance >= 0.6
+      ? Confidence.max
+      : chance >= 0.5
+          ? Confidence.high
+          : Confidence.medium;
 }
+
+/// The odds rules. Free tips stay between 1.4 and 2.0; Pro tips sell value:
+/// a single at [Confidence.minOdds] or more, or two selections together
+/// above 2.0.
+const freeMinOdds = 1.4, freeMaxOdds = 2.0, comboMinOdds = 2.0;
+
+bool followsOddsRules(Tip t) => t.free
+    ? t.legs.length == 1 && t.odds >= freeMinOdds && t.odds <= freeMaxOdds
+    : t.legs.length == 2
+        ? t.odds > comboMinOdds
+        : t.legs.length == 1 && t.odds >= t.level.minOdds;
 
 /// The markets a tip can be on, each settled from the final score.
 enum TipMarket {
@@ -73,40 +89,91 @@ enum TipMarket {
       };
 }
 
-/// One prediction for a match. [free] tips show in Daily tips; the rest are
-/// Pro tips that cost [cost] tokens to unlock.
-class Tip {
-  const Tip({
-    required this.matchId,
-    required this.market,
-    required this.pick,
-    required this.chance,
-    required this.reasons,
-    required this.free,
-    this.line,
-  });
-  final String matchId;
+/// One selection of a tip, with the price it is offered at.
+class TipLeg {
+  const TipLeg(this.market, this.pick, this.odds, {this.line});
   final TipMarket market;
 
   /// What to back, e.g. "Over 1.5 goals".
   final String pick;
+  final double odds;
+  final double? line;
+
+  Map<String, dynamic> toJson() => {'market': market.name, 'pick': pick, 'odds': odds, 'line': ?line};
+
+  static TipLeg? fromJson(Map<String, dynamic> j) {
+    final m = TipMarket.values.where((m) => m.name == j['market']).firstOrNull;
+    if (m == null) return null;
+    return TipLeg(m, '${j['pick'] ?? ''}', (j['odds'] as num?)?.toDouble() ?? 0, line: (j['line'] as num?)?.toDouble());
+  }
+}
+
+/// One prediction for a match: a single, or two selections on the same
+/// match. [free] tips show in Daily tips; the rest are Pro tips that cost
+/// [cost] tokens to unlock.
+class Tip {
+  const Tip({
+    required this.matchId,
+    required this.legs,
+    required this.chance,
+    required this.reasons,
+    required this.free,
+    required this.level,
+  });
+  final String matchId;
+  final List<TipLeg> legs;
 
   /// The model's chance that the tip wins, 0-1.
   final double chance;
   final List<String> reasons;
   final bool free;
-  final double? line;
+  final Confidence level;
 
-  String get id => '$matchId:${market.name}';
-  Confidence get confidence => Confidence.of(chance);
-  int get cost => confidence.cost;
+  String get id => '$matchId:${legs.map((l) => l.market.name).join('+')}';
+  bool get isCombo => legs.length > 1;
+  TipMarket get market => legs.first.market;
+  String get pick => legs.map((l) => l.pick).join(' & ');
+  String get group => isCombo ? 'Bet builder · ${legs.length} selections' : market.group;
+  Confidence get confidence => level;
+  int get cost => level.cost;
   int get percent => (chance * 100).round();
 
-  /// The decimal odds the chance is worth.
-  double get fairOdds => 1 / chance;
+  /// The decimal odds of the tip: both prices multiplied for two selections.
+  double get odds => legs.fold(1.0, (o, l) => o * l.odds);
+
+  /// What the model expects back per unit staked above the stake: positive
+  /// is a value bet.
+  double get value => chance * odds - 1;
 
   /// Won (true), lost (false) or not decided yet (null).
-  bool? result(int? h, int? a) => h == null || a == null ? null : market.wins(h, a, line: line);
+  bool? result(int? h, int? a) =>
+      h == null || a == null ? null : legs.every((l) => l.market.wins(h, a, line: l.line));
+
+  Map<String, dynamic> toJson() => {
+        'match': matchId,
+        'legs': [for (final l in legs) l.toJson()],
+        'chance': chance,
+        'reasons': reasons,
+        'free': free,
+        'level': level.name,
+      };
+
+  static Tip? fromJson(Map<String, dynamic> j) {
+    try {
+      final legs = [for (final l in (j['legs'] as List)) ?TipLeg.fromJson((l as Map).cast<String, dynamic>())];
+      if (legs.isEmpty) return null;
+      return Tip(
+        matchId: '${j['match']}',
+        legs: legs,
+        chance: (j['chance'] as num).toDouble(),
+        reasons: [for (final r in (j['reasons'] as List? ?? const [])) '$r'],
+        free: j['free'] == true,
+        level: Confidence.values.firstWhere((c) => c.name == j['level'], orElse: () => Confidence.medium),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 /// Today's tips for a match: a couple of free ones and the Pro tips.
@@ -116,75 +183,98 @@ class MatchTips {
   final List<Tip> pro;
 
   List<Tip> get all => [...daily, ...pro];
+
+  /// These tips with the ones already bought for the match in their place:
+  /// a bought tip stays what was paid for even when the prices move.
+  MatchTips withBought(Iterable<Tip> bought) {
+    final pro = [...this.pro];
+    for (final b in bought) {
+      if (pro.any((t) => t.id == b.id)) continue;
+      final i = pro.indexWhere((t) => t.level == b.level);
+      if (i >= 0) {
+        pro[i] = b;
+      } else {
+        pro.add(b);
+      }
+    }
+    return MatchTips(daily: daily, pro: pro);
+  }
 }
 
-/// Simulated tips while the prediction model is built: chances start from the
-/// bookmaker's prices when there are any, the match's form and table nudge
-/// them, and a seed from the match id keeps the same tips on every visit.
+/// Simulated tips while the prediction model is built. Each market gets a
+/// price (the bookmaker's when the feed has one, otherwise a fair price with
+/// a usual margin) and a model chance a few points above what the price
+/// implies, so every tip is a value bet. The odds rules then pick the tips:
+/// see [followsOddsRules]. Only the match list's prices and a seed from the
+/// match id go in, so the tips are the same on every page and every visit;
+/// [details] only adds the reasons.
 MatchTips simulateTips(Match match, MatchDetails details) {
   final rnd = math.Random(match.id.codeUnits.fold<int>(17, (h, c) => (h * 31 + c) & 0x3fffffff));
   final soccer = match.league.knownSport == Sport.soccer;
-  final book = [...details.odds, ?match.odds].where((o) => o.home != null && o.away != null).firstOrNull;
+  final book = [?match.odds, ...details.odds].where((o) => o.home != null && o.away != null).firstOrNull;
 
   // Win chances: the bookmaker's, margin removed, or a home-leaning guess.
   double pH, pD, pA;
+  var margin = 0.06;
   if (book != null) {
     final ih = 1 / book.home!, ia = 1 / book.away!, id = book.draw == null ? 0.0 : 1 / book.draw!;
     final sum = ih + ia + id;
     pH = ih / sum;
     pA = ia / sum;
     pD = id / sum;
+    margin = (sum - 1).clamp(0.03, 0.1);
   } else {
     pD = soccer ? 0.22 + rnd.nextDouble() * 0.08 : 0;
     pH = (1 - pD) * (0.45 + rnd.nextDouble() * 0.25);
     pA = 1 - pD - pH;
   }
-  // Form over the last five nudges each side a little.
-  double formScore(String f) => f.isEmpty
-      ? 0
-      : f.split('').map((c) => c == 'W' ? 1.0 : c == 'L' ? -1.0 : 0.0).reduce((a, b) => a + b) / f.length;
-  final nudge = (formScore(details.home.form) - formScore(details.away.form)) * 0.03;
-  pH = (pH + nudge).clamp(0.05, 0.9);
-  pA = (pA - nudge).clamp(0.05, 0.9);
-  final norm = pH + pD + pA;
-  pH /= norm;
-  pD /= norm;
-  pA /= norm;
 
   final home = match.home.name, away = match.away.name;
-  final reasons = _reasons(match, details);
-  final candidates = <(TipMarket, String, double, double?)>[
-    (TipMarket.homeWin, '$home to win', pH, null),
-    (TipMarket.awayWin, '$away to win', pA, null),
+  // (market, pick, fair chance, line, bookmaker price if any)
+  final markets = <(TipMarket, String, double, double?, double?)>[
+    (TipMarket.homeWin, '$home to win', pH, null, book?.home),
+    (TipMarket.awayWin, '$away to win', pA, null, book?.away),
   ];
   if (soccer) {
-    // Goals: ESPN's over price when there is one, otherwise around 2.6 a game.
-    var over25 = book?.over != null && book?.under != null && book?.totalLine == 2.5
-        ? (1 / book!.over!) / (1 / book.over! + 1 / book.under!)
-        : 0.45 + rnd.nextDouble() * 0.14;
+    // Goals: the bookmaker's over price when there is one, otherwise around 2.6 a game.
+    final totals = book?.over != null && book?.under != null && book?.totalLine == 2.5;
+    var over25 = totals ? (1 / book!.over!) / (1 / book.over! + 1 / book.under!) : 0.45 + rnd.nextDouble() * 0.14;
     over25 = over25.clamp(0.3, 0.72);
     final btts = (0.42 + rnd.nextDouble() * 0.16 + (over25 - 0.5) * 0.4).clamp(0.3, 0.7);
-    candidates.addAll([
-      (TipMarket.draw, 'Draw', pD, null),
-      (TipMarket.homeOrDraw, '$home or draw', pH + pD, null),
-      (TipMarket.awayOrDraw, '$away or draw', pA + pD, null),
-      (TipMarket.over15, 'Over 1.5 goals', (over25 + 0.25).clamp(0.55, 0.88), null),
-      (TipMarket.over25, 'Over 2.5 goals', over25, null),
-      (TipMarket.under25, 'Under 2.5 goals', 1 - over25, null),
-      (TipMarket.under35, 'Under 3.5 goals', (1 - over25 + 0.22).clamp(0.5, 0.86), null),
-      (TipMarket.bttsYes, 'Both teams to score', btts, null),
-      (TipMarket.bttsNo, 'Not both teams to score', 1 - btts, null),
-      (TipMarket.homeScores, '$home to score', (0.6 + pH * 0.4).clamp(0.55, 0.9), null),
-      (TipMarket.awayScores, '$away to score', (0.55 + pA * 0.4).clamp(0.5, 0.88), null),
+    markets.addAll([
+      (TipMarket.draw, 'Draw', pD, null, book?.draw),
+      (TipMarket.homeOrDraw, '$home or draw', pH + pD, null, null),
+      (TipMarket.awayOrDraw, '$away or draw', pA + pD, null, null),
+      (TipMarket.over15, 'Over 1.5 goals', (over25 + 0.25).clamp(0.55, 0.88), null, null),
+      (TipMarket.over25, 'Over 2.5 goals', over25, null, totals ? book!.over : null),
+      (TipMarket.under25, 'Under 2.5 goals', 1 - over25, null, totals ? book!.under : null),
+      (TipMarket.under35, 'Under 3.5 goals', (1 - over25 + 0.22).clamp(0.5, 0.86), null, null),
+      (TipMarket.bttsYes, 'Both teams to score', btts, null, null),
+      (TipMarket.bttsNo, 'Not both teams to score', 1 - btts, null, null),
+      (TipMarket.homeScores, '$home to score', (0.6 + pH * 0.4).clamp(0.55, 0.9), null, null),
+      (TipMarket.awayScores, '$away to score', (0.55 + pA * 0.4).clamp(0.5, 0.88), null, null),
     ]);
   } else if (book?.totalLine case final line?) {
-    final over = book!.over != null && book.under != null ? (1 / book.over!) / (1 / book.over! + 1 / book.under!) : 0.5;
+    final hasPrices = book!.over != null && book.under != null;
+    final over = hasPrices ? (1 / book.over!) / (1 / book.over! + 1 / book.under!) : 0.5;
     final unit = match.league.knownSport.scoreUnit;
-    candidates.addAll([
-      (TipMarket.overLine, 'Over $line $unit', over, line),
-      (TipMarket.underLine, 'Under $line $unit', 1 - over, line),
+    markets.addAll([
+      (TipMarket.overLine, 'Over $line $unit', over, line, book.over),
+      (TipMarket.underLine, 'Under $line $unit', 1 - over, line, book.under),
     ]);
   }
+
+  // Each market's price, and the model's chance: what the price implies plus
+  // an edge of 3 to 12 points.
+  final candidates = [
+    for (final (m, pick, p, line, price) in markets)
+      if (p > 0)
+        () {
+          final odds = price ?? double.parse((1 / (p * (1 + margin))).clamp(1.01, 50.0).toStringAsFixed(2));
+          final edge = 0.03 + rnd.nextDouble() * 0.09;
+          return (leg: TipLeg(m, pick, odds, line: line), chance: math.min(0.95, (1 / odds) * (1 + edge)));
+        }(),
+  ];
 
   // Tips that can both win together only: never a market and its opposite.
   const opposite = {
@@ -199,32 +289,87 @@ MatchTips simulateTips(Match match, MatchDetails details) {
     TipMarket.homeOrDraw: TipMarket.awayWin,
     TipMarket.awayOrDraw: TipMarket.homeWin,
   };
+  // Markets that already win whenever the key wins: never paired with it.
+  const implies = {
+    TipMarket.homeWin: {TipMarket.homeOrDraw, TipMarket.homeScores},
+    TipMarket.awayWin: {TipMarket.awayOrDraw, TipMarket.awayScores},
+    TipMarket.draw: {TipMarket.homeOrDraw, TipMarket.awayOrDraw},
+    TipMarket.bttsYes: {TipMarket.homeScores, TipMarket.awayScores, TipMarket.over15},
+    TipMarket.over25: {TipMarket.over15},
+    TipMarket.under25: {TipMarket.under35},
+  };
   final used = <TipMarket>{};
-  Tip? take(double target, {required bool free, double min = 0.3}) {
-    final open = candidates
-        .where((c) => c.$3 >= min && !used.contains(c.$1) && !used.contains(opposite[c.$1]))
-        .toList()
-      ..sort((a, b) => (a.$3 - target).abs().compareTo((b.$3 - target).abs()));
-    final c = open.firstOrNull;
-    if (c == null) return null;
-    used.add(c.$1);
+  final pairs = <String>{};
+  bool open(TipMarket m) => !used.contains(m) && !used.contains(opposite[m]);
+  final reasons = _reasons(match, details);
+  Tip tip(List<({TipLeg leg, double chance})> picked, {required bool free, required Confidence level}) {
+    for (final c in picked) {
+      used.add(c.leg.market);
+    }
+    // Two selections: both chances together, a little less for the price
+    // of combining them.
+    final chance = picked.length == 1 ? picked.single.chance : picked.fold(1.0, (p, c) => p * c.chance) * 0.97;
     return Tip(
       matchId: match.id,
-      market: c.$1,
-      pick: c.$2,
-      chance: c.$3,
-      line: c.$4,
+      legs: [for (final c in picked) c.leg],
+      chance: chance,
       free: free,
-      reasons: [..._marketReason(c.$1, c.$3, home, away), ...reasons],
+      level: level,
+      reasons: [for (final c in picked) ..._marketReason(c.leg.market, c.chance, home, away), ...reasons],
     );
   }
 
-  // The Pro tips first, one at each level where the match allows it.
-  final pro = [take(0.8, free: false, min: 0.62), take(0.68, free: false, min: 0.5), take(0.56, free: false)]
-      .nonNulls
-      .toList()
-    ..sort((a, b) => b.chance.compareTo(a.chance));
-  final daily = [take(0.6, free: true), take(0.5, free: true)].nonNulls.toList();
+  /// The open single priced between [min] and [max] nearest to [target].
+  Tip? single({required double min, double max = 99, required double target, required bool free, Confidence? level}) {
+    final fit = candidates.where((c) => open(c.leg.market) && c.leg.odds >= min && c.leg.odds <= max).toList()
+      ..sort((a, b) => (a.leg.odds - target).abs().compareTo((b.leg.odds - target).abs()));
+    final c = fit.firstOrNull;
+    if (c == null) return null;
+    return tip([c], free: free, level: level ?? Confidence.of(c.chance));
+  }
+
+  /// Two selections from different markets, together above 2.0: the
+  /// likeliest such pair. A leg may repeat a market another tip uses, but
+  /// never goes against one.
+  Tip? combo(Confidence level) {
+    final legs = candidates
+        .where((c) => !used.contains(opposite[c.leg.market]) && c.leg.odds >= 1.2 && c.leg.odds <= 2.6)
+        .toList();
+    ({TipLeg leg, double chance})? a, b;
+    var best = 0.0;
+    for (var i = 0; i < legs.length; i++) {
+      for (var j = i + 1; j < legs.length; j++) {
+        final x = legs[i], y = legs[j];
+        final (mx, my) = (x.leg.market, y.leg.market);
+        if (mx.group == my.group || opposite[mx] == my || pairs.contains('${mx.name}+${my.name}')) continue;
+        if ((implies[mx]?.contains(my) ?? false) || (implies[my]?.contains(mx) ?? false)) continue;
+        final odds = x.leg.odds * y.leg.odds;
+        if (odds <= comboMinOdds || odds > 4) continue;
+        final p = x.chance * y.chance;
+        if (p > best) (best, a, b) = (p, x, y);
+      }
+    }
+    if (a == null || b == null) return null;
+    pairs.add('${a.leg.market.name}+${b.leg.market.name}');
+    return tip([a, b], free: false, level: level);
+  }
+
+  // Free tips first, from the short prices; then the Pro tips: the safest
+  // value single at Max, a longer price at High, and a two-selection bet
+  // builder at Medium. Each falls back to the other kind when the match has
+  // no market that fits.
+  final daily = [
+    single(min: freeMinOdds, max: freeMaxOdds, target: 1.5, free: true),
+    single(min: freeMinOdds, max: freeMaxOdds, target: 1.7, free: true),
+  ].nonNulls.where(followsOddsRules).toList();
+  final pro = [
+    single(min: Confidence.max.minOdds, max: 2.3, target: 1.85, free: false, level: Confidence.max) ??
+        combo(Confidence.max),
+    single(min: Confidence.high.minOdds, max: 2.8, target: 2.1, free: false, level: Confidence.high) ??
+        combo(Confidence.high),
+    combo(Confidence.medium) ??
+        single(min: Confidence.medium.minOdds, target: 2.6, free: false, level: Confidence.medium),
+  ].nonNulls.where(followsOddsRules).toList();
   return MatchTips(daily: daily, pro: pro);
 }
 
@@ -265,18 +410,25 @@ String _suffix(int n) {
   return switch (n % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', _ => 'th' };
 }
 
-/// A Pro tip the user paid for. [result] is 'won' or 'refunded' once the
-/// match is over.
+/// A Pro tip the user paid for, kept as it was bought. [result] is 'won'
+/// or 'refunded' once the match is over.
 class UnlockedTip {
-  const UnlockedTip({required this.cost, required this.at, this.result});
+  const UnlockedTip({required this.cost, required this.at, this.result, this.tip});
   final int cost;
   final String at;
   final String? result;
 
-  UnlockedTip settled(String result) => UnlockedTip(cost: cost, at: at, result: result);
+  /// The tip as bought (missing for tips bought before 0.16).
+  final Tip? tip;
 
-  Map<String, dynamic> toJson() => {'cost': cost, 'at': at, 'result': ?result};
+  UnlockedTip settled(String result) => UnlockedTip(cost: cost, at: at, result: result, tip: tip);
 
-  factory UnlockedTip.fromJson(Map<String, dynamic> j) =>
-      UnlockedTip(cost: (j['cost'] as num?)?.toInt() ?? 0, at: '${j['at'] ?? ''}', result: j['result'] as String?);
+  Map<String, dynamic> toJson() => {'cost': cost, 'at': at, 'result': ?result, 'tip': ?tip?.toJson()};
+
+  factory UnlockedTip.fromJson(Map<String, dynamic> j) => UnlockedTip(
+        cost: (j['cost'] as num?)?.toInt() ?? 0,
+        at: '${j['at'] ?? ''}',
+        result: j['result'] as String?,
+        tip: j['tip'] is Map ? Tip.fromJson((j['tip'] as Map).cast<String, dynamic>()) : null,
+      );
 }

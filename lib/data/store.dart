@@ -29,6 +29,11 @@ class BankStore extends ChangeNotifier {
   int tokens = 0;
   Map<String, UnlockedTip> unlockedTips = {};
 
+  /// The profile picture: '' for the default, `emoji:<emoji>:<colour>` for
+  /// a preset or `photo:<base64 jpeg>`. Saved as a preference with the name.
+  String avatar = '';
+  String profileName = '';
+
   /// Selected look, one of [appThemes] ids. Saved as a preference.
   String themeId = 'olive';
   bool loaded = false;
@@ -43,6 +48,8 @@ class BankStore extends ChangeNotifier {
     parlays = await _db.parlays();
     favorites = await _db.favorites();
     themeId = await _db.pref('app.theme') ?? 'olive';
+    avatar = await _db.pref('profile.avatar') ?? '';
+    profileName = await _db.pref('profile.name') ?? '';
     await _loadTips();
     loaded = true;
     notifyListeners();
@@ -84,6 +91,18 @@ class BankStore extends ChangeNotifier {
     await _db.setPref('app.theme', id);
   }
 
+  Future<void> setAvatar(String value) async {
+    avatar = value;
+    notifyListeners();
+    await _db.setPref('profile.avatar', value);
+  }
+
+  Future<void> setProfileName(String name) async {
+    profileName = name.trim();
+    notifyListeners();
+    await _db.setPref('profile.name', profileName);
+  }
+
   // Pro tips
   /// Tokens every new user starts with, until tokens can be bought.
   static const starterTokens = 10;
@@ -120,7 +139,7 @@ class BankStore extends ChangeNotifier {
     if (isUnlocked(t)) return true;
     if (tokens < t.cost) return false;
     tokens -= t.cost;
-    unlockedTips[t.id] = UnlockedTip(cost: t.cost, at: _now());
+    unlockedTips[t.id] = UnlockedTip(cost: t.cost, at: _now(), tip: t);
     await _saveTips();
     return true;
   }
@@ -139,6 +158,12 @@ class BankStore extends ChangeNotifier {
     }
     if (changed) await _saveTips();
   }
+
+  /// The Pro tips bought for [matchId], as they were bought.
+  List<Tip> boughtTips(String matchId) => [
+        for (final u in unlockedTips.values)
+          if (u.tip case final t? when t.matchId == matchId) t,
+      ];
 
   Future<void> addTokens(int n) async {
     tokens += n;

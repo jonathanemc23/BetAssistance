@@ -653,8 +653,11 @@ const _filler = {
   'y',
 };
 
+/// [text] in lower case without accents, for matching what people type.
+String plainText(String text) => text.toLowerCase().split('').map((c) => _accents[c] ?? c).join();
+
 Set<String> _teamWords(String name) {
-  final plain = name.toLowerCase().split('').map((c) => _accents[c] ?? c).join();
+  final plain = plainText(name);
   return plain.split(RegExp(r'[^a-z0-9]+')).where((w) => w.length > 1 && !_filler.contains(w)).toSet();
 }
 
@@ -1313,6 +1316,132 @@ class FixturesApi {
     } catch (_) {
       throw const FixturesException("Couldn't load this match. Check your connection and try again.");
     }
+  }
+
+  /// The leagues whose matches are the day's important ones, most important
+  /// first: Home and the Pro tips page lead with them.
+  static const featuredLeagues = [
+    'uefa.champions',
+    'conmebol.libertadores',
+    'eng.1',
+    'esp.1',
+    'ita.1',
+    'ger.1',
+    'fra.1',
+    'arg.1',
+    'bra.1',
+    'uefa.europa',
+    'conmebol.sudamericana',
+    'por.1',
+    'ned.1',
+    'mex.1',
+    'usa.1',
+    'col.1',
+    'nba',
+    'mlb',
+  ];
+
+  /// The important matches on [day] (the phone's day) that haven't finished:
+  /// [featuredLeagues] only, biggest league first, then by kick-off. At most
+  /// [max].
+  Future<List<Match>> featuredMatches(DateTime day, {int max = 10, bool refresh = false}) async {
+    final leagues = [for (final slug in featuredLeagues) ?leagueBySlug(slug)];
+    final list = await matches(Country('featured', 'Featured', '', leagues), day, refresh: refresh);
+    int rank(Match m) => featuredLeagues.indexOf(m.league.slug);
+    final open = [
+      for (final m in list)
+        if (m.state == MatchState.scheduled || m.state == MatchState.live) m,
+    ]..sort((a, b) {
+        final c = rank(a).compareTo(rank(b));
+        return c != 0 ? c : a.kickoff.compareTo(b.kickoff);
+      });
+    return open.take(max).toList();
+  }
+
+  /// Every match ESPN lists on [day] (the phone's day), for searching:
+  /// matches still to play first, then by kick-off.
+  Future<List<Match>> matchesOn(DateTime day, {Sport sport = Sport.soccer}) async {
+    final local = DateTime(day.year, day.month, day.day);
+    final list = await _allOn(local, sport: sport, withTsdb: false);
+    int order(Match m) => switch (m.state) {
+          MatchState.scheduled => 0,
+          MatchState.live => 1,
+          _ => 2,
+        };
+    return [
+      for (final m in list)
+        if (_sameDay(m.kickoff.toLocal(), local)) m,
+    ]..sort((a, b) {
+        final c = order(a).compareTo(order(b));
+        return c != 0 ? c : a.kickoff.compareTo(b.kickoff);
+      });
+  }
+
+  final _schedules = <String, (DateTime, TeamSchedule)>{};
+
+  /// One team's finished games in a season (the current one when null),
+  /// from ESPN's team schedule. Soccer reads every competition the team
+  /// plays in. Kept half an hour; empty when it couldn't be read.
+  Future<TeamSchedule> _schedule(League league, String teamId, {int? season}) async {
+    final base = league.knownSport == Sport.soccer ? '$_espn/soccer/all' : _feed(league);
+    final url = '$base/teams/$teamId/schedule${season == null ? '' : '?season=$season'}';
+    final hit = _schedules[url];
+    if (hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 30)) return hit.$2;
+    String? body;
+    try {
+      body = await _get(url);
+    } catch (_) {
+      body = null;
+    }
+    if (body == null) return const TeamSchedule();
+    final s = parseSchedule(body, teamId);
+    _schedules[url] = (DateTime.now(), s);
+    return s;
+  }
+
+  /// Each team's last [count] results and their last [count] meetings, from
+  /// the teams' schedules: the current season, then earlier ones (up to six
+  /// back for the meetings). Only games before this match count. Null for
+  /// matches only TheSportsDB has, or when the teams' ids are unknown.
+  Future<MatchHistory?> history(Match m, MatchDetails d, {int count = 10}) async {
+    final homeId = d.home.id, awayId = d.away.id;
+    if (m.id.startsWith('tsdb:') || homeId.isEmpty || awayId.isEmpty) return null;
+    bool before(ScheduleGame g) => g.id != m.id && (g.game.date?.isBefore(m.kickoff) ?? true);
+
+    Future<(List<ScheduleGame>, int?)> latest(String id) async {
+      final now = await _schedule(m.league, id);
+      final games = now.games.where(before).toList();
+      if (games.length < count && now.season != null) {
+        games.addAll((await _schedule(m.league, id, season: now.season! - 1)).games.where(before));
+      }
+      return (games, now.season);
+    }
+
+    final (home, away) = await (latest(homeId), latest(awayId)).wait;
+    final seen = <String>{};
+    bool meeting(ScheduleGame g) =>
+        ((g.homeId == homeId && g.awayId == awayId) || (g.homeId == awayId && g.awayId == homeId)) && seen.add(g.id);
+    final meetings = home.$1.where(meeting).toList();
+    // Earlier seasons, three at a time, until there are enough meetings.
+    final season = home.$2;
+    for (var back = 1; season != null && back <= 6 && meetings.length < count; back += 3) {
+      final older = await Future.wait([
+        for (var b = back; b < back + 3; b++) _schedule(m.league, homeId, season: season - b),
+      ]);
+      for (final s in older) {
+        meetings.addAll(s.games.where(before).where(meeting));
+      }
+    }
+    meetings.sort((x, y) => (y.game.date ?? DateTime(0)).compareTo(x.game.date ?? DateTime(0)));
+    return MatchHistory(
+      home: home.$1.take(count).map((g) => g.game).toList(),
+      away: away.$1.take(count).map((g) => g.game).toList(),
+      // Meetings as the head-to-head list shows them: no W/D/L.
+      h2h: [
+        for (final g in meetings.take(count))
+          PastGame(date: g.game.date, home: g.game.home, away: g.game.away, score: g.game.score, competition: g.game.competition),
+      ],
+    );
   }
 
   static bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
