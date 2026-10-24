@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:bank_track/data/database.dart';
@@ -133,11 +134,48 @@ void main() {
     await tester.runAsync(() => precacheImage(const AssetImage('assets/brand/icon.png'), tester.element(find.byType(BrandTitle))));
     await tester.pumpAndSettle();
 
-    // Summary is the main page and holds no bet list.
+    // Home: the bank with highlights, the day's important matches, Pro tips
+    // and free tips.
+    await settle(tester);
+    expect(find.text('BANK'), findsOneWidget);
+    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('2 open bets'), findsOneWidget);
+    expect(find.text('Important matches today'), findsOneWidget);
+    expect(find.text('Arsenal'), findsOneWidget); // live
+    expect(find.text('AFC Bournemouth'), findsOneWidget);
+    expect(find.text('Leeds United'), findsNothing); // finished: not in the strip
+    expect(find.text('Barcelona to win'), findsNothing);
+    await shot('home');
+    await tester.scrollUntilVisible(find.text('Free tips'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('home-pro-tips')), findsOneWidget);
+    await shot('home_tips');
+    await tester.drag(find.text('Free tips'), const Offset(0, 2000));
+    await tester.pumpAndSettle();
+
+    // The avatar is picked from Home, and shows there.
+    await tester.tap(find.byKey(const Key('home-avatar')));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose your avatar'), findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.text('🦁'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(store.avatar, startsWith('emoji:🦁:'));
+    await shot('avatar_picker');
+    Navigator.of(tester.element(find.text('Choose your avatar'))).pop();
+    await tester.pumpAndSettle();
+
+    // The full summary is one tap away and holds no bet list.
+    await tester.tap(find.text('See summary'));
+    await tester.pumpAndSettle();
     expect(find.text('BANKROLL'), findsOneWidget);
     expect(find.text('ROI'), findsOneWidget);
     expect(find.text('Barcelona to win'), findsNothing);
     await shot('summary');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     // Bet register tab.
     await tester.tap(find.text('Bets'));
@@ -243,8 +281,16 @@ void main() {
     await shot('match_odds');
     await openTab(tester, 'Teams');
     expect(find.text('FORM GUIDE'), findsOneWidget);
-    expect(find.text('Last 5: 9 of 15 points · scored 6, conceded 4 in 5'), findsOneWidget);
+    expect(find.text('Last 5: 7 of 15 points · scored 7, conceded 7 in 5'), findsNWidgets(2));
     await shot('match_teams');
+    // Ten latest results for each side, read from the teams' schedules.
+    final teamsList = find.descendant(of: find.byType(TabBarView), matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.text('at Opponent 2'), 200, scrollable: teamsList);
+    await tester.scrollUntilVisible(find.text('at Opponent 10'), 200, scrollable: teamsList);
+    expect(find.text('at Opponent 12'), findsNothing);
+    await openTab(tester, 'H2H');
+    expect(find.text('LAST 10 MEETINGS'), findsOneWidget);
+    await shot('match_h2h_ten');
     await openTab(tester, 'News');
     await shot('match_news');
     await openTab(tester, 'Table');
@@ -289,6 +335,7 @@ void main() {
     await settle(tester);
     expect(find.text('Get our full bet analysis'), findsOneWidget);
     expect(find.text('FREE TODAY'), findsOneWidget);
+    expect(find.textContaining('Value +'), findsWidgets);
     await shot('pro_tips_daily');
     await tester.tap(find.text('See Pro tips'));
     await tester.pumpAndSettle();
@@ -381,6 +428,36 @@ void main() {
     expect(find.text('Money movement'), findsNothing);
     expect(find.text('Pro tips'), findsOneWidget);
     await shot('bet_tools');
+
+    // Pro tips from Bet Tools: the day's page, not a match page.
+    await tester.tap(find.text('Pro tips'));
+    await settle(tester);
+    expect(find.text('Search a match'), findsOneWidget);
+    expect(find.text("Today's best value bets"), findsOneWidget);
+    expect(find.text("RECOMMENDED FOR TODAY'S BIG MATCHES"), findsOneWidget);
+    expect(find.text('Everton vs Chelsea'), findsWidgets);
+    await shot('pro_tips_hub');
+    await tester.tap(find.widgetWithText(Tab, 'Pro tips'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Every Pro tip is a value bet'), findsOneWidget);
+    expect(find.textContaining('Buy prediction'), findsWidgets);
+    await shot('pro_tips_hub_pro');
+    await tester.tap(find.byKey(const Key('search-match')));
+    await settle(tester);
+    await tester.enterText(find.byType(TextField), 'chel');
+    await tester.pumpAndSettle();
+    expect(find.text('Everton vs Chelsea'), findsOneWidget);
+    expect(find.text('Arsenal vs Tottenham Hotspur'), findsNothing);
+    await shot('pro_tips_search');
+    await tester.tap(find.text('Everton vs Chelsea'));
+    await settle(tester);
+    expect(find.text('FREE TODAY'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Parlay builder'));
     await tester.pumpAndSettle();
@@ -680,8 +757,44 @@ http.Response _summary(Uri url) => http.Response.bytes(
       headers: {'content-type': 'application/json; charset=utf-8'},
     );
 
+/// ESPN team schedules. Everton (368) and Chelsea (363) play six games a
+/// season, meeting once this season and twice in each of the five before.
+http.Response _schedule(Uri url) {
+  final team = url.pathSegments[url.pathSegments.length - 2];
+  final season = int.tryParse(url.queryParameters['season'] ?? '') ?? 2026;
+  if (team != '368' && team != '363') return http.Response(jsonEncode({'events': []}), 200);
+  final other = team == '368' ? '363' : '368';
+  final names = {'368': 'Everton', '363': 'Chelsea'};
+  final events = [
+    for (var i = 0; i < 6; i++)
+      () {
+        final meets = season < 2026 ? i < 2 : i == 0;
+        final opponent = meets ? other : '${900 + i}';
+        final home = i.isEven;
+        final (h, a) = home ? (team, opponent) : (opponent, team);
+        final n = (2026 - season) * 6 + i + 1;
+        return {
+          'id': '$season$team$i',
+          'date': DateTime.utc(season, 10, 12).subtract(Duration(days: 7 * i)).toIso8601String(),
+          'league': {'shortName': 'Premier League'},
+          'competitions': [
+            {
+              'status': {'type': {'state': 'post'}},
+              'competitors': [
+                for (final (side, id, score) in [('home', h, 2), ('away', a, i % 3)])
+                  {'homeAway': side, 'team': {'id': id, 'displayName': names[id] ?? 'Opponent ${meets ? 0 : n}'}, 'score': {'displayValue': '$score'}},
+              ],
+            },
+          ],
+        };
+      }(),
+  ];
+  return http.Response(jsonEncode({'requestedSeason': {'year': season}, 'events': events}), 200);
+}
+
 http.Client _fixturesClient() => MockClient((req) async {
   if (req.url.pathSegments.last == 'summary') return _summary(req.url);
+  if (req.url.pathSegments.last == 'schedule') return _schedule(req.url);
   final slug = req.url.pathSegments[req.url.pathSegments.length - 2];
   if (!req.url.queryParameters.containsKey('dates')) {
     // Today's scoreboard, used by the Live tab.

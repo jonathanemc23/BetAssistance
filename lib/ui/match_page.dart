@@ -58,11 +58,19 @@ class _MatchPageState extends State<MatchPage> {
     try {
       final d = await widget.api.details(widget.match, refresh: refresh);
       if (mounted) setState(() => _details = d);
+      _loadHistory(d);
     } on FixturesException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// The last ten results and meetings, read after the page is up: the
+  /// summary only has five results and this season's meetings.
+  Future<void> _loadHistory(MatchDetails d) async {
+    final h = await widget.api.history(widget.match, d);
+    if (h != null && mounted && identical(_details, d)) setState(() => _details = d.withHistory(h));
   }
 
   void _pick(String selection, double odds) {
@@ -87,7 +95,7 @@ class _MatchPageState extends State<MatchPage> {
           actions: [
             FavoriteStar(store: widget.store, match: m),
             ProTipsButton(
-              onPressed: () => openProTips(context, store: widget.store, match: m, details: _details),
+              onPressed: () => openProTips(context, store: widget.store, match: m, details: _details, api: widget.api),
             ),
             const SizedBox(width: 4),
             IconButton(
@@ -832,10 +840,13 @@ class _FormGuideRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final form = info.form.isNotEmpty ? info.form : games.map((g) => g.result).join();
+    // The results listed below when they all have one, so the chips and the
+    // goals add up; otherwise the feed's own form.
+    final fromGames = games.isNotEmpty && games.every((g) => g.result.isNotEmpty);
+    final form = fromGames || info.form.isEmpty ? games.map((g) => g.result).join() : info.form;
     final recent = form.length > 5 ? form.substring(0, 5) : form;
     final w = recent.split('').where((r) => r == 'W').length, d = recent.split('').where((r) => r == 'D').length;
-    final scored = games.where((g) => g.gf != null).toList();
+    final scored = games.take(recent.length).where((g) => g.gf != null).toList();
     final gf = scored.fold<int>(0, (a, g) => a + g.gf!), ga = scored.fold<int>(0, (a, g) => a + g.ga!);
     final facts = [
       ?position,

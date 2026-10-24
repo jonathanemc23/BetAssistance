@@ -96,6 +96,108 @@ class MatchDetails {
     statNames: statNames,
     attendance: attendance,
   );
+
+  /// These details with the longer [history]: each team's last results and
+  /// the meetings between them, when it found more than the summary has.
+  MatchDetails withHistory(MatchHistory history) => MatchDetails(
+    odds: odds,
+    news: news,
+    home: history.home.length > home.lastGames.length ? home.withLastGames(history.home.reversed.toList()) : home,
+    away: history.away.length > away.lastGames.length ? away.withLastGames(history.away.reversed.toList()) : away,
+    events: events,
+    stats: stats,
+    statsAreSeason: statsAreSeason,
+    // ESPN's summary line covers this season's meetings only.
+    h2hSummary: history.h2h.length > h2h.length ? '' : h2hSummary,
+    h2h: history.h2h.length > h2h.length ? history.h2h : h2h,
+    table: table,
+    tableTitle: tableTitle,
+    tableGroups: tableGroups,
+    state: state,
+    clock: clock,
+    homeScore: homeScore,
+    awayScore: awayScore,
+    shots: shots,
+    statValues: statValues,
+    statNames: statNames,
+    attendance: attendance,
+  );
+}
+
+/// Each team's latest results and the latest meetings between them, newest
+/// first, from the teams' schedules ([FixturesApi.history]).
+class MatchHistory {
+  const MatchHistory({this.home = const [], this.away = const [], this.h2h = const []});
+  final List<PastGame> home;
+  final List<PastGame> away;
+  final List<PastGame> h2h;
+}
+
+/// One finished game from a team's schedule, with both teams' ids.
+class ScheduleGame {
+  const ScheduleGame({required this.id, required this.game, required this.homeId, required this.awayId});
+  final String id;
+  final PastGame game;
+  final String homeId;
+  final String awayId;
+}
+
+/// A team's finished games in one season, newest first, and that season's year.
+class TeamSchedule {
+  const TeamSchedule({this.season, this.games = const []});
+  final int? season;
+  final List<ScheduleGame> games;
+}
+
+/// Parses ESPN's team schedule feed (`.../teams/<id>/schedule`): the
+/// finished games, with W, D or L from [teamId]'s side.
+TeamSchedule parseSchedule(String body, String teamId) {
+  final Object? json;
+  try {
+    json = jsonDecode(body);
+  } catch (_) {
+    return const TeamSchedule();
+  }
+  if (json is! Map<String, dynamic>) return const TeamSchedule();
+  final Map<String, dynamic> map = json;
+  final season = _try(() => ((map['requestedSeason'] as Map?)?['year'] ?? (map['season'] as Map?)?['year']) as int?);
+  final games = <ScheduleGame>[];
+  for (final e in (map['events'] as List? ?? const [])) {
+    try {
+      final comp = (e['competitions'] as List).first as Map<String, dynamic>;
+      if (comp['status']?['type']?['state'] != 'post' && e['status']?['type']?['state'] != 'post') continue;
+      final cs = (comp['competitors'] as List).cast<Map<String, dynamic>>();
+      final h = cs.firstWhere((c) => c['homeAway'] == 'home', orElse: () => cs.first);
+      final a = cs.firstWhere((c) => c['homeAway'] == 'away', orElse: () => cs.last);
+      String score(Map<String, dynamic> c) {
+        final s = c['score'];
+        return s is Map ? '${s['displayValue'] ?? s['value'] ?? ''}' : '${s ?? ''}';
+      }
+
+      final hs = int.tryParse(score(h)), as = int.tryParse(score(a));
+      if (hs == null || as == null) continue;
+      final homeId = '${h['team']?['id'] ?? h['id'] ?? ''}', awayId = '${a['team']?['id'] ?? a['id'] ?? ''}';
+      final (gf, ga) = homeId == teamId ? (hs, as) : (as, hs);
+      final league = e['league'];
+      games.add(ScheduleGame(
+        id: '${e['id'] ?? ''}',
+        homeId: homeId,
+        awayId: awayId,
+        game: PastGame(
+          date: DateTime.tryParse('${e['date']}'),
+          home: '${h['team']?['displayName'] ?? ''}',
+          away: '${a['team']?['displayName'] ?? ''}',
+          score: '$hs-$as',
+          result: gf > ga ? 'W' : gf < ga ? 'L' : 'D',
+          competition: league is Map ? '${league['shortName'] ?? league['abbreviation'] ?? league['name'] ?? ''}' : '',
+        ),
+      ));
+    } catch (_) {
+      // Skip a game we can't read.
+    }
+  }
+  games.sort((x, y) => (y.game.date ?? DateTime(0)).compareTo(x.game.date ?? DateTime(0)));
+  return TeamSchedule(season: season, games: games);
 }
 
 enum ShotKind { goal, onTarget, offTarget, blocked }
@@ -173,6 +275,21 @@ class TeamInfo {
 
   /// The club colour as 0xRRGGBB, when the feed has one.
   final int? color;
+
+  TeamInfo withLastGames(List<PastGame> games) => TeamInfo(
+        id: id,
+        name: name,
+        logo: logo,
+        record: record,
+        points: points,
+        form: form,
+        lastGames: games,
+        leaders: leaders,
+        formation: formation,
+        starters: starters,
+        subs: subs,
+        color: color,
+      );
 }
 
 class Player {
@@ -206,7 +323,7 @@ class KeyEvent {
   final String? side;
 }
 
-/// A past match: from one team's last five or the head-to-head list.
+/// A past match: from one team's latest results or the head-to-head list.
 class PastGame {
   const PastGame({
     required this.date,
@@ -221,7 +338,7 @@ class PastGame {
   final String away;
   final String score;
 
-  /// 'W', 'D' or 'L' from the team's point of view (last five only).
+  /// 'W', 'D' or 'L' from the team's point of view (latest results only).
   final String result;
   final String competition;
 }

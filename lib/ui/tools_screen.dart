@@ -3,14 +3,15 @@ import 'package:flutter/material.dart';
 import '../data/fixtures.dart';
 import '../data/store.dart';
 import 'parlay_screens.dart';
+import 'pro_tips_page.dart';
 import 'themes.dart';
 
 /// Bet Tools tab: the helpers for studying matches and building bets.
 class BetToolsScreen extends StatelessWidget {
-  const BetToolsScreen({super.key, required this.store, required this.api, required this.onOpenMatches});
+  const BetToolsScreen({super.key, required this.store, required this.api, this.today});
   final BankStore store;
   final FixturesApi api;
-  final VoidCallback onOpenMatches;
+  final DateTime? today;
 
   @override
   Widget build(BuildContext context) {
@@ -26,10 +27,10 @@ class BetToolsScreen extends StatelessWidget {
           _ToolCard(
             icon: Icons.auto_awesome,
             title: 'Pro tips',
-            text: 'Free daily tips and Pro predictions for every match. Open a match and tap Pro tips.',
+            text: "Value bets for today's big matches, free daily tips, and a search for any other match.",
             badge: '${store.tokens} token${store.tokens == 1 ? '' : 's'}',
             highlight: true,
-            onTap: onOpenMatches,
+            onTap: () => openProTipsHub(context, store: store, api: api, today: today),
           ),
           const SizedBox(height: 12),
           _ToolCard(
