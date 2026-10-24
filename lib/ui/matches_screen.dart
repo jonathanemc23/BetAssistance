@@ -11,8 +11,8 @@ import 'match_page.dart';
 import 'parlay_screens.dart';
 
 /// Matches page: fixtures by country and day, everything live now, and the
-/// matches the user starred.
-class MatchesTabs extends StatelessWidget {
+/// matches the user starred. The sport switch applies to the first two.
+class MatchesTabs extends StatefulWidget {
   const MatchesTabs({super.key, required this.store, required this.api, this.today, this.onPick});
   final BankStore store;
   final FixturesApi api;
@@ -20,36 +20,93 @@ class MatchesTabs extends StatelessWidget {
   final void Function(Match match, String selection, double odds)? onPick;
 
   @override
-  Widget build(BuildContext context) => DefaultTabController(
-    length: 3,
-    child: Column(
-      children: [
-        const TabBar(
-          tabs: [
-            Tab(text: 'Matches'),
-            Tab(text: 'Live'),
-            Tab(text: 'Favorites'),
-          ],
-        ),
-        Expanded(
-          child: TabBarView(
-            children: [
-              MatchesScreen(store: store, api: api, today: today, onPick: onPick),
-              LiveMatches(store: store, api: api, onPick: onPick),
-              FavoriteMatches(store: store, api: api, onPick: onPick),
+  State<MatchesTabs> createState() => _MatchesTabsState();
+}
+
+class _MatchesTabsState extends State<MatchesTabs> {
+  Sport? _sport;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.store.pref('matches.sport').then((v) {
+      if (mounted) setState(() => _sport = Sport.byName(v));
+    });
+  }
+
+  void _setSport(Sport s) {
+    setState(() => _sport = s);
+    widget.store.setPref('matches.sport', s.name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sport = _sport;
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<Sport>(
+                key: const Key('sport-switch'),
+                showSelectedIcon: false,
+                segments: [
+                  for (final s in Sport.values)
+                    ButtonSegment(
+                      value: s,
+                      label: FittedBox(fit: BoxFit.scaleDown, child: Text('${s.emoji} ${s.title}')),
+                    ),
+                ],
+                selected: {sport ?? Sport.soccer},
+                onSelectionChanged: (v) => _setSport(v.first),
+              ),
+            ),
+          ),
+          const TabBar(
+            tabs: [
+              Tab(text: 'Matches'),
+              Tab(text: 'Live'),
+              Tab(text: 'Favorites'),
             ],
           ),
-        ),
-      ],
-    ),
-  );
+          Expanded(
+            child: sport == null
+                ? const SizedBox()
+                : TabBarView(
+                    children: [
+                      MatchesScreen(
+                        store: widget.store,
+                        api: widget.api,
+                        today: widget.today,
+                        sport: sport,
+                        onPick: widget.onPick,
+                      ),
+                      LiveMatches(store: widget.store, api: widget.api, sport: sport, onPick: widget.onPick),
+                      FavoriteMatches(store: widget.store, api: widget.api, onPick: widget.onPick),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 }
+
+IconData sportIcon(Sport s) => switch (s) {
+  Sport.soccer => Icons.sports_soccer_outlined,
+  Sport.basketball => Icons.sports_basketball_outlined,
+  Sport.baseball => Icons.sports_baseball_outlined,
+};
 
 /// Every live match, A to Z, refreshed every minute while it is on screen.
 class LiveMatches extends StatefulWidget {
-  const LiveMatches({super.key, required this.store, required this.api, this.onPick});
+  const LiveMatches({super.key, required this.store, required this.api, this.sport = Sport.soccer, this.onPick});
   final BankStore store;
   final FixturesApi api;
+  final Sport sport;
   final void Function(Match match, String selection, double odds)? onPick;
 
   @override
@@ -73,15 +130,28 @@ class _LiveMatchesState extends State<LiveMatches> {
   }
 
   @override
+  void didUpdateWidget(LiveMatches old) {
+    super.didUpdateWidget(old);
+    if (old.sport != widget.sport) {
+      setState(() {
+        _matches = null;
+        _error = null;
+      });
+      _load();
+    }
+  }
+
+  @override
   void dispose() {
     _timer?.cancel();
     super.dispose();
   }
 
   Future<void> _load({bool refresh = false, bool full = false}) async {
+    final sport = widget.sport;
     try {
-      final list = await widget.api.liveMatches(refresh: refresh, full: full);
-      if (mounted) {
+      final list = await widget.api.liveMatches(sport: sport, refresh: refresh, full: full);
+      if (mounted && sport == widget.sport) {
         setState(() {
           _matches = list;
           _error = null;
@@ -89,7 +159,7 @@ class _LiveMatchesState extends State<LiveMatches> {
         });
       }
     } on FixturesException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted && sport == widget.sport) setState(() => _error = e.message);
     }
   }
 
@@ -108,6 +178,11 @@ class _LiveMatchesState extends State<LiveMatches> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final list = _matches;
+    final what = switch (widget.sport) {
+      Sport.soccer => 'live matches',
+      Sport.basketball => 'basketball games live',
+      Sport.baseball => 'baseball games live',
+    };
     Widget message(IconData icon, String text) => ListView(
       children: [
         const SizedBox(height: 80),
@@ -125,7 +200,7 @@ class _LiveMatchesState extends State<LiveMatches> {
       child: list == null
           ? (_error != null ? message(Icons.cloud_off, _error!) : const Center(child: CircularProgressIndicator()))
           : list.isEmpty
-          ? message(Icons.sports_soccer_outlined, 'No live matches right now. Pull down to refresh.')
+          ? message(sportIcon(widget.sport), 'No $what right now. Pull down to refresh.')
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
@@ -198,9 +273,17 @@ List<({String title, List<Match> matches})> groupByLeague(List<Match> list) {
 
 /// Fixtures for a country on a chosen day.
 class MatchesScreen extends StatefulWidget {
-  const MatchesScreen({super.key, required this.store, required this.api, this.today, this.onPick});
+  const MatchesScreen({
+    super.key,
+    required this.store,
+    required this.api,
+    this.today,
+    this.sport = Sport.soccer,
+    this.onPick,
+  });
   final BankStore store;
   final FixturesApi api;
+  final Sport sport;
 
   /// Set when picking a selection for a parlay: tapping a price returns it
   /// here instead of offering to log it.
@@ -208,6 +291,11 @@ class MatchesScreen extends StatefulWidget {
 
   /// Overrides "today" in tests.
   final DateTime? today;
+
+  /// Overrides "today" in tests for match lists opened without [today]
+  /// (picking a bet or a parlay leg from the bet form).
+  @visibleForTesting
+  static DateTime? debugToday;
 
   @override
   State<MatchesScreen> createState() => _MatchesScreenState();
@@ -227,19 +315,49 @@ class _MatchesScreenState extends State<MatchesScreen> {
   @override
   void initState() {
     super.initState();
-    final now = widget.today ?? DateTime.now();
+    final now = widget.today ?? MatchesScreen.debugToday ?? DateTime.now();
     _today = DateTime(now.year, now.month, now.day);
     _day = _today;
     _init();
   }
 
-  Future<void> _init() async {
-    final saved = countryByCode(await widget.store.pref('matches.country'));
-    if (!mounted) return;
+  /// Football keeps the key it always had, so the country picked before
+  /// sports came along is kept.
+  String get _countryPref => widget.sport == Sport.soccer ? 'matches.country' : 'matches.country.${widget.sport.name}';
+
+  /// The country last picked for this sport, else the phone's own when it
+  /// plays it, else the United States (every sport) or the first that does.
+  Future<Country> _startCountry() async {
+    final sport = widget.sport;
+    final saved = countryByCode(await widget.store.pref(_countryPref));
+    if (saved != null && saved.has(sport)) return saved;
     final region = WidgetsBinding.instance.platformDispatcher.locale.countryCode;
-    setState(() => _country = saved ?? defaultCountry(region));
+    final home = defaultCountry(region);
+    if (home.has(sport)) return home;
+    final usa = countryByCode('usa');
+    return usa != null && usa.has(sport) ? usa : countries.firstWhere((c) => c.has(sport));
+  }
+
+  Future<void> _init() async {
+    final sport = widget.sport;
+    final c = await _startCountry();
+    if (!mounted || sport != widget.sport) return;
+    setState(() => _country = c);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToDay());
     await _load();
+  }
+
+  @override
+  void didUpdateWidget(MatchesScreen old) {
+    super.didUpdateWidget(old);
+    if (old.sport != widget.sport) {
+      setState(() {
+        _matches = null;
+        _error = null;
+      });
+      _request++;
+      _init();
+    }
   }
 
   @override
@@ -258,7 +376,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
       if (!refresh) _matches = null;
     });
     try {
-      final list = await widget.api.matches(country, _day, refresh: refresh);
+      final list = await widget.api.matches(country, _day, sport: widget.sport, refresh: refresh);
       if (mounted && req == _request) setState(() => _matches = list);
     } catch (e) {
       if (mounted && req == _request) setState(() => _error = e.toString());
@@ -289,11 +407,11 @@ class _MatchesScreenState extends State<MatchesScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _CountryPicker(selected: _country),
+      builder: (_) => _CountryPicker(selected: _country, sport: widget.sport),
     );
     if (c == null || !mounted) return;
     setState(() => _country = c);
-    widget.store.setPref('matches.country', c.code);
+    widget.store.setPref(_countryPref, c.code);
     _load();
   }
 
@@ -437,13 +555,13 @@ class _MatchesScreenState extends State<MatchesScreen> {
     if (list == null) return ListView();
     if (list.isEmpty) {
       return message(
-        Icons.sports_soccer,
-        'No matches for ${_country?.name} on ${DateFormat.MMMEd().format(_day)}. Try another day or country.',
+        sportIcon(widget.sport),
+        'No ${widget.sport == Sport.soccer ? 'matches' : '${widget.sport.title.toLowerCase()} games'} for ${_country?.name} on ${DateFormat.MMMEd().format(_day)}. Try another day or country.',
       );
     }
 
     // Group by league, leagues in the country's order.
-    final order = {for (final (i, l) in (_country?.leagues ?? const <League>[]).indexed) l.slug: i};
+    final order = {for (final (i, l) in (_country?.leaguesIn(widget.sport) ?? const <League>[]).indexed) l.slug: i};
     final groups = <String, List<Match>>{};
     for (final m in list) {
       groups.putIfAbsent(m.league.slug, () => []).add(m);
@@ -715,6 +833,23 @@ class _FavoriteMatchesState extends State<FavoriteMatches> {
       ? widget.onPick!(m, selection, odds)
       : pickSelection(context, store: widget.store, api: widget.api, match: m, selection: selection, odds: odds);
 
+  Future<void> _removeAll(int count) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Remove all favorites?'),
+        content: Text('The $count match${count == 1 ? '' : 'es'} you starred will be taken off this list.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Remove all')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await widget.store.clearFavorites();
+    if (mounted) setState(() => _current = {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -795,6 +930,25 @@ class _FavoriteMatchesState extends State<FavoriteMatches> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${all.length} favorite${all.length == 1 ? '' : 's'}',
+                    style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ),
+                TextButton.icon(
+                  key: const Key('remove-all-favorites'),
+                  onPressed: () => _removeAll(all.length),
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  label: const Text('Remove all'),
+                ),
+              ],
+            ),
+          ),
           if (live.isNotEmpty) section('Live now', live),
           if (upcoming.isNotEmpty) section('Upcoming', upcoming),
           if (done.isNotEmpty) section('Finished', done),
@@ -905,8 +1059,9 @@ class OddsRow extends StatelessWidget {
 }
 
 class _CountryPicker extends StatefulWidget {
-  const _CountryPicker({required this.selected});
+  const _CountryPicker({required this.selected, required this.sport});
   final Country? selected;
+  final Sport sport;
   @override
   State<_CountryPicker> createState() => _CountryPickerState();
 }
@@ -914,15 +1069,20 @@ class _CountryPicker extends StatefulWidget {
 class _CountryPickerState extends State<_CountryPicker> {
   String _q = '';
 
-  /// Where the list was when a country was last picked, so it reopens there.
-  static double? _lastOffset;
+  /// Where each sport's list was when a country was last picked, so it
+  /// reopens there.
+  static final _offsets = <Sport, double>{};
   static const _rowHeight = 72.0;
+  late final _all = countries.where((c) => c.has(widget.sport)).toList();
   late final ScrollController _scroll = ScrollController(
     initialScrollOffset:
-        _lastOffset ??
+        _offsets[widget.sport] ??
         // First time: open with the selected country in view.
-        (countries.indexWhere((c) => c.code == widget.selected?.code) * _rowHeight - _rowHeight * 2).clamp(0, 1e9),
+        (_all.indexWhere((c) => c.code == widget.selected?.code) * _rowHeight - _rowHeight * 2).clamp(0, 1e9),
   );
+
+  double? get _lastOffset => _offsets[widget.sport];
+  set _lastOffset(double? v) => v == null ? _offsets.remove(widget.sport) : _offsets[widget.sport] = v;
 
   @override
   void dispose() {
@@ -934,7 +1094,7 @@ class _CountryPickerState extends State<_CountryPicker> {
   @override
   Widget build(BuildContext context) {
     // Every country is listed; its matches load once it's picked.
-    final list = countries.where((c) => c.name.toLowerCase().contains(_q.toLowerCase())).toList();
+    final list = _all.where((c) => c.name.toLowerCase().contains(_q.toLowerCase())).toList();
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.75,
       child: Column(
@@ -966,7 +1126,7 @@ class _CountryPickerState extends State<_CountryPicker> {
                   leading: Text(c.flag, style: const TextStyle(fontSize: 26)),
                   title: Text(c.name),
                   subtitle: Text(
-                    c.leagues.map((l) => l.name).join(' · '),
+                    c.leaguesIn(widget.sport).map((l) => l.name).join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

@@ -136,7 +136,7 @@ Future<void> pickSelection(BuildContext context,
   );
   if (choice == null || !context.mounted) return;
   if (choice == 'single') {
-    return openBetForm(context, store, template: match.toBetTemplate(selection: selection, odds: odds));
+    return openBetForm(context, store, template: match.toBetTemplate(selection: selection, odds: odds), api: api);
   }
   final leg = ParlayLeg.fromMatch(match, selection, odds);
   final p = choice == 'add' && current != null ? await store.addLeg(current, leg) : await store.newParlay(legs: [leg]);
@@ -467,7 +467,7 @@ class _ParlayPageState extends State<ParlayPage> {
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(
-              onPressed: p.legs.isEmpty ? null : () => openBetForm(context, store, template: _asBet(p)),
+              onPressed: p.legs.isEmpty ? null : () => openBetForm(context, store, template: _asBet(p), api: widget.api),
               icon: const Icon(Icons.receipt_long_outlined),
               label: const Text('Log in the bet register'),
             ),

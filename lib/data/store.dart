@@ -201,4 +201,11 @@ class BankStore extends ChangeNotifier {
     favorites = await _db.favorites();
     notifyListeners();
   }
+
+  /// Unstars every match.
+  Future<void> clearFavorites() async {
+    await _db.deleteAllFavorites();
+    favorites = await _db.favorites();
+    notifyListeners();
+  }
 }

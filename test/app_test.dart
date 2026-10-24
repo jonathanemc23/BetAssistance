@@ -5,6 +5,7 @@ import 'package:bank_track/data/models.dart';
 import 'package:bank_track/data/store.dart';
 import 'package:bank_track/main.dart';
 import 'package:bank_track/ui/match_page.dart';
+import 'package:bank_track/ui/matches_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -117,6 +118,8 @@ void main() {
     }
 
     final store = (await tester.runAsync(seededStore))!;
+    MatchesScreen.debugToday = DateTime(2026, 10, 18);
+    addTearDown(() => MatchesScreen.debugToday = null);
     await tester.pumpWidget(
       BankTrackApp(
         store: store,
@@ -169,6 +172,8 @@ void main() {
     expect(find.text('Returns \$42.00'), findsOneWidget);
     await shot('log_bet');
 
+    await tester.ensureVisible(find.text('Parlay'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Parlay'));
     await tester.pumpAndSettle();
     final legSelection = find.widgetWithText(TextFormField, 'Selection');
@@ -181,14 +186,25 @@ void main() {
     expect(find.text('Combined 3.15'), findsOneWidget);
     await shot('log_parlay');
 
+    // A third leg picked from the real matches: a tapped price fills it in.
+    await tester.ensureVisible(find.byKey(const Key('add-leg-from-matches')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-leg-from-matches')));
+    await settle(tester);
+    expect(find.text('Pick a selection'), findsOneWidget);
+    await tester.tap(find.text('2.10'));
+    await settle(tester);
+
     await tester.runAsync(() async {
       await tester.tap(find.text('Log bet').last);
       await Future<void>.delayed(const Duration(milliseconds: 300));
     });
     await tester.pumpAndSettle();
     final saved = store.bets.firstWhere((b) => b.isParlay && b.status == BetStatus.pending);
-    expect(saved.legs.map((l) => l.selection), ['Arsenal to win', 'Lakers ML']);
-    expect(saved.odds, closeTo(3.15, 1e-9));
+    expect(saved.legs.map((l) => l.selection), ['Arsenal to win', 'Lakers ML', 'AFC Bournemouth to win']);
+    expect(saved.legs.last.event, 'AFC Bournemouth vs Sunderland');
+    expect(saved.legs.last.sport, 'Soccer');
+    expect(saved.odds, closeTo(3.15 * 2.1, 1e-9));
 
     // Matches. Let the "Bet logged" message time out first.
     await tester.pump(const Duration(seconds: 5));
@@ -338,6 +354,15 @@ void main() {
     expect(find.text('LIVE NOW · 1'), findsOneWidget);
     expect(find.byTooltip('Remove from favorites'), findsOneWidget);
     await shot('favorites');
+
+    // "Remove all" empties Favorites after asking.
+    await tester.tap(find.byKey(const Key('remove-all-favorites')));
+    await tester.pumpAndSettle();
+    expect(find.text('Remove all favorites?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove all'));
+    await settle(tester);
+    expect(store.favorites, isEmpty);
+    expect(find.text('Tap the star on any match to follow it here.'), findsOneWidget);
     await tester.tap(find.widgetWithText(Tab, 'Matches'));
     await tester.pumpAndSettle();
 

@@ -86,11 +86,11 @@ class BetsScreenState extends State<BetsScreen> {
     if (!mounted) return;
     switch (action) {
       case 'edit':
-        await openBetForm(context, store, bet: b);
+        await openBetForm(context, store, bet: b, api: widget.api);
       case 'share':
         await showShareBet(context, store, b);
       case 'again':
-        await openBetForm(context, store,
+        await openBetForm(context, store, api: widget.api,
             template: b.asNew(date: isoDate(DateTime.now()), created: DateTime.now().toIso8601String()));
     }
   }
@@ -137,7 +137,7 @@ class BetsScreenState extends State<BetsScreen> {
           ]),
           const SizedBox(height: 8),
           if (store.bets.isEmpty)
-            _EmptyState(onAdd: () => openBetForm(context, store))
+            _EmptyState(onAdd: () => openBetForm(context, store, api: widget.api))
           else if (list.isEmpty)
             const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No bets match this filter.'))),
         ]),
@@ -150,7 +150,7 @@ class BetsScreenState extends State<BetsScreen> {
           itemBuilder: (_, i) => _BetTile(
             bet: list[i],
             fmt: fmt,
-            onTap: () => openBetForm(context, store, bet: list[i]),
+            onTap: () => openBetForm(context, store, bet: list[i], api: widget.api),
             onLongPress: () => _actions(list[i]),
             onSettle: (st) => st == BetStatus.cashout ? _cashOut(list[i]) : store.settle(list[i], st),
             onReview: () => openBetReview(context, store: store, api: widget.api, bet: list[i]),
