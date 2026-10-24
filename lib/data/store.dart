@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
+import '../logic/pro_tips.dart';
 import '../logic/stats.dart';
 import 'board.dart';
 import 'database.dart';
@@ -22,6 +25,10 @@ class BankStore extends ChangeNotifier {
   List<Parlay> parlays = [];
   List<FavoriteMatch> favorites = [];
 
+  /// Tokens to unlock Pro tips, and the tips unlocked so far by id.
+  int tokens = 0;
+  Map<String, UnlockedTip> unlockedTips = {};
+
   /// Selected look, one of [appThemes] ids. Saved as a preference.
   String themeId = 'olive';
   bool loaded = false;
@@ -36,6 +43,7 @@ class BankStore extends ChangeNotifier {
     parlays = await _db.parlays();
     favorites = await _db.favorites();
     themeId = await _db.pref('app.theme') ?? 'olive';
+    await _loadTips();
     loaded = true;
     notifyListeners();
   }
@@ -74,6 +82,67 @@ class BankStore extends ChangeNotifier {
     themeId = id;
     notifyListeners();
     await _db.setPref('app.theme', id);
+  }
+
+  // Pro tips
+  /// Tokens every new user starts with, until tokens can be bought.
+  static const starterTokens = 10;
+
+  Future<void> _loadTips() async {
+    final saved = await _db.pref('tips.tokens');
+    if (saved == null) {
+      tokens = starterTokens;
+      await _db.setPref('tips.tokens', '$tokens');
+    } else {
+      tokens = int.tryParse(saved) ?? 0;
+    }
+    final raw = await _db.pref('tips.unlocked');
+    try {
+      final json = raw == null ? const {} : jsonDecode(raw) as Map<String, dynamic>;
+      unlockedTips = {
+        for (final e in json.entries) e.key: UnlockedTip.fromJson(e.value as Map<String, dynamic>),
+      };
+    } catch (_) {
+      unlockedTips = {};
+    }
+  }
+
+  Future<void> _saveTips() async {
+    await _db.setPref('tips.tokens', '$tokens');
+    await _db.setPref('tips.unlocked', jsonEncode({for (final e in unlockedTips.entries) e.key: e.value.toJson()}));
+    notifyListeners();
+  }
+
+  bool isUnlocked(Tip t) => t.free || unlockedTips.containsKey(t.id);
+
+  /// Spends the tip's tokens to unlock it. False when there aren't enough.
+  Future<bool> unlockTip(Tip t) async {
+    if (isUnlocked(t)) return true;
+    if (tokens < t.cost) return false;
+    tokens -= t.cost;
+    unlockedTips[t.id] = UnlockedTip(cost: t.cost, at: _now());
+    await _saveTips();
+    return true;
+  }
+
+  /// Settles the unlocked tips once the final score is in: a tip that lost
+  /// gives its tokens back, once.
+  Future<void> settleTips(List<Tip> tips, int home, int away) async {
+    var changed = false;
+    for (final t in tips) {
+      final u = unlockedTips[t.id];
+      if (u == null || u.result != null) continue;
+      final won = t.result(home, away)!;
+      unlockedTips[t.id] = u.settled(won ? 'won' : 'refunded');
+      if (!won) tokens += u.cost;
+      changed = true;
+    }
+    if (changed) await _saveTips();
+  }
+
+  Future<void> addTokens(int n) async {
+    tokens += n;
+    await _saveTips();
   }
 
   // Matchboard

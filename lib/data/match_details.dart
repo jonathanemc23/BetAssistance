@@ -19,6 +19,7 @@ class MatchDetails {
     this.h2h = const [],
     this.table = const [],
     this.tableTitle = '',
+    this.tableGroups = const [],
     this.state = MatchState.other,
     this.clock = '',
     this.homeScore,
@@ -42,6 +43,10 @@ class MatchDetails {
   final List<PastGame> h2h;
   final List<TableRow> table;
   final String tableTitle;
+
+  /// The table split by group when the match's teams sit in different groups
+  /// (Argentina's zones, cup groups). Empty when [table] is a single group.
+  final List<TableGroup> tableGroups;
 
   /// Where the match is now, from the feed's header: state, clock ("67'",
   /// "FT") and the score once it has started.
@@ -81,6 +86,7 @@ class MatchDetails {
     h2h: h2h,
     table: table,
     tableTitle: tableTitle,
+    tableGroups: tableGroups,
     state: m.state,
     clock: m.detail,
     homeScore: int.tryParse(m.home.score ?? ''),
@@ -218,6 +224,13 @@ class PastGame {
   /// 'W', 'D' or 'L' from the team's point of view (last five only).
   final String result;
   final String competition;
+}
+
+/// One group of a league table, such as a zone, with its rows by rank.
+class TableGroup {
+  const TableGroup({required this.title, required this.rows});
+  final String title;
+  final List<TableRow> rows;
 }
 
 class TableRow {
@@ -425,16 +438,25 @@ MatchDetails parseMatchDetails(String body) {
           ]..sort((x, y) => (y.date ?? DateTime(0)).compareTo(x.date ?? DateTime(0)))) ??
       const <PastGame>[];
 
-  // Several groups (conferences, divisions, cup groups): the one with this match's teams.
+  // Several groups (conferences, divisions, cup groups, zones): the ones with this
+  // match's teams, the home team's first. Teams from different zones get both.
   final groups = safe(() => (json['standings']['groups'] as List).cast<Map<String, dynamic>>()) ?? const [];
-  final teamIds = {for (final c in competitors) '${c['team']?['id'] ?? c['id']}'};
-  final group = groups.where((g) {
-        final entries = safe(() => g['standings']['entries'] as List) ?? const [];
-        return entries.any((e) => e is Map && teamIds.contains('${e['id'] ?? ''}'));
-      }).firstOrNull ??
-      groups.firstOrNull;
-  final table = safe(() => [
-            for (final (i, e) in (group!['standings']['entries'] as List).indexed)
+  final sideIds = ([...competitors]..sort((a, b) => (a['homeAway'] == 'home' ? 0 : 1).compareTo(b['homeAway'] == 'home' ? 0 : 1)))
+      .map((c) => '${c['team']?['id'] ?? c['id'] ?? ''}')
+      .where((id) => id.isNotEmpty)
+      .toList();
+  bool holds(Map<String, dynamic> g, String id) =>
+      (safe(() => g['standings']['entries'] as List) ?? const []).any((e) => e is Map && '${e['id'] ?? ''}' == id);
+  final picked = <Map<String, dynamic>>[];
+  for (final id in sideIds) {
+    final g = groups.where((g) => holds(g, id)).firstOrNull;
+    if (g != null && !picked.contains(g)) picked.add(g);
+  }
+  if (picked.isEmpty && groups.isNotEmpty) picked.add(groups.first);
+  final group = picked.firstOrNull;
+  List<TableRow> rowsOf(Map<String, dynamic> g) =>
+      safe(() => [
+            for (final (i, e) in (g['standings']['entries'] as List).indexed)
               () {
                 String st(String n) {
                   for (final s in (e['stats'] as List)) {
@@ -460,6 +482,15 @@ MatchDetails parseMatchDetails(String body) {
               }(),
           ]..sort((a, b) => a.rank.compareTo(b.rank))) ??
       const <TableRow>[];
+  final tableGroups = [for (final g in picked) (g, rowsOf(g))];
+  final table = [for (final (_, rows) in tableGroups) ...rows];
+  // Zones often share one header, so each is named after the match's team in it.
+  String groupTitle(Map<String, dynamic> g, List<TableRow> rows) {
+    final header = '${g['header'] ?? ''}';
+    if (picked.where((o) => '${o['header'] ?? ''}' == header).length == 1 && header.isNotEmpty) return header;
+    final team = rows.where((r) => sideIds.contains(r.teamId)).firstOrNull?.team;
+    return team == null ? header : 'Group with $team';
+  }
 
   final news = safe(() => [
             for (final a in (json['news']['articles'] as List))
@@ -492,6 +523,9 @@ MatchDetails parseMatchDetails(String body) {
     h2h: h2h,
     table: table,
     tableTitle: '${group?['header'] ?? json['standings']?['header'] ?? ''}',
+    tableGroups: tableGroups.length < 2
+        ? const []
+        : [for (final (g, rows) in tableGroups) TableGroup(title: groupTitle(g, rows), rows: rows)],
     state: switch (safe(() => header!['status']['type']['state'] as String?)) {
       'pre' => MatchState.scheduled,
       'in' => MatchState.live,

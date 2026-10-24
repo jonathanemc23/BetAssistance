@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../data/fixtures.dart';
 import '../data/store.dart';
-import 'matchboard_screen.dart';
 import 'parlay_screens.dart';
 import 'themes.dart';
 
@@ -20,23 +19,17 @@ class BetToolsScreen extends StatelessWidget {
       listenable: store,
       builder: (context, _) {
         final open = store.parlays.where((p) => p.isOpen).length;
-        final boards = store.boards.length;
         return ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [
           Text('Study a match, build a parlay, then log it.',
               style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           const SizedBox(height: 14),
           _ToolCard(
-            icon: Icons.space_dashboard_outlined,
-            title: 'Matchboard',
-            text: 'A workspace per match. Ask questions and every answer is saved as a key note.',
-            badge: boards == 0 ? null : '$boards board${boards == 1 ? '' : 's'}',
+            icon: Icons.auto_awesome,
+            title: 'Pro tips',
+            text: 'Free daily tips and Pro predictions for every match. Open a match and tap Pro tips.',
+            badge: '${store.tokens} token${store.tokens == 1 ? '' : 's'}',
             highlight: true,
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => Scaffold(
-                appBar: AppBar(title: const Text('Matchboard')),
-                body: MatchboardScreen(store: store, api: api, onBrowseMatches: onOpenMatches),
-              ),
-            )),
+            onTap: onOpenMatches,
           ),
           const SizedBox(height: 12),
           _ToolCard(
