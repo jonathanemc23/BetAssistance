@@ -352,6 +352,8 @@ class AppDatabase {
 
   Future<void> deleteFavorite(String matchId) => db.delete('favorites', where: 'match_id = ?', whereArgs: [matchId]);
 
+  Future<void> deleteAllFavorites() => db.delete('favorites');
+
   // Odds history
   Future<List<OddsSnapshot>> oddsHistory(String matchId) async => [
         for (final r in await db.query('odds_history', where: 'match_id = ?', whereArgs: [matchId], orderBy: 'at'))

@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
 
+import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/store.dart';
 import '../logic/markets.dart';
 import '../logic/stats.dart';
 import 'format.dart';
 import 'market_sheet.dart';
+import 'matches_screen.dart';
 import 'themes.dart';
 import 'share_ui.dart';
 
 /// Opens the bet form: [bet] edits an existing bet, [template] pre-fills a
-/// new one (from a share link or "log again"). Shows the result as a snackbar.
-Future<void> openBetForm(BuildContext context, BankStore store, {Bet? bet, Bet? template}) async {
+/// new one (from a share link or "log again"). With [api], picks and parlay
+/// legs can be chosen from the real matches. Shows the result as a snackbar.
+Future<void> openBetForm(BuildContext context, BankStore store, {Bet? bet, Bet? template, FixturesApi? api}) async {
   final messenger = ScaffoldMessenger.of(context);
   final msg = await Navigator.push<String>(
     context,
-    MaterialPageRoute(builder: (_) => BetFormPage(store: store, bet: bet, template: template)),
+    MaterialPageRoute(builder: (_) => BetFormPage(store: store, bet: bet, template: template, api: api)),
   );
   if (msg != null) messenger.showSnackBar(SnackBar(content: Text(msg)));
 }
@@ -39,10 +42,13 @@ class _Leg {
 }
 
 class BetFormPage extends StatefulWidget {
-  const BetFormPage({super.key, required this.store, this.bet, this.template});
+  const BetFormPage({super.key, required this.store, this.bet, this.template, this.api});
   final BankStore store;
   final Bet? bet;
   final Bet? template;
+
+  /// The match feeds; when set, picks can be chosen from the real matches.
+  final FixturesApi? api;
 
   @override
   State<BetFormPage> createState() => _BetFormPageState();
@@ -198,7 +204,59 @@ class _BetFormPageState extends State<BetFormPage> {
   }
 
   /// Where the bet came from (the match it was picked from, if any).
-  Bet? get _source => widget.bet ?? widget.template;
+  Bet? get _source => _picked ?? widget.bet ?? widget.template;
+
+  /// The match last chosen with "Pick from matches" for a single bet.
+  Bet? _picked;
+
+  /// Opens the match list; a tapped price comes back with its match.
+  Future<(Match, String, double)?> _pickFromMatches() => Navigator.of(context).push<(Match, String, double)>(
+        MaterialPageRoute(
+          builder: (c) => Scaffold(
+            appBar: AppBar(title: const Text('Pick a selection')),
+            body: MatchesTabs(
+              store: widget.store,
+              api: widget.api!,
+              onPick: (m, sel, odds) => Navigator.pop(c, (m, sel, odds)),
+            ),
+          ),
+        ),
+      );
+
+  Future<void> _pickSingle() async {
+    final pick = await _pickFromMatches();
+    if (pick == null || !mounted) return;
+    final (m, sel, odds) = pick;
+    final t = m.toBetTemplate(selection: sel, odds: odds);
+    setState(() {
+      _picked = t;
+      _selection.text = sel;
+      _event.text = m.title;
+      _market = t.market;
+      _sport = sports.contains(t.sport) ? t.sport : 'Other';
+      _odds.text = formatOdds(odds, _settings.oddsFormat);
+      _date = t.date;
+    });
+  }
+
+  /// Fills [leg] from a real match, or the first empty leg (adding one when
+  /// none is empty) when [leg] is null.
+  Future<void> _pickLeg([_Leg? leg]) async {
+    final pick = await _pickFromMatches();
+    if (pick == null || !mounted) return;
+    final (m, sel, odds) = pick;
+    setState(() {
+      var target = leg ?? _legs.where((l) => l.selection.text.trim().isEmpty && l.event.text.trim().isEmpty).firstOrNull;
+      if (target == null) {
+        _addLeg();
+        target = _legs.last;
+      }
+      target.selection.text = sel;
+      target.event.text = m.title;
+      target.sport = m.league.knownSport.label;
+      target.odds.text = formatOdds(odds, _settings.oddsFormat);
+    });
+  }
 
   Future<void> _chooseMarket() async {
     final pick = await showMarketSheet(context,
@@ -290,7 +348,22 @@ class _BetFormPageState extends State<BetFormPage> {
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             sliver: SliverList.list(children: [
               if (!_parlay) ...[
-                const _Label('What did you bet on?'),
+                _Label(
+                  'What did you bet on?',
+                  action: widget.api == null
+                      ? null
+                      : TextButton.icon(
+                          key: const Key('pick-single-from-matches'),
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          onPressed: _pickSingle,
+                          icon: const Icon(Icons.sports_soccer_outlined, size: 18),
+                          label: const Text('Pick from matches'),
+                        ),
+                ),
                 TextFormField(
                   controller: _selection,
                   textCapitalization: TextCapitalization.sentences,
@@ -345,14 +418,24 @@ class _BetFormPageState extends State<BetFormPage> {
                     onChanged: _refresh,
                     onStatus: _legStatusChanged,
                     onMarket: () => _chooseLegMarket(_legs[i]),
+                    onPickMatch: widget.api == null ? null : () => _pickLeg(_legs[i]),
                   ),
                 Padding(
                   padding: const EdgeInsets.only(left: 40),
-                  child: TextButton.icon(
-                    onPressed: () => setState(() => _addLeg()),
-                    icon: const Icon(Icons.add_circle_outline),
-                    label: const Text('Add leg'),
-                  ),
+                  child: Wrap(spacing: 8, runSpacing: 4, children: [
+                    if (widget.api != null)
+                      FilledButton.tonalIcon(
+                        key: const Key('add-leg-from-matches'),
+                        onPressed: () => _pickLeg(),
+                        icon: const Icon(Icons.sports_soccer_outlined),
+                        label: const Text('Add from matches'),
+                      ),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _addLeg()),
+                      icon: const Icon(Icons.add_circle_outline),
+                      label: Text(widget.api == null ? 'Add leg' : 'Type a leg'),
+                    ),
+                  ]),
                 ),
               ],
               const _Label('Stake'),
@@ -553,9 +636,10 @@ class _SlipHeader extends StatelessWidget {
 }
 
 class _Label extends StatelessWidget {
-  const _Label(this.text, {this.trailing});
+  const _Label(this.text, {this.trailing, this.action});
   final String text;
   final String? trailing;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -563,10 +647,10 @@ class _Label extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 22, 2, 10),
       child: Row(children: [
-        Text(text, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-        const Spacer(),
+        Expanded(child: Text(text, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
         if (trailing != null)
           Text(trailing!, style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
+        ?action,
       ]),
     );
   }
@@ -704,6 +788,7 @@ class _LegCard extends StatelessWidget {
     required this.onChanged,
     required this.onStatus,
     required this.onMarket,
+    this.onPickMatch,
   });
   final int index;
   final bool last;
@@ -716,6 +801,7 @@ class _LegCard extends StatelessWidget {
   final VoidCallback onChanged;
   final VoidCallback onStatus;
   final VoidCallback onMarket;
+  final VoidCallback? onPickMatch;
 
   @override
   Widget build(BuildContext context) {
@@ -762,6 +848,13 @@ class _LegCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onPickMatch != null)
+                  IconButton(
+                    tooltip: 'Pick from matches',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.event_available_outlined, size: 18),
+                    onPressed: onPickMatch,
+                  ),
                 IconButton(
                   tooltip: 'Choose a market',
                   visualDensity: VisualDensity.compact,

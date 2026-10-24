@@ -5,6 +5,8 @@ import 'package:bank_track/data/models.dart';
 import 'package:bank_track/data/store.dart';
 import 'package:bank_track/main.dart';
 import 'package:bank_track/ui/match_page.dart';
+import 'package:bank_track/ui/match_visuals.dart';
+import 'package:bank_track/ui/matches_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -117,6 +119,8 @@ void main() {
     }
 
     final store = (await tester.runAsync(seededStore))!;
+    MatchesScreen.debugToday = DateTime(2026, 10, 18);
+    addTearDown(() => MatchesScreen.debugToday = null);
     await tester.pumpWidget(
       BankTrackApp(
         store: store,
@@ -169,6 +173,8 @@ void main() {
     expect(find.text('Returns \$42.00'), findsOneWidget);
     await shot('log_bet');
 
+    await tester.ensureVisible(find.text('Parlay'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Parlay'));
     await tester.pumpAndSettle();
     final legSelection = find.widgetWithText(TextFormField, 'Selection');
@@ -181,14 +187,25 @@ void main() {
     expect(find.text('Combined 3.15'), findsOneWidget);
     await shot('log_parlay');
 
+    // A third leg picked from the real matches: a tapped price fills it in.
+    await tester.ensureVisible(find.byKey(const Key('add-leg-from-matches')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add-leg-from-matches')));
+    await settle(tester);
+    expect(find.text('Pick a selection'), findsOneWidget);
+    await tester.tap(find.text('2.10'));
+    await settle(tester);
+
     await tester.runAsync(() async {
       await tester.tap(find.text('Log bet').last);
       await Future<void>.delayed(const Duration(milliseconds: 300));
     });
     await tester.pumpAndSettle();
     final saved = store.bets.firstWhere((b) => b.isParlay && b.status == BetStatus.pending);
-    expect(saved.legs.map((l) => l.selection), ['Arsenal to win', 'Lakers ML']);
-    expect(saved.odds, closeTo(3.15, 1e-9));
+    expect(saved.legs.map((l) => l.selection), ['Arsenal to win', 'Lakers ML', 'AFC Bournemouth to win']);
+    expect(saved.legs.last.event, 'AFC Bournemouth vs Sunderland');
+    expect(saved.legs.last.sport, 'Soccer');
+    expect(saved.odds, closeTo(3.15 * 2.1, 1e-9));
 
     // Matches. Let the "Bet logged" message time out first.
     await tester.pump(const Duration(seconds: 5));
@@ -216,6 +233,11 @@ void main() {
     // A match opens its own page with tabs.
     await tester.tap(find.text('Everton'));
     await settle(tester);
+    // It opens on the overview: chances from the odds, form and the table.
+    expect(find.text('WIN CHANCES'), findsOneWidget);
+    expect(find.text('FORM GUIDE'), findsOneWidget);
+    await shot('match_overview');
+    await openTab(tester, 'Odds');
     expect(find.text('DraftKings'.toUpperCase()), findsOneWidget);
     expect(find.text('BET 365'), findsOneWidget);
     await shot('match_odds');
@@ -338,6 +360,15 @@ void main() {
     expect(find.text('LIVE NOW · 1'), findsOneWidget);
     expect(find.byTooltip('Remove from favorites'), findsOneWidget);
     await shot('favorites');
+
+    // "Remove all" empties Favorites after asking.
+    await tester.tap(find.byKey(const Key('remove-all-favorites')));
+    await tester.pumpAndSettle();
+    expect(find.text('Remove all favorites?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove all'));
+    await settle(tester);
+    expect(store.favorites, isEmpty);
+    expect(find.text('Tap the star on any match to follow it here.'), findsOneWidget);
     await tester.tap(find.widgetWithText(Tab, 'Matches'));
     await tester.pumpAndSettle();
 
@@ -523,7 +554,8 @@ void main() {
     ));
     await settle(tester);
     await openTab(tester, 'Line-ups');
-    expect(find.text('4-2-3-1'), findsOneWidget);
+    expect(find.byType(LineupPitch), findsOneWidget);
+    expect(find.textContaining('4-4-1-1'), findsOneWidget); // the away side, above the pitch
     await shot('match_lineups');
     await openTab(tester, 'Events');
     expect(find.text('First Half begins.'), findsOneWidget);
@@ -535,6 +567,59 @@ void main() {
     await openTab(tester, 'H2H');
     await openTab(tester, 'Odds');
     expect(find.text('DRAFTKINGS'), findsOneWidget);
+  });
+
+  testWidgets('match with shot positions: overview, stat tiles, shot map, table with crests', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    if (shots) await tester.runAsync(loadFonts);
+    Future<void> shot(String name) async {
+      if (shots) await expectLater(find.byType(MatchPage), matchesGoldenFile('screenshots/$name.png'));
+    }
+
+    final store = (await tester.runAsync(seededStore))!;
+    final match = Match(
+      id: '401879260',
+      league: const League('eng.1', 'Premier League'),
+      kickoff: DateTime.utc(2026, 10, 18, 13),
+      home: const Team('Leeds United', 'Leeds', null, '1'),
+      away: const Team('Manchester United', 'Man United', null, '1'),
+      state: MatchState.finished,
+      detail: 'FT',
+      venue: 'Elland Road',
+    );
+    await tester.pumpWidget(MaterialApp(
+      theme: BankTrackApp.theme('olive'),
+      home: MatchPage(match: match, store: store, api: FixturesApi(client: _fixturesClient())),
+    ));
+    await settle(tester);
+    expect(find.text('KEY STATS'), findsOneWidget);
+    expect(find.text('Corners'), findsOneWidget);
+    expect(find.text('Mbeumo 35\''), findsOneWidget); // scorer under the score
+    await shot('match_overview_live');
+    await openTab(tester, 'Stats');
+    expect(find.byType(StatTiles), findsOneWidget);
+    await shot('match_stats_tiles');
+    expect(find.byType(ShotMap, skipOffstage: false), findsOneWidget);
+    if (shots) {
+      final list = find.descendant(of: find.byType(TabBarView), matching: find.byType(Scrollable)).first;
+      await tester.scrollUntilVisible(find.text('SHOT MAP'), 200, scrollable: list);
+      await tester.drag(list, const Offset(0, -120));
+      await tester.pumpAndSettle();
+      await shot('match_shot_map');
+    }
+    await openTab(tester, 'Table');
+    expect(find.text('Leeds United'), findsWidgets);
+    await shot('match_table_crests');
+    await openTab(tester, 'Line-ups');
+    expect(find.byType(LineupPitch), findsOneWidget);
+    expect(find.text('Mbeumo'), findsOneWidget);
+    await shot('match_lineup_pitch');
+    await openTab(tester, 'Events');
+    await shot('match_timeline');
+    await openTab(tester, 'H2H');
+    await shot('match_h2h');
   });
 }
 
@@ -558,9 +643,11 @@ Future<void> openTab(WidgetTester tester, String name) async {
 /// Match summaries: Everton vs Chelsea before kick-off, anything else a
 /// finished Colombian match with line-ups and key events.
 http.Response _summary(Uri url) => http.Response.bytes(
-      File(url.queryParameters['event'] == '401878771'
-              ? 'test/data/espn_summary_pre.json'
-              : 'test/data/espn_summary_col.json')
+      File(switch (url.queryParameters['event']) {
+        '401878771' => 'test/data/espn_summary_pre.json',
+        '401879260' => 'test/data/espn_summary_shots.json',
+        _ => 'test/data/espn_summary_col.json',
+      })
           .readAsBytesSync(),
       200,
       headers: {'content-type': 'application/json; charset=utf-8'},

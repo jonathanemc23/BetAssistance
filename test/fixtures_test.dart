@@ -441,6 +441,60 @@ void main() {
     );
     expect(mergeSportsDb(men, women).map((m) => m.id), ['401', 'tsdb:9']);
   });
+
+  test('basketball and baseball read their own ESPN feeds, apart from football', () async {
+    final paths = <String>[];
+    final api = FixturesApi(
+      client: MockClient((req) async {
+        paths.add(req.url.path);
+        if (req.url.path.contains('/basketball/nba/')) {
+          return http.Response(
+            board([
+              espnEvent('n1', '2026-10-20T23:30Z', 'Boston Celtics', 'New York Knicks', state: 'in', detail: 'Q3 4:12'),
+            ]),
+            200,
+          );
+        }
+        return http.Response(board([]), 200);
+      }),
+    );
+    final usa = countryByCode('usa')!;
+    final list = await api.matches(usa, DateTime(2026, 10, 20), sport: Sport.basketball);
+    expect(paths, isNotEmpty);
+    expect(paths.every((p) => p.contains('/sports/basketball/')), isTrue);
+    expect(list.single.league.slug, 'nba');
+    expect(list.single.toBetTemplate().sport, 'Basketball');
+
+    paths.clear();
+    final live = await api.liveMatches(sport: Sport.basketball);
+    expect(live.map((m) => m.title), ['Boston Celtics vs New York Knicks']);
+    expect(paths.where((p) => p.contains('/sports/soccer/')), isEmpty);
+    expect(paths.where((p) => p.contains('/sports/baseball/')), isEmpty);
+  });
+
+  test('every sport has countries, and the new leagues are listed', () {
+    for (final s in Sport.values) {
+      expect(countries.where((c) => c.has(s)), isNotEmpty, reason: s.name);
+    }
+    expect(countryByCode('cro')!.leagues.map((l) => l.name), ['HNL', 'Prva NL']);
+    expect(countryByCode('swe')!.leagues.map((l) => l.name), contains('Superettan'));
+    expect(countryByCode('ger')!.leaguesIn(Sport.soccer).map((l) => l.name), contains('Frauen-Bundesliga'));
+    expect(countryByCode('usa')!.leaguesIn(Sport.baseball).map((l) => l.name), contains('MLB'));
+    // A league rebuilt from a saved slug still knows its sport.
+    expect(const League('mlb', 'MLB').knownSport, Sport.baseball);
+    final slugs = [
+      for (final c in countries)
+        for (final l in c.leagues) l.slug,
+    ];
+    expect(slugs.toSet().length, slugs.length, reason: 'league slugs are unique');
+  });
+
+  test('TheSportsDB quarters and innings read as live', () {
+    expect(sportsDbStatus('Q2', hasScore: true), (MatchState.live, 'Q2'));
+    expect(sportsDbStatus('OT', hasScore: true), (MatchState.live, 'OT'));
+    expect(sportsDbStatus('IN7', hasScore: true), (MatchState.live, 'IN7'));
+    expect(sportsDbStatus('AOT', hasScore: true), (MatchState.finished, 'AOT'));
+  });
 }
 
 bool _isOn(Match m, int y, int mo, int d) => m.kickoff.year == y && m.kickoff.month == mo && m.kickoff.day == d;
