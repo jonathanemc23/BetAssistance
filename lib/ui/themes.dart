@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
+
 /// One of the looks the user can pick in Settings. Colours are explicit so
 /// each theme matches its palette exactly instead of a generated one.
 class AppTheme {
@@ -33,6 +35,22 @@ class AppTheme {
   final String id;
   final String name;
   final String description;
+
+  /// [name] and [description] in the app's language.
+  String get localName => switch (id) {
+        'olive' => tr('Olive & Gold'),
+        'carbon' => 'Carbon',
+        'ember' => 'Ember',
+        'ocean' => tr('Ocean'),
+        _ => name,
+      };
+  String get localDescription => switch (id) {
+        'olive' => tr('Dark olive with gold accents'),
+        'carbon' => tr('True black with silver, easy on OLED screens'),
+        'ember' => tr('Warm dark with red and orange'),
+        'ocean' => tr('Light and clean with blue'),
+        _ => description,
+      };
   final Brightness brightness;
   final Color background;
   final Color cardLowest, card, cardMid, cardHigh, cardHighest;

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../data/fixtures.dart';
+import '../l10n/l10n.dart';
 
 /// How sure a tip is, and the price of a Pro tip at that level.
 enum Confidence {
@@ -11,6 +12,13 @@ enum Confidence {
   const Confidence(this.label);
   final String label;
 
+  /// [label] in the app's language.
+  String get title => switch (this) {
+        Confidence.max => tr('Max'),
+        Confidence.high => tr('High'),
+        Confidence.medium => tr('Medium'),
+      };
+
   /// Tokens to unlock a Pro tip at this level. Safer tips cost more; a tip
   /// that loses gives its tokens back.
   int get cost => switch (this) {
@@ -19,9 +27,9 @@ enum Confidence {
         Confidence.medium => 1,
       };
 
-  /// Lowest decimal odds a single Pro tip at this level may have: paid tips
-  /// are value bets, never short prices.
-  double get minOdds => this == Confidence.max ? 1.8 : 1.9;
+  /// Lowest decimal odds a Pro tip at this level may have: the more a tip
+  /// costs, the better its price. Every tip stays at [proMaxOdds] or under.
+  double get minOdds => this == Confidence.max ? 1.8 : 1.6;
 
   /// The level for a free tip, from its chance.
   static Confidence of(double chance) => chance >= 0.6
@@ -31,16 +39,15 @@ enum Confidence {
           : Confidence.medium;
 }
 
-/// The odds rules. Free tips stay between 1.4 and 2.0; Pro tips sell value:
-/// a single at [Confidence.minOdds] or more, or two selections together
-/// above 2.0.
-const freeMinOdds = 1.4, freeMaxOdds = 2.0, comboMinOdds = 2.0;
+/// The odds rules, by what the tip costs: free tips between 1.4 and 2.0,
+/// Medium and High (1 and 2 tokens) between 1.6 and 2.0, and Max (3 tokens)
+/// between 1.8 and 2.0. A Pro tip may be two selections whose combined odds
+/// fit its range.
+const freeMinOdds = 1.4, freeMaxOdds = 2.0, proMaxOdds = 2.0;
 
 bool followsOddsRules(Tip t) => t.free
     ? t.legs.length == 1 && t.odds >= freeMinOdds && t.odds <= freeMaxOdds
-    : t.legs.length == 2
-        ? t.odds > comboMinOdds
-        : t.legs.length == 1 && t.odds >= t.level.minOdds;
+    : t.legs.isNotEmpty && t.legs.length <= 2 && t.odds >= t.level.minOdds && t.odds <= proMaxOdds;
 
 /// The markets a tip can be on, each settled from the final score.
 enum TipMarket {
@@ -81,11 +88,11 @@ enum TipMarket {
       };
 
   String get group => switch (this) {
-        homeWin || draw || awayWin => 'Match result',
-        homeOrDraw || awayOrDraw => 'Double chance',
-        over15 || over25 || under25 || under35 || overLine || underLine => 'Total',
-        bttsYes || bttsNo => 'Both teams to score',
-        homeScores || awayScores => 'Team to score',
+        homeWin || draw || awayWin => tr('Match result'),
+        homeOrDraw || awayOrDraw => tr('Double chance'),
+        over15 || over25 || under25 || under35 || overLine || underLine => tr('Total'),
+        bttsYes || bttsNo => tr('Both teams to score'),
+        homeScores || awayScores => tr('Team to score'),
       };
 }
 
@@ -133,7 +140,7 @@ class Tip {
   bool get isCombo => legs.length > 1;
   TipMarket get market => legs.first.market;
   String get pick => legs.map((l) => l.pick).join(' & ');
-  String get group => isCombo ? 'Bet builder · ${legs.length} selections' : market.group;
+  String get group => isCombo ? tr('Bet builder · {n} selections', {'n': legs.length}) : market.group;
   Confidence get confidence => level;
   int get cost => level.cost;
   int get percent => (chance * 100).round();
@@ -208,7 +215,10 @@ class MatchTips {
 /// see [followsOddsRules]. Only the match list's prices and a seed from the
 /// match id go in, so the tips are the same on every page and every visit;
 /// [details] only adds the reasons.
-MatchTips simulateTips(Match match, MatchDetails details) {
+/// Every market a tip can be on for [match], with its price (the
+/// bookmaker's, else a fair price with a usual margin) and the model's
+/// chance. The same on every call: the seed is the match id.
+List<({TipLeg leg, double chance})> pricedMarkets(Match match, MatchDetails details) {
   final rnd = math.Random(match.id.codeUnits.fold<int>(17, (h, c) => (h * 31 + c) & 0x3fffffff));
   final soccer = match.league.knownSport == Sport.soccer;
   final book = [?match.odds, ...details.odds].where((o) => o.home != null && o.away != null).firstOrNull;
@@ -275,6 +285,12 @@ MatchTips simulateTips(Match match, MatchDetails details) {
           return (leg: TipLeg(m, pick, odds, line: line), chance: math.min(0.95, (1 / odds) * (1 + edge)));
         }(),
   ];
+  return candidates;
+}
+
+MatchTips simulateTips(Match match, MatchDetails details) {
+  final candidates = pricedMarkets(match, details);
+  final home = match.home.name, away = match.away.name;
 
   // Tips that can both win together only: never a market and its opposite.
   const opposite = {
@@ -328,12 +344,13 @@ MatchTips simulateTips(Match match, MatchDetails details) {
     return tip([c], free: free, level: level ?? Confidence.of(c.chance));
   }
 
-  /// Two selections from different markets, together above 2.0: the
-  /// likeliest such pair. A leg may repeat a market another tip uses, but
-  /// never goes against one.
+  /// Two selections from different markets with combined odds from [min]
+  /// to [proMaxOdds]: the likeliest such pair. A leg may repeat a market
+  /// another tip uses, but never goes against one.
   Tip? combo(Confidence level) {
+    final min = level.minOdds;
     final legs = candidates
-        .where((c) => !used.contains(opposite[c.leg.market]) && c.leg.odds >= 1.2 && c.leg.odds <= 2.6)
+        .where((c) => !used.contains(opposite[c.leg.market]) && c.leg.odds >= 1.15 && c.leg.odds <= 1.75)
         .toList();
     ({TipLeg leg, double chance})? a, b;
     var best = 0.0;
@@ -344,7 +361,7 @@ MatchTips simulateTips(Match match, MatchDetails details) {
         if (mx.group == my.group || opposite[mx] == my || pairs.contains('${mx.name}+${my.name}')) continue;
         if ((implies[mx]?.contains(my) ?? false) || (implies[my]?.contains(mx) ?? false)) continue;
         final odds = x.leg.odds * y.leg.odds;
-        if (odds <= comboMinOdds || odds > 4) continue;
+        if (odds < min || odds > proMaxOdds) continue;
         final p = x.chance * y.chance;
         if (p > best) (best, a, b) = (p, x, y);
       }
@@ -354,38 +371,44 @@ MatchTips simulateTips(Match match, MatchDetails details) {
     return tip([a, b], free: false, level: level);
   }
 
-  // Free tips first, from the short prices; then the Pro tips: the safest
-  // value single at Max, a longer price at High, and a two-selection bet
-  // builder at Medium. Each falls back to the other kind when the match has
-  // no market that fits.
-  final daily = [
-    single(min: freeMinOdds, max: freeMaxOdds, target: 1.5, free: true),
-    single(min: freeMinOdds, max: freeMaxOdds, target: 1.7, free: true),
-  ].nonNulls.where(followsOddsRules).toList();
+  // The Pro tips first, so the paid levels get the best prices: Max a
+  // single from 1.80 to 2.00, High a single from 1.60, and Medium a
+  // two-selection bet builder from 1.60. Each falls back to the other kind
+  // when the match has no market that fits. Then the free tips from what is
+  // left, 1.40 to 2.00.
   final pro = [
-    single(min: Confidence.max.minOdds, max: 2.3, target: 1.85, free: false, level: Confidence.max) ??
+    single(min: Confidence.max.minOdds, max: proMaxOdds, target: 1.9, free: false, level: Confidence.max) ??
         combo(Confidence.max),
-    single(min: Confidence.high.minOdds, max: 2.8, target: 2.1, free: false, level: Confidence.high) ??
+    single(min: Confidence.high.minOdds, max: proMaxOdds, target: 1.75, free: false, level: Confidence.high) ??
         combo(Confidence.high),
     combo(Confidence.medium) ??
-        single(min: Confidence.medium.minOdds, target: 2.6, free: false, level: Confidence.medium),
+        single(min: Confidence.medium.minOdds, max: proMaxOdds, target: 1.7, free: false, level: Confidence.medium),
+  ].nonNulls.where(followsOddsRules).toList();
+  final daily = [
+    single(min: freeMinOdds, max: freeMaxOdds, target: 1.5, free: true),
+    single(min: freeMinOdds, max: freeMaxOdds, target: 1.65, free: true),
   ].nonNulls.where(followsOddsRules).toList();
   return MatchTips(daily: daily, pro: pro);
 }
 
 List<String> _marketReason(TipMarket m, double p, String home, String away) => [
       switch (m) {
-        TipMarket.homeWin => '$home win this ${(p * 100).round()}% of the time in our simulation.',
-        TipMarket.awayWin => '$away come out on top in ${(p * 100).round()}% of simulated games.',
-        TipMarket.draw => 'An even game: the sides are close on the prices.',
-        TipMarket.homeOrDraw => '$home avoid defeat in ${(p * 100).round()}% of simulated games.',
-        TipMarket.awayOrDraw => '$away avoid defeat in ${(p * 100).round()}% of simulated games.',
-        TipMarket.over15 || TipMarket.over25 || TipMarket.overLine => 'Both attacks point to an open game.',
-        TipMarket.under25 || TipMarket.under35 || TipMarket.underLine => 'A tight, low-scoring game is the likeliest script.',
-        TipMarket.bttsYes => 'Each side scores often and concedes often.',
-        TipMarket.bttsNo => 'At least one side struggles to score.',
-        TipMarket.homeScores => '$home rarely go a home game without a goal.',
-        TipMarket.awayScores => '$away find the net in most of their games.',
+        TipMarket.homeWin =>
+          tr('{team} win this {pct}% of the time in our simulation.', {'team': home, 'pct': (p * 100).round()}),
+        TipMarket.awayWin =>
+          tr('{team} come out on top in {pct}% of simulated games.', {'team': away, 'pct': (p * 100).round()}),
+        TipMarket.draw => tr('An even game: the sides are close on the prices.'),
+        TipMarket.homeOrDraw =>
+          tr('{team} avoid defeat in {pct}% of simulated games.', {'team': home, 'pct': (p * 100).round()}),
+        TipMarket.awayOrDraw =>
+          tr('{team} avoid defeat in {pct}% of simulated games.', {'team': away, 'pct': (p * 100).round()}),
+        TipMarket.over15 || TipMarket.over25 || TipMarket.overLine => tr('Both attacks point to an open game.'),
+        TipMarket.under25 || TipMarket.under35 || TipMarket.underLine =>
+          tr('A tight, low-scoring game is the likeliest script.'),
+        TipMarket.bttsYes => tr('Each side scores often and concedes often.'),
+        TipMarket.bttsNo => tr('At least one side struggles to score.'),
+        TipMarket.homeScores => tr('{team} rarely go a home game without a goal.', {'team': home}),
+        TipMarket.awayScores => tr('{team} find the net in most of their games.', {'team': away}),
       },
     ];
 
@@ -397,17 +420,22 @@ List<String> _reasons(Match match, MatchDetails d) {
         .where((r) => (info.id.isNotEmpty && r.teamId == info.id) || r.team == t.name)
         .firstOrNull;
     final parts = [
-      if (info.form.isNotEmpty) 'form ${info.form.split('').join(' ')}',
-      if (pos != null) '${pos.rank}${_suffix(pos.rank)} in the table${pos.points.isEmpty ? '' : ' on ${pos.points} pts'}',
+      if (info.form.isNotEmpty) tr('form {form}', {'form': info.form.split('').join(' ')}),
+      if (pos != null)
+        pos.points.isEmpty
+            ? tr('{rank} in the table', {'rank': ordinal(pos.rank)})
+            : tr('{rank} in the table on {pts} pts', {'rank': ordinal(pos.rank), 'pts': pos.points}),
     ];
     if (parts.isNotEmpty) out.add('${t.name}: ${parts.join(', ')}.');
   }
   return out;
 }
 
-String _suffix(int n) {
-  if (n % 100 >= 11 && n % 100 <= 13) return 'th';
-  return switch (n % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', _ => 'th' };
+/// 1st, 2nd... in English; 1.º, 2.º... in Spanish.
+String ordinal(int n) {
+  if (L10n.spanish) return '$n.º';
+  if (n % 100 >= 11 && n % 100 <= 13) return '${n}th';
+  return '$n${switch (n % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', _ => 'th' }}';
 }
 
 /// A Pro tip the user paid for, kept as it was bought. [result] is 'won'

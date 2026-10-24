@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../data/models.dart';
 import '../data/store.dart';
 import '../logic/stats.dart';
@@ -27,13 +28,18 @@ class SummaryScreen extends StatelessWidget {
       BankCard(store: store, fmt: fmt, stats: s, onToast: (m) => _toast(context, m)),
       const SizedBox(height: 12),
       KpiGrid(tiles: [
-        Kpi('Profit / loss', fmt.money(s.profit, sign: true),
-            '${s.units >= 0 ? '+' : '−'}${s.units.abs().toStringAsFixed(1)} units', BankColors.forValue(context, s.profit)),
-        Kpi('ROI', fmt.pct(s.roi), 'on ${fmt.money(s.turnover)} staked', BankColors.forValue(context, s.roi)),
-        Kpi('Win rate', '${(s.winRate * 100).toStringAsFixed(0)}%', '${s.wins}W · ${s.losses}L', null),
-        Kpi('Bets', '${s.count}', '${s.settledCount} settled · ${s.pendingCount} open', null),
-        Kpi('Avg odds', s.avgOdds == 0 ? '–' : formatOdds(s.avgOdds, store.settings.oddsFormat), 'won and lost bets', null),
-        Kpi('At risk', fmt.money(s.exposure), '${s.pendingCount} open bets', null),
+        Kpi(tr('Profit / loss'), fmt.money(s.profit, sign: true),
+            tr('{units} units', {'units': '${s.units >= 0 ? '+' : '−'}${s.units.abs().toStringAsFixed(1)}'}),
+            BankColors.forValue(context, s.profit)),
+        Kpi('ROI', fmt.pct(s.roi), tr('on {amount} staked', {'amount': fmt.money(s.turnover)}),
+            BankColors.forValue(context, s.roi)),
+        Kpi(tr('Win rate'), '${(s.winRate * 100).toStringAsFixed(0)}%',
+            tr('{w}W · {l}L', {'w': s.wins, 'l': s.losses}), null),
+        Kpi(tr('Bets'), '${s.count}',
+            tr('{settled} settled · {open} open', {'settled': s.settledCount, 'open': s.pendingCount}), null),
+        Kpi(tr('Avg odds'), s.avgOdds == 0 ? '–' : formatOdds(s.avgOdds, store.settings.oddsFormat),
+            tr('won and lost bets'), null),
+        Kpi(tr('At risk'), fmt.money(s.exposure), trn(s.pendingCount, '{n} open bet', '{n} open bets'), null),
       ]),
       if (store.bets.isNotEmpty) ...[
         const SizedBox(height: 12),
@@ -59,12 +65,12 @@ class SummaryScreen extends StatelessWidget {
           child: OutlinedButton.icon(
             onPressed: onOpenBets,
             icon: const Icon(Icons.receipt_long_outlined),
-            label: const Text('Bet register'),
+            label: Text(tr('Bet register')),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: FilledButton.icon(onPressed: onLogBet, icon: const Icon(Icons.add), label: const Text('Log bet')),
+          child: FilledButton.icon(onPressed: onLogBet, icon: const Icon(Icons.add), label: Text(tr('Log bet'))),
         ),
       ]),
     ]);
@@ -87,28 +93,30 @@ class BankCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('BANKROLL', style: TextStyle(letterSpacing: 1.2, fontSize: 12, color: cs.onPrimaryContainer)),
+          Text(tr('BANKROLL'), style: TextStyle(letterSpacing: 1.2, fontSize: 12, color: cs.onPrimaryContainer)),
           const SizedBox(height: 4),
           Text(fmt.money(stats.balance),
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w700, color: cs.onPrimaryContainer, fontFeatures: const [FontFeature.tabularFigures()])),
-          Text('${fmt.money(stats.available)} available · started at ${fmt.money(store.settings.startBankroll)}',
+          Text(
+                tr('{available} available · started at {start}',
+                    {'available': fmt.money(stats.available), 'start': fmt.money(store.settings.startBankroll)}),
               style: TextStyle(color: cs.onPrimaryContainer.withValues(alpha: 0.8))),
           const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 8, children: [
             FilledButton.tonalIcon(
               onPressed: () async => onToast(await showTxSheet(context, store, TxKind.deposit)),
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Deposit'),
+              label: Text(tr('Deposit')),
             ),
             FilledButton.tonalIcon(
               onPressed: () async => onToast(await showTxSheet(context, store, TxKind.withdrawal)),
               icon: const Icon(Icons.remove, size: 18),
-              label: const Text('Withdraw'),
+              label: Text(tr('Withdraw')),
             ),
             TextButton(
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TransactionsPage(store: store))),
-              child: const Text('History'),
+              child: Text(tr('History')),
             ),
           ]),
         ]),

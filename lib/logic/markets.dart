@@ -1,3 +1,5 @@
+import '../l10n/l10n.dart';
+
 /// Bet markets the user can pick from when the match list has no price for
 /// them (handicaps, corners, cards...). Each one turns a side and a line into
 /// the selection text saved with the bet, e.g. "Arsenal -1.5" or
@@ -16,6 +18,31 @@ class Market {
 
   /// Hint for markets that take free text (a score, a player).
   final String? input;
+
+  /// [label] in the app's language.
+  String get name => switch (id) {
+        'result' => tr('Match result'),
+        'double_chance' => tr('Double chance'),
+        'handicap' => tr('Handicap'),
+        'goals' => tr('Over/Under goals'),
+        'btts' => tr('Both teams to score'),
+        'corners' => tr('Corners'),
+        'cards' => tr('Cards'),
+        'dnb' => tr('Draw no bet'),
+        'half_time' => tr('Half-time result'),
+        'correct_score' => tr('Correct score'),
+        'scorer' => tr('Goalscorer'),
+        'other' => tr('Other'),
+        _ => label,
+      };
+
+  /// [input] in the app's language.
+  String? get hint => switch (id) {
+        'correct_score' => tr('Score, e.g. 2-1'),
+        'scorer' => tr('Player, e.g. Haaland'),
+        'other' => tr('Your pick, e.g. Arsenal win both halves'),
+        _ => input,
+      };
 
   bool get hasLine => line != null;
   bool get hasText => input != null;

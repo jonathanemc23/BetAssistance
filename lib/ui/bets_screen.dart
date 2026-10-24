@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/store.dart';
@@ -39,29 +40,29 @@ class BetsScreenState extends State<BetsScreen> {
     final amount = await showDialog<double>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Cash out'),
+        title: Text(tr('Cash out')),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Stake ${fmt.money(b.stake)} · full win ${fmt.money(b.stake * b.odds)}'),
+          Text(tr('Stake {stake} · full win {win}', {'stake': fmt.money(b.stake), 'win': fmt.money(b.stake * b.odds)})),
           const SizedBox(height: 12),
           TextField(
             key: const Key('cashout-amount'),
             controller: ctrl,
             autofocus: true,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Amount received'),
+            decoration: InputDecoration(labelText: tr('Amount received')),
           ),
           const SizedBox(height: 8),
-          Text('Counts as a win when it locks in a profit, as a loss when it is at or near the stake.',
+          Text(tr('Counts as a win when it locks in a profit, as a loss when it is at or near the stake.'),
               style: Theme.of(c).textTheme.bodySmall),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(tr('Cancel'))),
           FilledButton(
             onPressed: () {
               final v = double.tryParse(ctrl.text.replaceAll(',', '.'));
               if (v != null && v >= 0) Navigator.pop(c, v);
             },
-            child: const Text('Save'),
+            child: Text(tr('Save')),
           ),
         ],
       ),
@@ -77,9 +78,9 @@ class BetsScreenState extends State<BetsScreen> {
       showDragHandle: true,
       builder: (c) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('Edit'), onTap: () => Navigator.pop(c, 'edit')),
-          ListTile(leading: const Icon(Icons.share_outlined), title: const Text('Share link'), onTap: () => Navigator.pop(c, 'share')),
-          ListTile(leading: const Icon(Icons.replay), title: const Text('Log this bet again'), onTap: () => Navigator.pop(c, 'again')),
+          ListTile(leading: const Icon(Icons.edit_outlined), title: Text(tr('Edit')), onTap: () => Navigator.pop(c, 'edit')),
+          ListTile(leading: const Icon(Icons.share_outlined), title: Text(tr('Share link')), onTap: () => Navigator.pop(c, 'share')),
+          ListTile(leading: const Icon(Icons.replay), title: Text(tr('Log this bet again')), onTap: () => Navigator.pop(c, 'again')),
         ]),
       ),
     );
@@ -114,11 +115,11 @@ class BetsScreenState extends State<BetsScreen> {
                   padding: const EdgeInsets.only(right: 8),
                   child: FilterChip(
                     label: Text(switch (f) {
-                      BetFilter.all => 'All',
-                      BetFilter.open => 'Open',
-                      BetFilter.won => 'Won',
-                      BetFilter.lost => 'Lost',
-                      BetFilter.parlays => 'Parlays',
+                      BetFilter.all => tr('All'),
+                      BetFilter.open => trc('status', 'Open'),
+                      BetFilter.won => tr('Won'),
+                      BetFilter.lost => tr('Lost'),
+                      BetFilter.parlays => tr('Parlays'),
                     }),
                     selected: _filter == f,
                     showCheckmark: false,
@@ -129,9 +130,12 @@ class BetsScreenState extends State<BetsScreen> {
           ),
           const SizedBox(height: 4),
           Row(children: [
-            Text('${list.length} bets', style: theme.textTheme.bodySmall),
+            Text(trn(list.length, '{n} bet', '{n} bets'), style: theme.textTheme.bodySmall),
             const Spacer(),
-            Text('Settled P/L ', style: theme.textTheme.bodySmall),
+            Flexible(
+              child: Text(tr('Settled P/L '),
+                  maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.end, style: theme.textTheme.bodySmall),
+            ),
             Text(fmt.money(pl, sign: true),
                 style: theme.textTheme.bodySmall?.copyWith(color: BankColors.forValue(context, pl), fontWeight: FontWeight.w600)),
           ]),
@@ -139,7 +143,7 @@ class BetsScreenState extends State<BetsScreen> {
           if (store.bets.isEmpty)
             _EmptyState(onAdd: () => openBetForm(context, store, api: widget.api))
           else if (list.isEmpty)
-            const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No bets match this filter.'))),
+            Padding(padding: EdgeInsets.all(24), child: Center(child: Text(tr('No bets match this filter.')))),
         ]),
       ),
       SliverPadding(
@@ -198,7 +202,10 @@ class _BetTile extends StatelessWidget {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
                     if (bet.type != BetType.single) ...[
-                      _TypeBadge(type: bet.type),
+                      Flexible(
+                        child: FittedBox(
+                            fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: _TypeBadge(type: bet.type)),
+                      ),
                       const SizedBox(width: 6),
                     ],
                     Expanded(child: Text(betTitle(bet), style: theme.textTheme.titleSmall)),
@@ -231,13 +238,13 @@ class _BetTile extends StatelessWidget {
                 if (pending)
                   Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                     Row(mainAxisSize: MainAxisSize.min, children: [
-                      _SettleButton(label: 'Won', color: BankColors.win(context), onTap: () => onSettle(BetStatus.won)),
+                      _SettleButton(label: tr('Won'), color: BankColors.win(context), onTap: () => onSettle(BetStatus.won)),
                       const SizedBox(width: 6),
-                      _SettleButton(label: 'Lost', color: BankColors.loss(context), onTap: () => onSettle(BetStatus.lost)),
+                      _SettleButton(label: tr('Lost'), color: BankColors.loss(context), onTap: () => onSettle(BetStatus.lost)),
                     ]),
                     const SizedBox(height: 6),
                     _SettleButton(
-                        label: 'Cash out',
+                        label: tr('Cash out'),
                         color: BankColors.forStatus(context, BetStatus.cashout),
                         onTap: () => onSettle(BetStatus.cashout)),
                   ])
@@ -299,12 +306,11 @@ class _EmptyState extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Your betting ledger starts here', style: Theme.of(context).textTheme.titleMedium),
+            Text(tr('Your betting ledger starts here'), style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            const Text('Log each bet with its stake and odds, as a single, a parlay or another type. '
-                'Long-press a bet to share it as a link or log it again.'),
+            Text(tr('Log each bet with its stake and odds, as a single, a parlay or another type. Long-press a bet to share it as a link or log it again.')),
             const SizedBox(height: 12),
-            FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add), label: const Text('Log your first bet')),
+            FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add), label: Text(tr('Log your first bet'))),
           ]),
         ),
       );
@@ -328,7 +334,12 @@ class _ReviewButton extends StatelessWidget {
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.fact_check_outlined, size: 15, color: cs.primary),
             const SizedBox(width: 5),
-            Text('Review bet', style: TextStyle(color: cs.primary, fontSize: 12, fontWeight: FontWeight.w700)),
+            Flexible(
+              child: Text(tr('Review bet'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: cs.primary, fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
           ]),
         ),
       ),

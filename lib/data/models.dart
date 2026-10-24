@@ -2,6 +2,8 @@
 /// transactions (deposits and withdrawals) and user settings.
 library;
 
+import '../l10n/l10n.dart';
+
 enum BetStatus { pending, won, lost, push, voided, cashout }
 
 extension BetStatusX on BetStatus {
@@ -9,12 +11,12 @@ extension BetStatusX on BetStatus {
   String get dbValue => this == BetStatus.voided ? 'void' : name;
 
   String get label => switch (this) {
-        BetStatus.pending => 'Pending',
-        BetStatus.won => 'Won',
-        BetStatus.lost => 'Lost',
-        BetStatus.push => 'Push',
-        BetStatus.voided => 'Void',
-        BetStatus.cashout => 'Cashed out',
+        BetStatus.pending => tr('Pending'),
+        BetStatus.won => tr('Won'),
+        BetStatus.lost => tr('Lost'),
+        BetStatus.push => tr('Push'),
+        BetStatus.voided => tr('Void'),
+        BetStatus.cashout => tr('Cashed out'),
       };
 
   static BetStatus parse(String v) => v == 'void'
@@ -27,6 +29,24 @@ const sports = [
   'MMA', 'Boxing', 'Cricket', 'Golf', 'Esports', 'Other',
 ];
 
+/// A sport from [sports] (the English name saved with the bet) in the app's
+/// language.
+String sportLabel(String sport) => switch (sport) {
+      'Soccer' => tr('Soccer'),
+      'Basketball' => tr('Basketball'),
+      'American Football' => tr('American Football'),
+      'Tennis' => tr('Tennis'),
+      'Baseball' => tr('Baseball'),
+      'Ice Hockey' => tr('Ice Hockey'),
+      'MMA' => 'MMA',
+      'Boxing' => tr('Boxing'),
+      'Cricket' => tr('Cricket'),
+      'Golf' => tr('Golf'),
+      'Esports' => tr('Esports'),
+      'Other' => tr('Other'),
+      _ => sport,
+    };
+
 const currencies = [
   'USD', 'EUR', 'GBP', 'BRL', 'MXN', 'COP', 'ARS', 'CAD', 'AUD', 'NGN', 'KES', 'ZAR', 'INR', 'JPY',
 ];
@@ -38,10 +58,10 @@ enum BetType { single, parlay, system, other }
 
 extension BetTypeX on BetType {
   String get label => switch (this) {
-        BetType.single => 'Single',
-        BetType.parlay => 'Parlay',
-        BetType.system => 'System',
-        BetType.other => 'Other',
+        BetType.single => tr('Single'),
+        BetType.parlay => tr('Parlay'),
+        BetType.system => tr('System'),
+        BetType.other => tr('Other'),
       };
 
   static BetType parse(String? v) =>

@@ -1,4 +1,5 @@
 import '../data/fixtures.dart';
+import '../l10n/l10n.dart';
 
 /// One answer from the Matchboard assistant. [note] is what gets saved on the
 /// board (null when the question wasn't understood).
@@ -26,16 +27,16 @@ abstract class MatchAssistant {
 }
 
 /// Ready-made questions shown as chips in the chat.
-const suggestedQuestions = [
-  'Who is the favourite?',
-  'How are both teams in form?',
-  'Head to head record',
-  'Goals trends: over 2.5 and BTTS',
-  'Where are they in the table?',
-  'Best odds and implied chances',
-  'Line-ups and key players',
-  'Latest news',
-];
+List<String> get suggestedQuestions => [
+      tr('Who is the favourite?'),
+      tr('How are both teams in form?'),
+      tr('Head to head record'),
+      tr('Goals trends: over 2.5 and BTTS'),
+      tr('Where are they in the table?'),
+      tr('Best odds and implied chances'),
+      tr('Line-ups and key players'),
+      tr('Latest news'),
+    ];
 
 /// Rule-based assistant: spots what the question is about (English or
 /// Spanish keywords) and builds the answer from the match data.
@@ -97,10 +98,8 @@ class DataAssistant implements MatchAssistant {
       'lineups' => _lineups(m, d),
       'stats' => _stats(m, d),
       'news' => _news(d),
-      _ => const AssistantReply(
-          "I can answer from this match's data: favourite and odds, form, head to head, goals trends "
-          '(over/under, both teams to score), the table, line-ups, stats and news. Try one of the suggestions, '
-          'or add an AI key in Settings so I can answer anything with help from the web.'),
+      _ => AssistantReply(tr(
+          "I can answer from this match's data: favourite and odds, form, head to head, goals trends (over/under, both teams to score), the table, line-ups, stats and news. Try one of the suggestions, or add an AI key in Settings so I can answer anything with help from the web.")),
     };
   }
 
@@ -118,7 +117,7 @@ class DataAssistant implements MatchAssistant {
     return AssistantReply(body, note: NoteDraft(category, title, body));
   }
 
-  static AssistantReply _none(String what) => AssistantReply("There's no $what in the feed for this match yet.");
+  static AssistantReply _none(String what) => AssistantReply(what);
 
   // ------------------------------------------------------------ Odds
 
@@ -145,18 +144,23 @@ class DataAssistant implements MatchAssistant {
 
   static AssistantReply _odds(Match m, MatchDetails d) {
     final b = bestOdds(m, d);
-    if (b == null) return _none('odds');
+    if (b == null) return _none(tr("There are no odds in the feed for this match yet."));
     final total = 1 + b.margin;
     final books = d.odds.isNotEmpty ? d.odds : [if (m.odds != null) m.odds!];
     final ou = books.where((o) => o.totalLine != null && o.over != null && o.under != null).firstOrNull;
-    return _reply('Odds', 'Best odds and implied chances', [
-      'Best prices across ${books.length} bookmaker${books.length == 1 ? '' : 's'}:',
+    return _reply('Odds', tr('Best odds and implied chances'), [
+      trn(books.length, 'Best prices across {n} bookmaker:', 'Best prices across {n} bookmakers:'),
       '• ${m.home.name}: ${_price(b.home!)} (${_pct(1 / b.home! / total)})',
-      if (b.draw != null) '• Draw: ${_price(b.draw!)} (${_pct(1 / b.draw! / total)})',
+      if (b.draw != null) '• ${tr('Draw')}: ${_price(b.draw!)} (${_pct(1 / b.draw! / total)})',
       '• ${m.away.name}: ${_price(b.away!)} (${_pct(1 / b.away! / total)})',
-      'Bookmaker margin: ${(b.margin * 100).toStringAsFixed(1)}%.',
+      tr('Bookmaker margin: {pct}%.', {'pct': (b.margin * 100).toStringAsFixed(1)}),
       if (ou != null)
-        'Total goals ${_line(ou.totalLine!)}: over ${_price(ou.over!)}, under ${_price(ou.under!)} (${ou.provider}).',
+        tr('Total goals {line}: over {over}, under {under} ({provider}).', {
+          'line': _line(ou.totalLine!),
+          'over': _price(ou.over!),
+          'under': _price(ou.under!),
+          'provider': ou.provider,
+        }),
     ]);
   }
 
@@ -199,47 +203,58 @@ class DataAssistant implements MatchAssistant {
 
   static AssistantReply _form(Match m, MatchDetails d, {String? only}) {
     final teams = [(m.home.name, d.home), (m.away.name, d.away)].where((t) => only == null || t.$1 == only).toList();
-    if (teams.every((t) => t.$2.form.isEmpty && t.$2.lastGames.isEmpty)) return _none('recent form');
+    if (teams.every((t) => t.$2.form.isEmpty && t.$2.lastGames.isEmpty)) {
+      return _none(tr("There's no recent form in the feed for this match yet."));
+    }
     final lines = <String>[];
     for (final (name, t) in teams) {
       final r = _recent(t);
       final form = t.form.isNotEmpty ? t.form : t.lastGames.reversed.map((g) => g.result).join();
       final pos = _position(d, t);
-      lines.add('$name: ${form.split('').join(' ')} (latest first)'
-          '${r.games > 0 ? ', ${r.w * 3 + r.dr} pts from last ${r.games}, goals ${r.gf}-${r.ga}' : ''}'
-          '${pos != null ? '; ${pos.$1} in the table on ${pos.$2} pts' : ''}.');
+      lines.add('$name: ${tr('{form} (latest first)', {'form': form.split('').map(trForm).join(' ')})}'
+          '${r.games > 0 ? tr(', {pts} pts from last {n}, goals {gf}-{ga}', {'pts': r.w * 3 + r.dr, 'n': r.games, 'gf': r.gf, 'ga': r.ga}) : ''}'
+          '${pos != null ? tr('; {rank} in the table on {pts} pts', {'rank': pos.$1, 'pts': pos.$2}) : ''}.');
     }
-    return _reply('Form', only == null ? 'Recent form' : '$only form', lines);
+    return _reply('Form', only == null ? tr('Recent form') : tr('{team} form', {'team': only}), lines);
   }
 
   static AssistantReply _goals(Match m, MatchDetails d) {
     final h = _recent(d.home), a = _recent(d.away);
-    if (h.games == 0 && a.games == 0 && d.h2h.isEmpty) return _none('goals data');
+    if (h.games == 0 && a.games == 0 && d.h2h.isEmpty) return _none(tr("There's no goals data in the feed for this match yet."));
     String team(String name, ({int w, int dr, int l, int gf, int ga, int over25, int btts, int games}) r) => r.games == 0
         ? ''
-        : '$name: scores ${(r.gf / r.games).toStringAsFixed(1)} and concedes ${(r.ga / r.games).toStringAsFixed(1)} '
-            'a game; over 2.5 in ${r.over25}/${r.games}, both scored in ${r.btts}/${r.games}.';
+        : tr('{team}: scores {gf} and concedes {ga} a game; over 2.5 in {over}/{n}, both scored in {btts}/{n}.', {
+            'team': name,
+            'gf': (r.gf / r.games).toStringAsFixed(1),
+            'ga': (r.ga / r.games).toStringAsFixed(1),
+            'over': r.over25,
+            'btts': r.btts,
+            'n': r.games,
+          });
     final h2hGoals = [
       for (final g in d.h2h)
         if (g.score.split('-').map((s) => int.tryParse(s.trim())).toList() case [final x?, final y?]) (x, y)
     ];
-    return _reply('Goals', 'Goals trends', [
-      'Last matches:',
+    return _reply('Goals', tr('Goals trends'), [
+      tr('Last matches:'),
       team(m.home.name, h),
       team(m.away.name, a),
       if (h2hGoals.isNotEmpty)
-        'Head to head: ${(h2hGoals.fold<int>(0, (s, g) => s + g.$1 + g.$2) / h2hGoals.length).toStringAsFixed(1)} '
-            'goals a game, both scored in ${h2hGoals.where((g) => g.$1 > 0 && g.$2 > 0).length}/${h2hGoals.length}.',
+        tr('Head to head: {avg} goals a game, both scored in {btts}/{n}.', {
+          'avg': (h2hGoals.fold<int>(0, (s, g) => s + g.$1 + g.$2) / h2hGoals.length).toStringAsFixed(1),
+          'btts': h2hGoals.where((g) => g.$1 > 0 && g.$2 > 0).length,
+          'n': h2hGoals.length,
+        }),
     ]);
   }
 
   // ------------------------------------------------------------ H2H, table
 
   static AssistantReply _h2h(Match m, MatchDetails d) {
-    if (d.h2h.isEmpty) return _none('head-to-head record');
-    return _reply('H2H', 'Head to head', [
+    if (d.h2h.isEmpty) return _none(tr("There's no head-to-head record in the feed for this match yet."));
+    return _reply('H2H', tr('Head to head'), [
       if (d.h2hSummary.isNotEmpty) '${d.h2hSummary}.',
-      'Last meetings:',
+      tr('Last meetings:'),
       for (final g in d.h2h.take(5))
         '• ${g.date == null ? '' : '${g.date!.year}-${g.date!.month.toString().padLeft(2, '0')}  '}${g.home} ${g.score} ${g.away}',
     ]);
@@ -253,15 +268,27 @@ class DataAssistant implements MatchAssistant {
   }
 
   static AssistantReply _table(Match m, MatchDetails d) {
-    if (d.table.isEmpty) return _none('league table');
+    if (d.table.isEmpty) return _none(tr("There's no league table in the feed for this match yet."));
     final lines = <String>[];
     for (final (name, t) in [(m.home.name, d.home), (m.away.name, d.away)]) {
       final r = d.table.where((r) => (t.id.isNotEmpty && r.teamId == t.id) || r.team == t.name).firstOrNull;
       if (r == null) continue;
-      lines.add('$name: #${r.rank}, ${r.points} pts from ${r.played} (W${r.won} D${r.drawn} L${r.lost}), GD ${r.goalDiff}.');
+      lines.add(tr('{team}: #{rank}, {pts} pts from {played} ({w}{won} {d}{drawn} {l}{lost}), GD {gd}.', {
+        'team': name,
+        'rank': r.rank,
+        'pts': r.points,
+        'played': r.played,
+        'w': trForm('W'),
+        'won': r.won,
+        'd': trForm('D'),
+        'drawn': r.drawn,
+        'l': trForm('L'),
+        'lost': r.lost,
+        'gd': r.goalDiff,
+      }));
     }
-    if (lines.isEmpty) return _none('table position for these teams');
-    return _reply('Table', 'League table', [if (d.tableTitle.isNotEmpty) '${d.tableTitle}:', ...lines]);
+    if (lines.isEmpty) return _none(tr("There's no table position for these teams in the feed yet."));
+    return _reply('Table', tr('League table'), [if (d.tableTitle.isNotEmpty) '${d.tableTitle}:', ...lines]);
   }
 
   // ------------------------------------------------------------ Line-ups, stats, news
@@ -270,29 +297,29 @@ class DataAssistant implements MatchAssistant {
     final lines = <String>[];
     for (final (name, t) in [(m.home.name, d.home), (m.away.name, d.away)]) {
       if (t.starters.isNotEmpty) {
-        lines.add('$name (${t.formation ?? 'line-up'}): ${t.starters.map((p) => p.name).join(', ')}.');
+        lines.add('$name (${t.formation ?? tr('line-up')}): ${t.starters.map((p) => p.name).join(', ')}.');
       }
-      final top = t.leaders.take(2).map((l) => '${l.$2} (${l.$1.toLowerCase()} ${l.$3})').join(', ');
-      if (top.isNotEmpty) lines.add('$name key players: $top.');
+      final top = t.leaders.take(2).map((l) => '${l.$2} (${trStat(l.$1).toLowerCase()} ${l.$3})').join(', ');
+      if (top.isNotEmpty) lines.add(tr('{team} key players: {players}.', {'team': name, 'players': top}));
     }
-    if (lines.isEmpty) return _none('line-up or player data');
+    if (lines.isEmpty) return _none(tr("There's no line-up or player data in the feed for this match yet."));
     if (d.home.starters.isEmpty && d.away.starters.isEmpty) {
-      lines.insert(0, 'Line-ups are not out yet (usually about an hour before kick-off).');
+      lines.insert(0, tr('Line-ups are not out yet (usually about an hour before kick-off).'));
     }
-    return _reply('Line-ups', 'Line-ups and key players', lines);
+    return _reply('Line-ups', tr('Line-ups and key players'), lines);
   }
 
   static AssistantReply _stats(Match m, MatchDetails d) {
-    if (d.stats.isEmpty) return _none('stats');
-    return _reply('Stats', d.statsAreSeason ? 'Season stats' : 'Match stats', [
-      '${m.home.name} vs ${m.away.name}${d.statsAreSeason ? ' (season so far)' : ''}:',
-      for (final (label, h, a) in d.stats.take(10)) '• $label: $h - $a',
+    if (d.stats.isEmpty) return _none(tr("There are no stats in the feed for this match yet."));
+    return _reply('Stats', d.statsAreSeason ? tr('Season stats') : tr('Match stats'), [
+      '${m.home.name} vs ${m.away.name}${d.statsAreSeason ? tr(' (season so far)') : ''}:',
+      for (final (label, h, a) in d.stats.take(10)) '• ${trStat(label)}: $h - $a',
     ]);
   }
 
   static AssistantReply _news(MatchDetails d) {
-    if (d.news.isEmpty) return _none('news');
-    return _reply('News', 'Latest news', [for (final n in d.news.take(3)) '• ${n.headline}']);
+    if (d.news.isEmpty) return _none(tr("There's no news in the feed for this match yet."));
+    return _reply('News', tr('Latest news'), [for (final n in d.news.take(3)) '• ${n.headline}']);
   }
 
   // ------------------------------------------------------------ Summary
@@ -304,22 +331,30 @@ class DataAssistant implements MatchAssistant {
       final total = 1 + b.margin;
       final ph = 1 / b.home! / total, pa = 1 / b.away! / total;
       final fav = ph >= pa ? m.home.name : m.away.name;
-      lines.add('Market favourite: $fav (${_pct(ph >= pa ? ph : pa)} implied, '
-          '${m.home.name} ${_price(b.home!)}${b.draw != null ? ' / draw ${_price(b.draw!)}' : ''} / ${m.away.name} ${_price(b.away!)}).');
+      lines.add(tr('Market favourite: {team} ({pct} implied, {prices}).', {
+        'team': fav,
+        'pct': _pct(ph >= pa ? ph : pa),
+        'prices': '${m.home.name} ${_price(b.home!)}${b.draw != null ? ' / ${tr('draw')} ${_price(b.draw!)}' : ''} / ${m.away.name} ${_price(b.away!)}',
+      }));
     }
     final h = _recent(d.home), a = _recent(d.away);
     if (h.games > 0 && a.games > 0) {
       final hp = h.w * 3 + h.dr, ap = a.w * 3 + a.dr;
-      lines.add('Form: ${m.home.name} $hp pts from ${h.games}, ${m.away.name} $ap pts from ${a.games}'
-          '${hp == ap ? ' (level).' : ' (edge ${hp > ap ? m.home.name : m.away.name}).'}');
+      lines.add(tr('Form: {home} {hp} pts from {hn}, {away} {ap} pts from {an}',
+              {'home': m.home.name, 'hp': hp, 'hn': h.games, 'away': m.away.name, 'ap': ap, 'an': a.games}) +
+          (hp == ap ? tr(' (level).') : tr(' (edge {team}).', {'team': hp > ap ? m.home.name : m.away.name})));
       final games = h.games + a.games;
-      lines.add('Goals: over 2.5 in ${h.over25 + a.over25}/$games recent games, both scored in ${h.btts + a.btts}/$games.');
+      lines.add(tr('Goals: over 2.5 in {over}/{n} recent games, both scored in {btts}/{n}.',
+          {'over': h.over25 + a.over25, 'btts': h.btts + a.btts, 'n': games}));
     }
     final hpos = _position(d, d.home), apos = _position(d, d.away);
-    if (hpos != null && apos != null) lines.add('Table: ${m.home.name} ${hpos.$1}, ${m.away.name} ${apos.$1}.');
-    if (d.h2hSummary.isNotEmpty) lines.add('Head to head: ${d.h2hSummary}.');
-    if (lines.isEmpty) return _none('data to summarise');
-    lines.add('This is a summary of the data, not a guarantee.');
-    return _reply('Summary', 'Match summary', lines);
+    if (hpos != null && apos != null) {
+      lines.add(tr('Table: {home} {hpos}, {away} {apos}.',
+          {'home': m.home.name, 'hpos': hpos.$1, 'away': m.away.name, 'apos': apos.$1}));
+    }
+    if (d.h2hSummary.isNotEmpty) lines.add(tr('Head to head: {summary}.', {'summary': d.h2hSummary}));
+    if (lines.isEmpty) return _none(tr("There's no data to summarise in the feed for this match yet."));
+    lines.add(tr('This is a summary of the data, not a guarantee.'));
+    return _reply('Summary', tr('Match summary'), lines);
   }
 }

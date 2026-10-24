@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/l10n.dart';
 import '../data/board.dart';
 import '../data/fixtures.dart';
 import '../data/store.dart';
@@ -30,11 +31,10 @@ class MatchboardScreen extends StatelessWidget {
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Icon(Icons.space_dashboard_outlined, size: 56, color: cs.primary),
                 const SizedBox(height: 16),
-                Text('Your match workspaces', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                Text(tr('Your match workspaces'), style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
                 Text(
-                  'Open any match and tap the board icon. Ask questions in its chat and every answer is kept '
-                  'on the board as a key note, next to your own notes.',
+                  tr('Open any match and tap the board icon. Ask questions in its chat and every answer is kept on the board as a key note, next to your own notes.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: cs.onSurfaceVariant),
                 ),
@@ -43,7 +43,7 @@ class MatchboardScreen extends StatelessWidget {
                   FilledButton.icon(
                     onPressed: onBrowseMatches,
                     icon: const Icon(Icons.sports_soccer),
-                    label: const Text('Browse matches'),
+                    label: Text(tr('Browse matches')),
                   ),
                 ],
               ]),
@@ -68,11 +68,11 @@ class MatchboardScreen extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Delete this board?'),
-        content: Text('${b.title}: its chat and ${b.noteCount} notes will be removed.'),
+        title: Text(tr('Delete this board?')),
+        content: Text(trn(b.noteCount, '{board}: its chat and {n} note will be removed.', '{board}: its chat and {n} notes will be removed.', {'board': b.title})),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Delete')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Delete'))),
         ],
       ),
     );
@@ -131,7 +131,7 @@ class _BoardTile extends StatelessWidget {
                 Text('${b.leagueName} · ${DateFormat.MMMd().add_Hm().format(b.kickoff.toLocal())}',
                     style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                 if (b.lastNote != null)
-                  Text('Latest: ${b.lastNote}',
+                  Text(tr('Latest: {note}', {'note': b.lastNote}),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(color: cs.primary)),
@@ -144,7 +144,7 @@ class _BoardTile extends StatelessWidget {
               child: Column(children: [
                 Text('${b.noteCount}',
                     style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: cs.onPrimaryContainer)),
-                Text('notes', style: theme.textTheme.labelSmall?.copyWith(color: cs.onPrimaryContainer)),
+                Text(tr('notes'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onPrimaryContainer)),
               ]),
             ),
           ]),
@@ -154,7 +154,24 @@ class _BoardTile extends StatelessWidget {
   }
 }
 
-const _categoryIcons = <String, IconData>{
+/// A note category ([_categoryIcons]) in the app's language.
+String categoryLabel(String c) => switch (c) {
+      'All' => tr('All'),
+      'Summary' => tr('Summary'),
+      'Odds' => tr('Odds'),
+      'Form' => tr('Form'),
+      'Goals' => tr('Goals'),
+      'H2H' => tr('H2H'),
+      'Table' => tr('Table'),
+      'Line-ups' => tr('Line-ups'),
+      'Stats' => tr('Stats'),
+      'News' => tr('News'),
+      'Research' => tr('Research'),
+      'My notes' => tr('My notes'),
+      _ => c,
+    };
+
+final _categoryIcons = <String, IconData>{
   'Summary': Icons.auto_awesome,
   'Odds': Icons.percent,
   'Form': Icons.trending_up,
@@ -253,7 +270,7 @@ class _BoardPageState extends State<BoardPage> with SingleTickerProviderStateMix
     if (history.isNotEmpty && history.last.$1 && history.last.$2 == q) history.removeLast();
     final AssistantReply reply;
     if (details == null) {
-      reply = const AssistantReply("I couldn't load this match's data. Check your connection and ask again.");
+      reply = AssistantReply(tr("I couldn't load this match's data. Check your connection and ask again."));
     } else {
       reply = await widget.assistant.ask(q, board.toMatch(), details, history: history);
     }
@@ -267,10 +284,10 @@ class _BoardPageState extends State<BoardPage> with SingleTickerProviderStateMix
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
-          content: Text('Saved to the board: ${reply.note!.title}'),
+          content: Text(tr('Saved to the board: {note}', {'note': reply.note!.title})),
           persist: false, // an action would otherwise keep it on screen
           duration: const Duration(seconds: 3),
-          action: SnackBarAction(label: 'View', onPressed: () => _tabs.animateTo(0)),
+          action: SnackBarAction(label: tr('View'), onPressed: () => _tabs.animateTo(0)),
         ));
     }
   }
@@ -284,17 +301,17 @@ class _BoardPageState extends State<BoardPage> with SingleTickerProviderStateMix
       builder: (c) => Padding(
         padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.viewInsetsOf(c).bottom),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('Your note', style: Theme.of(c).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          Text(tr('Your note'), style: Theme.of(c).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           TextField(
             controller: text,
             autofocus: true,
             minLines: 3,
             maxLines: 6,
-            decoration: const InputDecoration(hintText: 'e.g. Their keeper is back from injury'),
+            decoration: InputDecoration(hintText: tr('e.g. Their keeper is back from injury')),
           ),
           const SizedBox(height: 12),
-          FilledButton(onPressed: () => Navigator.pop(c, text.text.trim()), child: const Text('Save to board')),
+          FilledButton(onPressed: () => Navigator.pop(c, text.text.trim()), child: Text(tr('Save to board'))),
         ]),
       ),
     );
@@ -312,12 +329,12 @@ class _BoardPageState extends State<BoardPage> with SingleTickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Matchboard')),
+      appBar: AppBar(title: Text(tr('Matchboard'))),
       body: Column(children: [
         _BoardHeader(board: board, notes: _notes.length),
         TabBar(controller: _tabs, tabs: [
-          Tab(text: 'Board (${_notes.length})'),
-          const Tab(text: 'Chat'),
+          Tab(text: tr('Board ({n})', {'n': _notes.length})),
+          Tab(text: tr('Chat')),
         ]),
         Expanded(
           child: TabBarView(controller: _tabs, children: [_boardTab(), _chatTab()]),
@@ -338,15 +355,15 @@ class _BoardPageState extends State<BoardPage> with SingleTickerProviderStateMix
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.push_pin_outlined, size: 44, color: cs.primary),
             const SizedBox(height: 12),
-            Text('Nothing on the board yet', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            Text(tr('Nothing on the board yet'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
-            Text('Ask in the chat and each answer is saved here. You can add your own notes too.',
+            Text(tr('Ask in the chat and each answer is saved here. You can add your own notes too.'),
                 textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
             const SizedBox(height: 16),
             Wrap(spacing: 8, children: [
               FilledButton.icon(
-                  onPressed: () => _tabs.animateTo(1), icon: const Icon(Icons.chat_bubble_outline), label: const Text('Ask')),
-              OutlinedButton.icon(onPressed: _addOwnNote, icon: const Icon(Icons.edit_note), label: const Text('Add note')),
+                  onPressed: () => _tabs.animateTo(1), icon: const Icon(Icons.chat_bubble_outline), label: Text(tr('Ask'))),
+              OutlinedButton.icon(onPressed: _addOwnNote, icon: const Icon(Icons.edit_note), label: Text(tr('Add note'))),
             ]),
           ]),
         ),
@@ -363,7 +380,7 @@ class _BoardPageState extends State<BoardPage> with SingleTickerProviderStateMix
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
-                  label: Text(c),
+                  label: Text(categoryLabel(c)),
                   avatar: c == 'All' ? null : Icon(_categoryIcons[c] ?? Icons.label_outline, size: 16),
                   selected: _filter == c,
                   onSelected: (_) => setState(() => _filter = c),
@@ -392,7 +409,7 @@ class _BoardPageState extends State<BoardPage> with SingleTickerProviderStateMix
           heroTag: 'add-note',
           onPressed: _addOwnNote,
           icon: const Icon(Icons.edit_note),
-          label: const Text('Add note'),
+          label: Text(tr('Add note')),
         ),
       ),
     ]);
@@ -409,16 +426,14 @@ class _BoardPageState extends State<BoardPage> with SingleTickerProviderStateMix
             ? ListView(padding: const EdgeInsets.all(24), children: [
                 Icon(Icons.forum_outlined, size: 44, color: cs.primary),
                 const SizedBox(height: 12),
-                Text('Ask about ${board.title}',
+                Text(tr('Ask about {match}', {'match': board.title}),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
                 Text(
                   widget.assistant is ClaudeAssistant
-                      ? 'Ask anything. Claude answers with the match data and searches the web for the rest. '
-                          'Each answer is saved on the board.'
-                      : 'Answers come from the match data: odds, form, head to head, goals, table, line-ups, stats and '
-                          'news. Each answer is saved on the board. Add an AI key in Settings to ask anything.',
+                      ? tr('Ask anything. Claude answers with the match data and searches the web for the rest. Each answer is saved on the board.')
+                      : tr('Answers come from the match data: odds, form, head to head, goals, table, line-ups, stats and news. Each answer is saved on the board. Add an AI key in Settings to ask anything.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: cs.onSurfaceVariant),
                 ),
@@ -456,12 +471,12 @@ class _BoardPageState extends State<BoardPage> with SingleTickerProviderStateMix
                 controller: _input,
                 textInputAction: TextInputAction.send,
                 onSubmitted: _ask,
-                decoration: const InputDecoration(hintText: 'Ask about this match', isDense: true),
+                decoration: InputDecoration(hintText: tr('Ask about this match'), isDense: true),
               ),
             ),
             const SizedBox(width: 8),
             IconButton.filled(
-              tooltip: 'Send',
+              tooltip: tr('Send'),
               onPressed: _thinking ? null : () => _ask(_input.text),
               icon: const Icon(Icons.send),
             ),
@@ -545,14 +560,14 @@ class _NoteCard extends StatelessWidget {
           const Spacer(),
           IconButton(
             visualDensity: VisualDensity.compact,
-            tooltip: n.pinned ? 'Unpin' : 'Pin to top',
+            tooltip: n.pinned ? tr('Unpin') : tr('Pin to top'),
             onPressed: onPin,
             icon: Icon(n.pinned ? Icons.push_pin : Icons.push_pin_outlined, size: 18,
                 color: n.pinned ? cs.primary : cs.onSurfaceVariant),
           ),
           IconButton(
             visualDensity: VisualDensity.compact,
-            tooltip: 'Delete note',
+            tooltip: tr('Delete note'),
             onPressed: onDelete,
             icon: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
           ),
@@ -565,7 +580,7 @@ class _NoteCard extends StatelessWidget {
             Text(n.body, style: theme.textTheme.bodyMedium?.copyWith(height: 1.35)),
             const SizedBox(height: 6),
             Text(
-              '${mine ? 'Your note' : 'From chat'} · ${DateFormat.MMMd().add_Hm().format(DateTime.parse(n.created))}',
+              '${mine ? tr('Your note') : tr('From chat')} · ${DateFormat.MMMd().add_Hm().format(DateTime.parse(n.created))}',
               style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
             ),
           ]),

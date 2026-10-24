@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../data/fixtures.dart';
+import '../l10n/l10n.dart';
 import 'assistant.dart';
 
 /// Preference that holds the user's Anthropic API key.
@@ -77,13 +78,13 @@ class ClaudeAssistant implements MatchAssistant {
         final body = jsonDecode(utf8.decode(res.bodyBytes));
         if (res.statusCode != 200) return AssistantReply(_error(res.statusCode, body));
         if (body['stop_reason'] == 'refusal') {
-          return const AssistantReply("I can't help with that question. Try asking it another way.");
+          return AssistantReply(tr("I can't help with that question. Try asking it another way."));
         }
         content.addAll((body['content'] as List).cast<Map<String, Object?>>());
         if (body['stop_reason'] != 'pause_turn') break;
       }
     } catch (_) {
-      return const AssistantReply("I couldn't reach the AI right now. Check your connection and try again.");
+      return AssistantReply(tr("I couldn't reach the AI right now. Check your connection and try again."));
     }
 
     final text = StringBuffer();
@@ -97,9 +98,9 @@ class ClaudeAssistant implements MatchAssistant {
       }
     }
     var answer = text.toString().trim();
-    if (answer.isEmpty) return const AssistantReply("I couldn't find an answer to that. Try asking another way.");
+    if (answer.isEmpty) return AssistantReply(tr("I couldn't find an answer to that. Try asking another way."));
     if (sources.isNotEmpty) {
-      answer += '\n\nSources:\n${sources.entries.take(4).map((e) => '• ${e.value} (${e.key})').join('\n')}';
+      answer += '\n\n${tr('Sources:')}\n${sources.entries.take(4).map((e) => '• ${e.value} (${e.key})').join('\n')}';
     }
     final title = question.length > 48 ? '${question.substring(0, 45)}…' : question;
     return AssistantReply(answer, note: NoteDraft('Research', title, answer));
@@ -108,10 +109,10 @@ class ClaudeAssistant implements MatchAssistant {
   static String _error(int status, Object? body) {
     final message = body is Map && body['error'] is Map ? (body['error'] as Map)['message'] : null;
     return switch (status) {
-      401 || 403 => 'The AI key in Settings was not accepted. Check it and try again.',
-      429 => 'The AI is busy or your Anthropic account hit its limit. Try again in a minute.',
-      400 when '$message'.contains('credit') => 'Your Anthropic account has no credit left. Add credit and try again.',
-      _ => "The AI couldn't answer right now (error $status). Try again.",
+      401 || 403 => tr('The AI key in Settings was not accepted. Check it and try again.'),
+      429 => tr('The AI is busy or your Anthropic account hit its limit. Try again in a minute.'),
+      400 when '$message'.contains('credit') => tr('Your Anthropic account has no credit left. Add credit and try again.'),
+      _ => tr("The AI couldn't answer right now (error {status}). Try again.", {'status': status}),
     };
   }
 
@@ -124,6 +125,7 @@ class ClaudeAssistant implements MatchAssistant {
           'general questions. Answer in the language the user writes in. Be concise and concrete: a short answer '
           'first, then the key facts. Use web search for anything recent or not in the data below. Never promise '
           'a result; when asked for a pick, give the reasoning and the risk.',
+      if (L10n.spanish) 'The app is set to Spanish: answer in Spanish unless the user writes in another language.',
       '',
       'Today: ${_now().toIso8601String().substring(0, 10)}',
       'Match: ${m.home.name} vs ${m.away.name} (${m.league.name}), kick-off ${m.kickoff.toUtc().toIso8601String()} UTC.',

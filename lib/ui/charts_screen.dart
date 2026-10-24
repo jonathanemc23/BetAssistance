@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/l10n.dart';
 import '../data/models.dart';
 import '../data/store.dart';
 import '../logic/stats.dart';
@@ -20,15 +21,15 @@ class ChartsScreen extends StatelessWidget {
     final bets = store.bets;
     return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
       _Panel(
-        title: 'Bankroll over time',
-        subtitle: "Balance after each day's settled bets, deposits and withdrawals. Dashed line is where you started.",
+        title: tr('Bankroll over time'),
+        subtitle: tr("Balance after each day's settled bets, deposits and withdrawals. Dashed line is where you started."),
         child: _BankrollLine(points: bankrollSeries(store.settings, bets, store.txs), start: store.settings.startBankroll, fmt: fmt),
       ),
-      _Panel(title: 'Profit by month', child: _MonthBars(data: profitByMonth(bets), fmt: fmt)),
-      _Panel(title: 'Results', child: _ResultsPie(bets: bets)),
+      _Panel(title: tr('Profit by month'), child: _MonthBars(data: profitByMonth(bets), fmt: fmt)),
+      _Panel(title: tr('Results'), child: _ResultsPie(bets: bets)),
       _Panel(
-        title: 'Profit by sport',
-        subtitle: 'Settled bets only, with ROI and number of bets.',
+        title: tr('Profit by sport'),
+        subtitle: tr('Settled bets only, with ROI and number of bets.'),
         child: _SportBars(data: profitBySport(bets), fmt: fmt),
       ),
     ]);
@@ -87,7 +88,7 @@ class _BankrollLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (points.length < 2) return const _Empty('Settle a bet or add a deposit to start the line.');
+    if (points.length < 2) return _Empty(tr('Settle a bet or add a deposit to start the line.'));
     final accent = Theme.of(context).colorScheme.primary;
     final t0 = points.first.date;
     double day(DateTime d) => d.difference(t0).inHours / 24;
@@ -167,7 +168,7 @@ class _MonthBars extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (data.isEmpty) return const _Empty('No settled bets yet.');
+    if (data.isEmpty) return _Empty(tr('No settled bets yet.'));
     final maxAbs = data.map((d) => d.$2.abs()).fold<double>(1, math.max);
     final minVal = data.map((d) => d.$2).fold<double>(0, math.min);
     String label(int i) => DateFormat.MMM().format(DateTime.parse('${data[i].$1}-15'));
@@ -226,15 +227,15 @@ class _ResultsPie extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (bets.isEmpty) return const _Empty('No bets logged yet.');
+    if (bets.isEmpty) return _Empty(tr('No bets logged yet.'));
     int n(bool Function(Bet) f) => bets.where(f).length;
     final parts = [
-      ('Won', n((b) => b.status == BetStatus.won), BankColors.win(context)),
-      ('Lost', n((b) => b.status == BetStatus.lost), BankColors.loss(context)),
-      ('Pending', n((b) => b.status == BetStatus.pending), BankColors.pending(context)),
+      (tr('Won'), n((b) => b.status == BetStatus.won), BankColors.win(context)),
+      (tr('Lost'), n((b) => b.status == BetStatus.lost), BankColors.loss(context)),
+      (tr('Pending'), n((b) => b.status == BetStatus.pending), BankColors.pending(context)),
       (
-        'Push, void, cash-out',
-        n((b) => const [BetStatus.push, BetStatus.voided, BetStatus.cashout].contains(b.status)),
+        tr('Push, void, cash-out'),
+        n((b) => [BetStatus.push, BetStatus.voided, BetStatus.cashout].contains(b.status)),
         BankColors.neutral(context)
       ),
     ];
@@ -253,7 +254,7 @@ class _ResultsPie extends StatelessWidget {
           )),
           Column(mainAxisSize: MainAxisSize.min, children: [
             Text('${bets.length}', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-            Text('bets', style: Theme.of(context).textTheme.bodySmall),
+            Text(tr('bets'), style: Theme.of(context).textTheme.bodySmall),
           ]),
         ]),
       ),
@@ -283,7 +284,7 @@ class _SportBars extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (data.isEmpty) return const _Empty('No settled bets yet.');
+    if (data.isEmpty) return _Empty(tr('No settled bets yet.'));
     final maxAbs = data.map((d) => d.profit.abs()).fold<double>(1, math.max);
     final theme = Theme.of(context);
     return Column(children: [
@@ -292,7 +293,7 @@ class _SportBars extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Expanded(child: Text('${g.label} (${g.count})', style: theme.textTheme.bodyMedium)),
+              Expanded(child: Text('${sportLabel(g.label)} (${g.count})', style: theme.textTheme.bodyMedium)),
               Text('${fmt.money(g.profit, sign: true)} · ROI ${fmt.pct(g.roi)}',
                   style: theme.textTheme.bodySmall?.copyWith(color: BankColors.forValue(context, g.profit))),
             ]),

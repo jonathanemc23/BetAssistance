@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'data/database.dart';
+import 'l10n/l10n.dart';
 import 'data/fixtures.dart';
 import 'data/live_alert_service.dart';
 import 'data/models.dart';
@@ -13,10 +15,12 @@ import 'ui/bank_screens.dart';
 import 'ui/bet_form.dart';
 import 'ui/bets_screen.dart';
 import 'ui/charts_screen.dart';
+import 'ui/community.dart';
 import 'ui/home_screen.dart';
 import 'ui/matches_screen.dart';
 import 'ui/themes.dart';
 import 'ui/share_ui.dart';
+import 'ui/stake_builder.dart';
 import 'ui/tools_screen.dart';
 
 Future<void> main() async {
@@ -50,6 +54,9 @@ class BankTrackApp extends StatelessWidget {
           title: 'BetPilot',
           debugShowCheckedModeBanner: false,
           theme: theme(store.themeId),
+          locale: store.language.locale,
+          supportedLocales: [for (final l in AppLanguage.values) l.locale],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
           home: child,
         ),
         child: HomeShell(store: store, links: links, fixtures: fixtures ?? FixturesApi(), today: today),
@@ -91,7 +98,7 @@ class _HomeShellState extends State<HomeShell> {
     final bet = BetLink.decode(uri.toString(), today: isoDate(DateTime.now()), created: DateTime.now().toIso8601String());
     if (!mounted) return;
     if (bet == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't read that bet link")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr("Couldn't read that bet link"))));
       return;
     }
     openBetForm(context, store, template: bet, api: widget.fixtures);
@@ -108,7 +115,7 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   void _openTools() => _push((_) => Scaffold(
-        appBar: AppBar(title: const Text('Bet Tools')),
+        appBar: AppBar(title: Text(tr('Bet Tools'))),
         body: BetToolsScreen(store: store, api: widget.fixtures, today: widget.today),
       ));
 
@@ -123,17 +130,45 @@ class _HomeShellState extends State<HomeShell> {
       f();
     }
 
+    final actions = <VoidCallback>[
+      _openTools,
+      () => openStakeBuilder(context, store: store, api: widget.fixtures, today: widget.today),
+      () => openCommunity(context, store: store, api: widget.fixtures, today: widget.today),
+      () => openCommunity(context, store: store, api: widget.fixtures, today: widget.today, tab: 1),
+      () => openCommunity(context, store: store, api: widget.fixtures, today: widget.today, tab: 2),
+      _openSettings,
+    ];
+    final sub = Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w400);
+    // Long names (and long translations) end in an ellipsis, not an overflow.
+    Widget label(String text, {Key? key, TextStyle? style}) => ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 200),
+          child: Text(text, key: key, style: style, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
+        );
     return NavigationDrawer(
       selectedIndex: null,
-      onDestinationSelected: (i) => go(i == 0 ? _openTools : _openSettings),
+      onDestinationSelected: (i) => go(actions[i]),
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 20, 16, 12),
           child: const BrandTitle(size: 36),
         ),
-        const NavigationDrawerDestination(icon: Icon(Icons.handyman_outlined), label: Text('Bet Tools')),
+        NavigationDrawerDestination(icon: Icon(Icons.handyman_outlined), label: label(tr('Bet Tools'))),
+        NavigationDrawerDestination(
+            icon: Icon(Icons.query_stats), label: label(tr('Stake builder'), key: const Key('drawer-stake'))),
         const Padding(padding: EdgeInsets.symmetric(horizontal: 28, vertical: 8), child: Divider()),
-        const NavigationDrawerDestination(icon: Icon(Icons.tune), label: Text('Settings')),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 4, 16, 8),
+          child: Text(tr('Community'), style: Theme.of(context).textTheme.titleSmall),
+        ),
+        NavigationDrawerDestination(
+            icon: Icon(Icons.storefront_outlined),
+            label: label(tr('Bets for sale'), style: sub, key: const Key('drawer-community'))),
+        NavigationDrawerDestination(
+            icon: Icon(Icons.workspace_premium_outlined),
+            label: label(tr('Become a pro bettor'), style: sub, key: const Key('drawer-pro-bettor'))),
+        NavigationDrawerDestination(icon: Icon(Icons.badge_outlined), label: label(tr('Social profile'), style: sub)),
+        const Padding(padding: EdgeInsets.symmetric(horizontal: 28, vertical: 8), child: Divider()),
+        NavigationDrawerDestination(icon: Icon(Icons.tune), label: label(tr('Settings'))),
       ],
     );
   }
@@ -152,12 +187,12 @@ class _HomeShellState extends State<HomeShell> {
         appBar: AppBar(
           title: _tab == 0
               ? const BrandTitle()
-              : Text(switch (_tab) { 1 => 'Bet register', 2 => 'Matches', _ => 'Charts' },
+              : Text(switch (_tab) { 1 => tr('Bet register'), 2 => tr('Matches'), _ => tr('Charts') },
                   style: const TextStyle(fontWeight: FontWeight.w700)),
           actions: [
             if (_tab == 1)
-              IconButton(tooltip: 'Open a bet link', icon: const Icon(Icons.add_link), onPressed: _pasteLink),
-            IconButton(tooltip: 'Settings', icon: const Icon(Icons.tune), onPressed: _openSettings),
+              IconButton(tooltip: tr('Open a bet link'), icon: const Icon(Icons.add_link), onPressed: _pasteLink),
+            IconButton(tooltip: tr('Settings'), icon: const Icon(Icons.tune), onPressed: _openSettings),
           ],
         ),
         body: IndexedStack(index: _tab, children: [
@@ -180,7 +215,7 @@ class _HomeShellState extends State<HomeShell> {
             ? FloatingActionButton.extended(
                 onPressed: () => openBetForm(context, store, api: widget.fixtures),
                 icon: const Icon(Icons.add),
-                label: const Text('Log bet'),
+                label: Text(tr('Log bet')),
               )
             : null,
         bottomNavigationBar: NavigationBar(
@@ -189,12 +224,12 @@ class _HomeShellState extends State<HomeShell> {
             _tab = i;
             if (i == 2) _matchesShown = true;
           }),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-            NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Bets'),
+          destinations: [
+            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: tr('Home')),
+            NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: tr('Bets')),
             NavigationDestination(
-                icon: Icon(Icons.sports_soccer_outlined), selectedIcon: Icon(Icons.sports_soccer), label: 'Matches'),
-            NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Charts'),
+                icon: Icon(Icons.sports_soccer_outlined), selectedIcon: Icon(Icons.sports_soccer), label: tr('Matches')),
+            NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: tr('Charts')),
           ],
         ),
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/store.dart';
@@ -7,6 +8,7 @@ import '../logic/bet_review.dart';
 import '../logic/stats.dart';
 import 'format.dart';
 import 'match_page.dart';
+import 'share_ui.dart';
 import 'themes.dart';
 
 Future<void> openBetReview(BuildContext context,
@@ -54,8 +56,8 @@ class _BetReviewPageState extends State<BetReviewPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bet review'),
-        actions: [IconButton(tooltip: 'Review again', icon: const Icon(Icons.refresh), onPressed: _run)],
+        title: Text(tr('Bet review')),
+        actions: [IconButton(tooltip: tr('Review again'), icon: const Icon(Icons.refresh), onPressed: _run)],
       ),
       body: FutureBuilder<BetReview>(
         future: _review,
@@ -67,7 +69,7 @@ class _BetReviewPageState extends State<BetReviewPage> {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
-                child: Text("Couldn't review this bet right now. Try again.", textAlign: TextAlign.center),
+                child: Text(tr("Couldn't review this bet right now. Try again."), textAlign: TextAlign.center),
               ),
             );
           }
@@ -95,7 +97,7 @@ class _BetReviewPageState extends State<BetReviewPage> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(
-              child: Text(b.isParlay ? '${b.legs.length}-leg parlay' : b.selection,
+              child: Text(betTitle(b),
                   style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w800)),
             ),
             Text(formatOdds(b.odds, store.settings.oddsFormat),
@@ -106,7 +108,7 @@ class _BetReviewPageState extends State<BetReviewPage> {
           const SizedBox(height: 10),
           Text(r.headline, style: theme.textTheme.titleSmall?.copyWith(color: fg, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text('${fmt.money(b.stake)} staked · ${b.status.label}',
+          Text(tr('{stake} staked · {status}', {'stake': fmt.money(b.stake), 'status': b.status.label}),
               style: theme.textTheme.bodySmall?.copyWith(color: fg.withValues(alpha: 0.85))),
         ]),
       ),
@@ -115,7 +117,7 @@ class _BetReviewPageState extends State<BetReviewPage> {
         FilledButton.icon(
           onPressed: () => store.settle(b, r.suggestedResult!),
           icon: const Icon(Icons.check),
-          label: Text('Mark as ${r.suggestedResult!.label.toLowerCase()}'),
+          label: Text(tr('Mark as {result}', {'result': r.suggestedResult!.label.toLowerCase()})),
         ),
       ] else if (b.status != BetStatus.pending) ...[
         const SizedBox(height: 10),
@@ -123,7 +125,9 @@ class _BetReviewPageState extends State<BetReviewPage> {
           Icon(Icons.circle, size: 10, color: color),
           const SizedBox(width: 6),
           Flexible(
-            child: Text('Settled as ${b.status.label.toLowerCase()} · ${fmt.money(b.profit, sign: true)}',
+            child: Text(
+                tr('Settled as {result} · {profit}',
+                    {'result': b.status.label.toLowerCase(), 'profit': fmt.money(b.profit, sign: true)}),
                 style: theme.textTheme.labelLarge?.copyWith(color: color)),
           ),
         ]),
@@ -139,11 +143,11 @@ class _BetReviewPageState extends State<BetReviewPage> {
             builder: (_) => MatchPage(match: r.match!, store: store, api: widget.api),
           )),
           icon: const Icon(Icons.sports_soccer),
-          label: const Text('Open the match page'),
+          label: Text(tr('Open the match page')),
         ),
       ],
       const SizedBox(height: 14),
-      Text('Built from the match data and your own history. It is a guide, not a guarantee.',
+      Text(tr('Built from the match data and your own history. It is a guide, not a guarantee.'),
           style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
     ]);
   }

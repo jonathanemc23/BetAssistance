@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/parlay.dart';
@@ -28,7 +29,7 @@ class ParlaysPage extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Parlay builder')),
+      appBar: AppBar(title: Text(tr('Parlay builder'))),
       floatingActionButton: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
         FloatingActionButton.extended(
           heroTag: 'slip',
@@ -36,7 +37,7 @@ class ParlaysPage extends StatelessWidget {
           backgroundColor: cs.secondaryContainer,
           foregroundColor: cs.onSecondaryContainer,
           icon: const Icon(Icons.document_scanner_outlined),
-          label: const Text('From screenshot'),
+          label: Text(tr('From screenshot')),
         ),
         const SizedBox(height: 12),
         FloatingActionButton.extended(
@@ -46,7 +47,7 @@ class ParlaysPage extends StatelessWidget {
             if (context.mounted) await openParlay(context, store: store, api: api, parlay: p);
           },
           icon: const Icon(Icons.add),
-          label: const Text('New parlay'),
+          label: Text(tr('New parlay')),
         ),
       ]),
       body: ListenableBuilder(
@@ -60,11 +61,10 @@ class ParlaysPage extends StatelessWidget {
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
                   Icon(Icons.account_tree_outlined, size: 56, color: cs.primary),
                   const SizedBox(height: 16),
-                  Text('Build your parlays', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(tr('Build your parlays'), style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   Text(
-                    'Add picks from the match list or matches that are not listed, or load a screenshot '
-                    'of a slip from any betting site. Check them, share them and mark the result.',
+                    tr('Add picks from the match list or matches that are not listed, or load a screenshot of a slip from any betting site. Check them, share them and mark the result.'),
                     textAlign: TextAlign.center,
                     style: TextStyle(color: cs.onSurfaceVariant),
                   ),
@@ -114,19 +114,19 @@ Future<void> pickSelection(BuildContext context,
           ),
           ListTile(
             leading: const Icon(Icons.receipt_long_outlined),
-            title: const Text('Log as a single bet'),
+            title: Text(tr('Log as a single bet')),
             onTap: () => Navigator.pop(c, 'single'),
           ),
           if (current != null)
             ListTile(
               leading: const Icon(Icons.playlist_add),
-              title: Text('Add to ${current.name}'),
-              subtitle: Text('${current.legs.length} picks so far'),
+              title: Text(tr('Add to {parlay}', {'parlay': current.name})),
+              subtitle: Text(trn(current.legs.length, '{n} pick so far', '{n} picks so far')),
               onTap: () => Navigator.pop(c, 'add'),
             ),
           ListTile(
             leading: const Icon(Icons.account_tree_outlined),
-            title: const Text('Start a new parlay'),
+            title: Text(tr('Start a new parlay')),
             onTap: () => Navigator.pop(c, 'new'),
           ),
           const SizedBox(height: 8),
@@ -144,11 +144,11 @@ Future<void> pickSelection(BuildContext context,
   final messenger = ScaffoldMessenger.of(context);
   messenger.hideCurrentSnackBar();
   messenger.showSnackBar(SnackBar(
-    content: Text('Added to ${p.name} · ${p.legs.length} pick${p.legs.length == 1 ? '' : 's'}'),
+    content: Text(trn(p.legs.length, 'Added to {parlay} · {n} pick', 'Added to {parlay} · {n} picks', {'parlay': p.name})),
     duration: const Duration(seconds: 4),
     persist: false,
     action: SnackBarAction(
-      label: 'Open',
+      label: tr('Open'),
       onPressed: () => openParlay(context, store: store, api: api, parlay: p),
     ),
   ));
@@ -189,7 +189,7 @@ class _ParlayTile extends StatelessWidget {
                 ]),
                 const SizedBox(height: 4),
                 Text(
-                  p.legs.isEmpty ? 'No picks yet' : p.legs.map((l) => l.selection).join(' · '),
+                  p.legs.isEmpty ? tr('No picks yet') : p.legs.map((l) => trPick(l.selection)).join(' · '),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
@@ -200,7 +200,7 @@ class _ParlayTile extends StatelessWidget {
             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Text(p.legs.isEmpty ? '–' : formatOdds(p.odds, format),
                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: cs.primary)),
-              Text('${p.legs.length} legs', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+              Text(trn(p.legs.length, '{n} leg', '{n} legs'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
             ]),
           ]),
         ),
@@ -247,7 +247,7 @@ class _ParlayPageState extends State<ParlayPage> {
   Future<void> _addFromMatches(Parlay p) async {
     final leg = await Navigator.of(context).push<ParlayLeg>(MaterialPageRoute(
       builder: (c) => Scaffold(
-        appBar: AppBar(title: const Text('Pick a selection')),
+        appBar: AppBar(title: Text(tr('Pick a selection'))),
         body: MatchesTabs(
           store: store,
           api: widget.api,
@@ -288,11 +288,11 @@ class _ParlayPageState extends State<ParlayPage> {
     final name = await showDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Rename parlay'),
-        content: TextField(controller: ctrl, autofocus: true, decoration: const InputDecoration(hintText: 'Name')),
+        title: Text(tr('Rename parlay')),
+        content: TextField(controller: ctrl, autofocus: true, decoration: InputDecoration(hintText: tr('Name'))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: const Text('Save')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: Text(tr('Save'))),
         ],
       ),
     );
@@ -303,11 +303,11 @@ class _ParlayPageState extends State<ParlayPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Delete this parlay?'),
-        content: Text('${p.name} and its ${p.legs.length} picks will be removed.'),
+        title: Text(tr('Delete this parlay?')),
+        content: Text(trn(p.legs.length, '{parlay} and its {n} pick will be removed.', '{parlay} and its {n} picks will be removed.', {'parlay': p.name})),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Delete')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Delete'))),
         ],
       ),
     );
@@ -330,14 +330,14 @@ class _ParlayPageState extends State<ParlayPage> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           ListTile(
             leading: const Icon(Icons.link),
-            title: const Text('Share as a link'),
-            subtitle: const Text('Opens in BetPilot ready to log'),
+            title: Text(tr('Share as a link')),
+            subtitle: Text(tr('Opens in BetPilot ready to log')),
             onTap: () => Navigator.pop(c, 'link'),
           ),
           ListTile(
             leading: const Icon(Icons.notes),
-            title: const Text('Share picks and check as text'),
-            subtitle: Text(p.check == null ? 'Run the check first to include it' : 'Includes the latest check'),
+            title: Text(tr('Share picks and check as text')),
+            subtitle: Text(p.check == null ? tr('Run the check first to include it') : tr('Includes the latest check')),
             onTap: () => Navigator.pop(c, 'text'),
           ),
           const SizedBox(height: 8),
@@ -347,20 +347,23 @@ class _ParlayPageState extends State<ParlayPage> {
     if (!mounted || choice == null) return;
     if (choice == 'link') return showShareBet(context, store, _asBet(p));
     final o = store.settings.oddsFormat;
-    final text = StringBuffer('${p.name}: ${p.legs.length} picks at ${formatOdds(p.odds, o)}');
-    if (p.stake > 0) text.write(', ${fmt.money(p.stake)} to return ${fmt.money(p.potentialReturn)}');
+    final text = StringBuffer(trn(p.legs.length, '{parlay}: {n} pick at {odds}', '{parlay}: {n} picks at {odds}',
+        {'parlay': p.name, 'odds': formatOdds(p.odds, o)}));
+    if (p.stake > 0) {
+      text.write(tr(', {stake} to return {returns}', {'stake': fmt.money(p.stake), 'returns': fmt.money(p.potentialReturn)}));
+    }
     text.writeln();
     for (final (i, l) in p.legs.indexed) {
       final c = p.check != null && i < p.check!.legs.length ? ' (${p.check!.legs[i].verdict})' : '';
-      text.writeln('${i + 1}. ${l.selection} @ ${formatOdds(l.odds, o)}${l.event.isEmpty ? '' : ' · ${l.event}'}$c');
+      text.writeln('${i + 1}. ${trPick(l.selection)} @ ${formatOdds(l.odds, o)}${l.event.isEmpty ? '' : ' · ${l.event}'}$c');
     }
     if (p.check != null) {
-      text.writeln('\nCheck (${p.check!.risk} risk):');
+      text.writeln('\n${tr('Check ({risk} risk):', {'risk': riskLabel(p.check!.risk).toLowerCase()})}');
       for (final s in p.check!.summary) {
         text.writeln('• $s');
       }
     }
-    text.write('\nBuilt with BetPilot');
+    text.write('\n${tr('Built with BetPilot')}');
     await SharePlus.instance.share(ShareParams(text: text.toString(), subject: p.name));
   }
 
@@ -378,20 +381,20 @@ class _ParlayPageState extends State<ParlayPage> {
           appBar: AppBar(
             title: Text(p.name),
             actions: [
-              IconButton(tooltip: 'Rename', icon: const Icon(Icons.edit_outlined), onPressed: () => _rename(p)),
+              IconButton(tooltip: tr('Rename'), icon: const Icon(Icons.edit_outlined), onPressed: () => _rename(p)),
               IconButton(
-                tooltip: 'Share parlay',
+                tooltip: tr('Share parlay'),
                 icon: const Icon(Icons.share_outlined),
                 onPressed: p.legs.isEmpty ? null : () => _share(p),
               ),
-              IconButton(tooltip: 'Delete parlay', icon: const Icon(Icons.delete_outline), onPressed: () => _delete(p)),
+              IconButton(tooltip: tr('Delete parlay'), icon: const Icon(Icons.delete_outline), onPressed: () => _delete(p)),
             ],
           ),
           body: ListView(key: const Key('parlay-page'), padding: const EdgeInsets.fromLTRB(16, 4, 16, 32), children: [
             _SlipHeader(parlay: p, store: store, stake: _stake),
             const SizedBox(height: 18),
             Row(children: [
-              Text('Selections', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              Text(tr('Selections'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
               const Spacer(),
               Text('${p.legs.length}', style: theme.textTheme.titleMedium?.copyWith(color: cs.onSurfaceVariant)),
             ]),
@@ -399,7 +402,7 @@ class _ParlayPageState extends State<ParlayPage> {
             if (p.legs.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text('Add picks from the match list, or type in a match that is not listed.',
+                child: Text(tr('Add picks from the match list, or type in a match that is not listed.'),
                     style: TextStyle(color: cs.onSurfaceVariant)),
               ),
             for (final (i, l) in p.legs.indexed)
@@ -422,7 +425,7 @@ class _ParlayPageState extends State<ParlayPage> {
                 child: OutlinedButton.icon(
                   onPressed: () => _addFromMatches(p),
                   icon: const Icon(Icons.sports_soccer),
-                  label: const Text('From matches'),
+                  label: Text(tr('From matches')),
                 ),
               ),
               const SizedBox(width: 10),
@@ -430,13 +433,13 @@ class _ParlayPageState extends State<ParlayPage> {
                 child: OutlinedButton.icon(
                   onPressed: () => _addExternal(p),
                   icon: const Icon(Icons.edit_note),
-                  label: const Text('Other match'),
+                  label: Text(tr('Other match')),
                 ),
               ),
             ]),
             const SizedBox(height: 22),
             Row(children: [
-              Text('Check', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              Text(tr('Check'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
               const Spacer(),
               if (p.check != null) _RiskPill(risk: p.check!.risk),
             ]),
@@ -448,16 +451,16 @@ class _ParlayPageState extends State<ParlayPage> {
               icon: _checking
                   ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: cs.onPrimary))
                   : const Icon(Icons.fact_check_outlined),
-              label: Text(p.check == null ? 'Check parlay' : 'Check again'),
+              label: Text(p.check == null ? tr('Check parlay') : tr('Check again')),
             ),
             const SizedBox(height: 22),
-            Text('Result', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            Text(tr('Result'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             SegmentedButton<BetStatus>(
-              segments: const [
-                ButtonSegment(value: BetStatus.pending, label: Text('Open')),
-                ButtonSegment(value: BetStatus.won, label: Text('Won')),
-                ButtonSegment(value: BetStatus.lost, label: Text('Lost')),
+              segments: [
+                ButtonSegment(value: BetStatus.pending, label: Text(trc('status', 'Open'))),
+                ButtonSegment(value: BetStatus.won, label: Text(tr('Won'))),
+                ButtonSegment(value: BetStatus.lost, label: Text(tr('Lost'))),
               ],
               selected: {if (const [BetStatus.pending, BetStatus.won, BetStatus.lost].contains(p.status)) p.status},
               emptySelectionAllowed: true,
@@ -469,7 +472,7 @@ class _ParlayPageState extends State<ParlayPage> {
             OutlinedButton.icon(
               onPressed: p.legs.isEmpty ? null : () => openBetForm(context, store, template: _asBet(p), api: widget.api),
               icon: const Icon(Icons.receipt_long_outlined),
-              label: const Text('Log in the bet register'),
+              label: Text(tr('Log in the bet register')),
             ),
           ]),
         );
@@ -507,7 +510,7 @@ class _SlipHeader extends StatelessWidget {
         Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('COMBINED ODDS', style: theme.textTheme.labelSmall?.copyWith(color: fg.withValues(alpha: 0.8), letterSpacing: 1)),
+              Text(tr('COMBINED ODDS'), style: theme.textTheme.labelSmall?.copyWith(color: fg.withValues(alpha: 0.8), letterSpacing: 1)),
               Text(p.legs.isEmpty ? '–' : formatOdds(p.odds, store.settings.oddsFormat),
                   style: theme.textTheme.headlineMedium?.copyWith(color: fg, fontWeight: FontWeight.w800)),
             ]),
@@ -524,7 +527,7 @@ class _SlipHeader extends StatelessWidget {
               style: TextStyle(color: fg, fontWeight: FontWeight.w700),
               decoration: InputDecoration(
                 isDense: true,
-                labelText: 'Stake',
+                labelText: tr('Stake'),
                 labelStyle: TextStyle(color: fg.withValues(alpha: 0.8)),
                 fillColor: Colors.black.withValues(alpha: 0.18),
               ),
@@ -538,7 +541,7 @@ class _SlipHeader extends StatelessWidget {
           // Large amounts (e.g. pesos) shrink rather than overflow.
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('Returns', style: theme.textTheme.labelSmall?.copyWith(color: fg.withValues(alpha: 0.8))),
+              Text(tr('Returns'), style: theme.textTheme.labelSmall?.copyWith(color: fg.withValues(alpha: 0.8))),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerRight,
@@ -591,7 +594,7 @@ class _LegCard extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(l.selection,
+                Text(trPick(l.selection),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
@@ -612,13 +615,13 @@ class _LegCard extends StatelessWidget {
             Text(formatOdds(l.odds, format),
                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: cs.primary)),
             PopupMenuButton<String>(
-              tooltip: 'Leg options',
+              tooltip: tr('Leg options'),
               onSelected: (v) => v == 'remove' ? onRemove() : onStatus(BetStatusX.parse(v)),
               itemBuilder: (_) => [
                 for (final s in [BetStatus.pending, BetStatus.won, BetStatus.lost, BetStatus.voided])
-                  CheckedPopupMenuItem(value: s.dbValue, checked: l.status == s, child: Text(s == BetStatus.pending ? 'Open' : s.label)),
+                  CheckedPopupMenuItem(value: s.dbValue, checked: l.status == s, child: Text(s == BetStatus.pending ? trc('status', 'Open') : s.label)),
                 const PopupMenuDivider(),
-                const PopupMenuItem(value: 'remove', child: Text('Remove pick')),
+                PopupMenuItem(value: 'remove', child: Text(tr('Remove pick'))),
               ],
             ),
           ]),
@@ -653,7 +656,7 @@ class _CheckCard extends StatelessWidget {
         if (stale)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text('The picks changed since this check. Check again to update it.',
+            child: Text(tr('The picks changed since this check. Check again to update it.'),
                 style: theme.textTheme.bodySmall?.copyWith(color: BankColors.pending(context))),
           ),
         for (final s in check.summary)
@@ -665,7 +668,7 @@ class _CheckCard extends StatelessWidget {
           const Divider(height: 18),
           Row(children: [
             Expanded(
-              child: Text(l.selection,
+              child: Text(trPick(l.selection),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
@@ -677,7 +680,7 @@ class _CheckCard extends StatelessWidget {
             Text(line, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
         ],
         const SizedBox(height: 8),
-        Text('${check.source}${when == null ? '' : ' · ${DateFormat.MMMd().add_Hm().format(when.toLocal())}'}',
+        Text('${check.source == 'Match data' ? tr('Match data') : check.source}${when == null ? '' : ' · ${DateFormat.MMMd().add_Hm().format(when.toLocal())}'}',
             style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
       ]),
     );
@@ -705,7 +708,7 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = status == BetStatus.pending ? 'OPEN' : status.label.toUpperCase();
+    final label = status == BetStatus.pending ? tr('OPEN') : status.label.toUpperCase();
     return _Pill(label, onDark ? HeroColors.of(context).onGradient : BankColors.forStatus(context, status));
   }
 }
@@ -716,7 +719,7 @@ class _RiskPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Pill(
-        '${risk.toUpperCase()} RISK',
+        tr('{risk} RISK', {'risk': riskLabel(risk).toUpperCase()}),
         switch (risk) {
           'Low' => BankColors.win(context),
           'High' => BankColors.loss(context),
@@ -772,24 +775,24 @@ class _ExternalLegSheetState extends State<_ExternalLegSheet> {
       child: Form(
         key: _form,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('Add another match', style: theme.textTheme.titleLarge),
+          Text(tr('Add another match'), style: theme.textTheme.titleLarge),
           const SizedBox(height: 4),
-          Text('For matches that are not in the list.', style: theme.textTheme.bodySmall),
+          Text(tr('For matches that are not in the list.'), style: theme.textTheme.bodySmall),
           const SizedBox(height: 14),
           TextFormField(
             controller: _event,
             textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Match', hintText: 'e.g. Millonarios vs Nacional'),
+            decoration: InputDecoration(labelText: tr('Match'), hintText: tr('e.g. Millonarios vs Nacional')),
           ),
           const SizedBox(height: 10),
           TextFormField(
             controller: _selection,
             textCapitalization: TextCapitalization.sentences,
             decoration: InputDecoration(
-              labelText: 'Selection',
-              hintText: 'e.g. Millonarios to win',
+              labelText: tr('Selection'),
+              hintText: tr('e.g. Millonarios to win'),
               suffixIcon: IconButton(
-                tooltip: 'Choose a market',
+                tooltip: tr('Choose a market'),
                 icon: const Icon(Icons.list_alt),
                 onPressed: () async {
                   final pick = await showMarketSheet(context, event: _event.text, format: widget.format);
@@ -797,7 +800,7 @@ class _ExternalLegSheetState extends State<_ExternalLegSheet> {
                 },
               ),
             ),
-            validator: (v) => (v ?? '').trim().isEmpty ? 'Enter the pick' : null,
+            validator: (v) => (v ?? '').trim().isEmpty ? tr('Enter the pick') : null,
           ),
           const SizedBox(height: 10),
           Row(children: [
@@ -806,8 +809,8 @@ class _ExternalLegSheetState extends State<_ExternalLegSheet> {
                 controller: _odds,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                 decoration: InputDecoration(
-                    labelText: 'Odds', hintText: widget.format == OddsFormat.american ? '+150' : '2.50'),
-                validator: (v) => parseOdds(v ?? '', widget.format) == null ? 'Enter valid odds' : null,
+                    labelText: tr('Odds'), hintText: widget.format == OddsFormat.american ? '+150' : '2.50'),
+                validator: (v) => parseOdds(v ?? '', widget.format) == null ? tr('Enter valid odds') : null,
               ),
             ),
             const SizedBox(width: 10),
@@ -815,8 +818,8 @@ class _ExternalLegSheetState extends State<_ExternalLegSheet> {
               child: DropdownButtonFormField<String>(
                 initialValue: _sport,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Sport'),
-                items: [for (final s in sports) DropdownMenuItem(value: s, child: Text(s))],
+                decoration: InputDecoration(labelText: tr('Sport')),
+                items: [for (final s in sports) DropdownMenuItem(value: s, child: Text(sportLabel(s)))],
                 onChanged: (v) => setState(() => _sport = v ?? _sport),
               ),
             ),
@@ -824,7 +827,7 @@ class _ExternalLegSheetState extends State<_ExternalLegSheet> {
           const SizedBox(height: 16),
           FilledButton.icon(
             icon: const Icon(Icons.add),
-            label: const Text('Add pick'),
+            label: Text(tr('Add pick')),
             onPressed: () {
               if (!_form.currentState!.validate()) return;
               Navigator.pop(

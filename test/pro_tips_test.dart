@@ -24,7 +24,7 @@ void main() {
     expect(Confidence.of(0.55), Confidence.high);
     expect(Confidence.of(0.45), Confidence.medium);
     expect([for (final c in Confidence.values) c.cost], [3, 2, 1]);
-    expect([for (final c in Confidence.values) c.minOdds], [1.8, 1.9, 1.9]);
+    expect([for (final c in Confidence.values) c.minOdds], [1.8, 1.6, 1.6]);
   });
 
   test('every tip follows the odds rules and is a value bet', () {
@@ -41,10 +41,10 @@ void main() {
       for (final t in tips.pro) {
         expect(followsOddsRules(t), isTrue, reason: '${t.pick} at ${t.odds}');
         expect(t.free, isFalse);
-        expect(t.odds, greaterThanOrEqualTo(t.isCombo ? 2.0 : t.level.minOdds));
+        expect(t.odds, inInclusiveRange(t.level.minOdds, 2.0), reason: '${t.level} ${t.pick}');
+        if (t.level == Confidence.max) expect(t.odds, greaterThanOrEqualTo(1.8));
         if (t.isCombo) {
           expect(t.legs, hasLength(2));
-          expect(t.odds, greaterThan(2.0));
           combos++;
         }
         expect(t.value, greaterThan(0), reason: '${t.pick} at ${t.odds}');
@@ -61,17 +61,26 @@ void main() {
     expect(free, greaterThan(80));
   });
 
-  test('the rules turn short prices away', () {
+  test('the price range follows what the tip costs', () {
     Tip tip(List<TipLeg> legs, {bool free = false, Confidence level = Confidence.max}) =>
         Tip(matchId: '1', legs: legs, chance: 0.6, reasons: const [], free: free, level: level);
     const short = TipLeg(TipMarket.homeWin, 'Home', 1.75), mid = TipLeg(TipMarket.over25, 'Over', 1.85);
+    const long = TipLeg(TipMarket.draw, 'Draw', 2.2), low = TipLeg(TipMarket.homeWin, 'Home', 1.5);
+    // Max (3 tokens): 1.80 to 2.00.
     expect(followsOddsRules(tip([short])), isFalse);
     expect(followsOddsRules(tip([mid])), isTrue);
-    expect(followsOddsRules(tip([mid], level: Confidence.high)), isFalse);
-    expect(followsOddsRules(tip([const TipLeg(TipMarket.draw, 'Draw', 1.9)], level: Confidence.medium)), isTrue);
-    expect(followsOddsRules(tip([const TipLeg(TipMarket.homeWin, 'Home', 1.3), const TipLeg(TipMarket.over15, 'O', 1.5)])),
-        isFalse);
-    expect(followsOddsRules(tip([short, mid])), isTrue);
+    expect(followsOddsRules(tip([long])), isFalse);
+    // High and Medium: 1.60 to 2.00.
+    for (final level in [Confidence.high, Confidence.medium]) {
+      expect(followsOddsRules(tip([short], level: level)), isTrue);
+      expect(followsOddsRules(tip([low], level: level)), isFalse);
+      expect(followsOddsRules(tip([long], level: level)), isFalse);
+    }
+    // Two selections count by their combined odds.
+    expect(followsOddsRules(tip([const TipLeg(TipMarket.homeWin, 'Home', 1.3), const TipLeg(TipMarket.over15, 'O', 1.45)])),
+        isTrue);
+    expect(followsOddsRules(tip([short, mid])), isFalse);
+    // Free: 1.40 to 2.00.
     expect(followsOddsRules(tip([short], free: true)), isTrue);
     expect(followsOddsRules(tip([const TipLeg(TipMarket.homeWin, 'Home', 2.2)], free: true)), isFalse);
     expect(followsOddsRules(tip([const TipLeg(TipMarket.homeWin, 'Home', 1.3)], free: true)), isFalse);
