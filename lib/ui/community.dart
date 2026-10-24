@@ -44,7 +44,7 @@ class CommunityPage extends StatelessWidget {
               appBar: AppBar(
                 title: Text(tr('Community')),
                 bottom: TabBar(tabs: [
-                  Tab(text: tr('Bets for sale')),
+                  Tab(text: trc('tab', 'Bets for sale')),
                   Tab(text: tr('Pro bettor')),
                   Tab(text: tr('Profile')),
                 ]),

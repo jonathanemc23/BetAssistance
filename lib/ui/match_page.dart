@@ -923,7 +923,7 @@ class _ResultRow extends StatelessWidget {
     final g = game;
     final sub = [
       if (g.game.date != null) DateFormat('d MMM').format(g.game.date!.toLocal()),
-      g.home ? tr('Home') : tr('Away'),
+      g.home ? trc('venue', 'Home') : trc('venue', 'Away'),
       if (g.game.competition.isNotEmpty) g.game.competition,
     ].join(' · ');
     return Padding(

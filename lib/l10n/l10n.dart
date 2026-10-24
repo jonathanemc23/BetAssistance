@@ -64,6 +64,13 @@ String tr(String en, [Map<String, Object?> args = const {}]) {
   return s;
 }
 
+/// [en] as [tr] gives it, for a word that translates differently by
+/// [context] ("Open" the button, "Open" the bets not settled yet).
+String trc(String context, String en, [Map<String, Object?> args = const {}]) {
+  final key = '$context|$en';
+  return tr(L10n.spanish && esStrings.containsKey(key) ? key : en, args);
+}
+
 /// [one] when [n] is 1, else [other], translated; `{n}` is the number.
 String trn(num n, String one, String other, [Map<String, Object?> args = const {}]) =>
     tr(n == 1 ? one : other, {'n': n, ...args});

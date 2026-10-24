@@ -10,10 +10,23 @@ target iOS later.
   ROI), the day's important matches in a sideways strip, Pro tips and free
   tips for those matches. "See summary" opens the full summary.
 - **Pro tips** (Bet Tools, Home, or a match page): simulated predictions.
-  Free tips are priced 1.40-2.00; paid tips are value bets only: Max
-  (3 tokens) at 1.80+, High (2) and Medium (1) at 1.90+, or two selections
-  together above 2.00 (`followsOddsRules` in `lib/logic/pro_tips.dart`).
+  The odds follow the price: free tips 1.40-2.00, Max (3 tokens)
+  1.80-2.00, High (2) and Medium (1) 1.60-2.00, as a single or two
+  selections together (`followsOddsRules` in `lib/logic/pro_tips.dart`).
   The day's page lists tips for the important matches and has a match search.
+- **Stake builder** (Bet Tools or the side menu): goals, corners, cards,
+  shots and fouls over each team's last six games, read from ESPN's box
+  scores (`FixturesApi.stakeStats`). Pick over/under lines from one or more
+  matches; Validate checks each pick by its hit rate before kick-off and by
+  the match's own stats once it starts (`lib/logic/stake_stats.dart`).
+- **Community** (side menu): a social profile is needed to enter; bets for
+  sale bought with tokens; the pro bettor challenge (30 bets that can't be
+  changed, 60% to pass, a week's wait after a fail or a restart, restart
+  allowed from 10 bets; `lib/logic/community.dart`). There is no server yet:
+  profiles, sellers and their bets are simulated on the phone.
+- **Languages**: English and Spanish, picked in Settings (the phone's
+  language by default). Every text goes through `tr()` in `lib/l10n/`;
+  `test/l10n_test.dart` fails when a text has no Spanish.
 - **Summary**: bankroll card (balance, available after open bets,
   deposit and withdraw, history), stat tiles (profit/loss and units, ROI, win
   rate, number of bets, average odds, money at risk) and bets per type.

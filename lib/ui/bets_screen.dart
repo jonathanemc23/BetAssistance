@@ -116,7 +116,7 @@ class BetsScreenState extends State<BetsScreen> {
                   child: FilterChip(
                     label: Text(switch (f) {
                       BetFilter.all => tr('All'),
-                      BetFilter.open => tr('Open'),
+                      BetFilter.open => trc('status', 'Open'),
                       BetFilter.won => tr('Won'),
                       BetFilter.lost => tr('Lost'),
                       BetFilter.parlays => tr('Parlays'),
@@ -132,7 +132,10 @@ class BetsScreenState extends State<BetsScreen> {
           Row(children: [
             Text(trn(list.length, '{n} bet', '{n} bets'), style: theme.textTheme.bodySmall),
             const Spacer(),
-            Text(tr('Settled P/L '), style: theme.textTheme.bodySmall),
+            Flexible(
+              child: Text(tr('Settled P/L '),
+                  maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.end, style: theme.textTheme.bodySmall),
+            ),
             Text(fmt.money(pl, sign: true),
                 style: theme.textTheme.bodySmall?.copyWith(color: BankColors.forValue(context, pl), fontWeight: FontWeight.w600)),
           ]),
@@ -199,7 +202,10 @@ class _BetTile extends StatelessWidget {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
                     if (bet.type != BetType.single) ...[
-                      _TypeBadge(type: bet.type),
+                      Flexible(
+                        child: FittedBox(
+                            fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: _TypeBadge(type: bet.type)),
+                      ),
                       const SizedBox(width: 6),
                     ],
                     Expanded(child: Text(betTitle(bet), style: theme.textTheme.titleSmall)),
@@ -328,7 +334,12 @@ class _ReviewButton extends StatelessWidget {
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.fact_check_outlined, size: 15, color: cs.primary),
             const SizedBox(width: 5),
-            Text(tr('Review bet'), style: TextStyle(color: cs.primary, fontSize: 12, fontWeight: FontWeight.w700)),
+            Flexible(
+              child: Text(tr('Review bet'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: cs.primary, fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
           ]),
         ),
       ),

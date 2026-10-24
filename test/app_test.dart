@@ -18,6 +18,7 @@ import 'package:bank_track/data/fixtures.dart';
 import 'fixtures_test.dart' show espnEvent, board;
 import 'slip_reader_test.dart' show screen;
 import 'stake_community_test.dart' show boxSummary;
+import 'package:bank_track/l10n/l10n.dart';
 import 'package:bank_track/logic/community.dart';
 import 'package:bank_track/logic/pro_tips.dart';
 import 'package:bank_track/logic/slip_reader.dart';
@@ -105,6 +106,8 @@ Future<BankStore> seededStore() async {
   );
   await db.saveTx(const BankTx(kind: TxKind.deposit, amount: 200, date: '2026-08-01', note: 'Top up'));
   await db.setPref('matches.country', 'eng');
+  await db.setPref('app.language', 'en');
+  await db.setPref('stake.picks', '[]');
   final store = BankStore(db);
   await store.load();
   return store;
@@ -842,6 +845,82 @@ void main() {
     await openTab(tester, 'Profile');
     expect(find.text('@laura_bets'), findsOneWidget);
     await shot('community_profile');
+  });
+
+  testWidgets('Spanish: the language setting switches every screen', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    if (shots) await tester.runAsync(loadFonts);
+    Future<void> shot(String name) async {
+      if (shots) await expectLater(find.byType(BankTrackApp), matchesGoldenFile('screenshots/$name.png'));
+    }
+
+    final store = (await tester.runAsync(seededStore))!;
+    addTearDown(() => L10n.use(AppLanguage.en));
+    await tester.pumpWidget(
+      BankTrackApp(store: store, fixtures: FixturesApi(client: _fixturesClient()), today: DateTime(2026, 10, 18)),
+    );
+    await settle(tester);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Español'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(store.language, AppLanguage.es);
+    expect(await tester.runAsync(() => store.pref('app.language')), 'es');
+    expect(find.text('Idioma'), findsOneWidget);
+    expect(find.text('Tema'), findsOneWidget);
+    await shot('es_settings');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    // Home, the register and the side menu.
+    expect(find.text('BANCA'), findsOneWidget);
+    expect(find.text('Partidos importantes de hoy'), findsOneWidget);
+    await shot('es_home');
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Apuestas'));
+    await tester.pumpAndSettle();
+    expect(find.text('Registrar apuesta'), findsOneWidget);
+    await shot('es_bets');
+    await tester.tap(find.byIcon(Icons.menu));
+    await tester.pumpAndSettle();
+    expect(find.text('Comunidad'), findsOneWidget);
+    expect(find.text('Hazte apostador pro'), findsOneWidget);
+    await shot('es_drawer');
+
+    // The pro bettor page.
+    communityClock = () => DateTime.utc(2026, 10, 18, 10);
+    addTearDown(() => communityClock = DateTime.now);
+    await tester.runAsync(() => store.saveSocialProfile(
+        const SocialProfile(name: 'Laura', handle: 'laura_bets', avatar: 'person:3', joined: '2026-10-18T10:00:00')));
+    await tester.tap(find.byKey(const Key('drawer-pro-bettor')));
+    await settle(tester);
+    expect(find.text('Condiciones'), findsOneWidget);
+    expect(find.textContaining('haz al menos 30 apuestas'), findsOneWidget);
+    await shot('es_pro_bettor');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    // The stake builder with a match's stats.
+    await tester.tap(find.byIcon(Icons.menu));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('drawer-stake')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('stake-pick-match')));
+    await settle(tester);
+    await tester.tap(find.text('Everton vs Chelsea'));
+    await settle(tester);
+    expect(find.text('Goles'), findsOneWidget);
+    expect(find.text('Más de 2.5 · 67%'), findsOneWidget);
+    await shot('es_stake_stats');
+
+    // Back to English.
+    await tester.runAsync(() => store.setLanguage(AppLanguage.en));
+    await tester.pumpAndSettle();
+    expect(find.text('Goals'), findsOneWidget);
   });
 
   testWidgets('finished match page: line-ups, key events and stats', (tester) async {

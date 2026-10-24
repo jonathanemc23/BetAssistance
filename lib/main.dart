@@ -139,6 +139,11 @@ class _HomeShellState extends State<HomeShell> {
       _openSettings,
     ];
     final sub = Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w400);
+    // Long names (and long translations) end in an ellipsis, not an overflow.
+    Widget label(String text, {Key? key, TextStyle? style}) => ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 200),
+          child: Text(text, key: key, style: style, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
+        );
     return NavigationDrawer(
       selectedIndex: null,
       onDestinationSelected: (i) => go(actions[i]),
@@ -147,9 +152,9 @@ class _HomeShellState extends State<HomeShell> {
           padding: const EdgeInsets.fromLTRB(28, 20, 16, 12),
           child: const BrandTitle(size: 36),
         ),
-        NavigationDrawerDestination(icon: Icon(Icons.handyman_outlined), label: Text(tr('Bet Tools'))),
+        NavigationDrawerDestination(icon: Icon(Icons.handyman_outlined), label: label(tr('Bet Tools'))),
         NavigationDrawerDestination(
-            icon: Icon(Icons.query_stats), label: Text(tr('Stake builder'), key: const Key('drawer-stake'))),
+            icon: Icon(Icons.query_stats), label: label(tr('Stake builder'), key: const Key('drawer-stake'))),
         const Padding(padding: EdgeInsets.symmetric(horizontal: 28, vertical: 8), child: Divider()),
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 4, 16, 8),
@@ -157,13 +162,13 @@ class _HomeShellState extends State<HomeShell> {
         ),
         NavigationDrawerDestination(
             icon: Icon(Icons.storefront_outlined),
-            label: Text(tr('Bets for sale'), style: sub, key: const Key('drawer-community'))),
+            label: label(tr('Bets for sale'), style: sub, key: const Key('drawer-community'))),
         NavigationDrawerDestination(
             icon: Icon(Icons.workspace_premium_outlined),
-            label: Text(tr('Become a pro bettor'), style: sub, key: const Key('drawer-pro-bettor'))),
-        NavigationDrawerDestination(icon: Icon(Icons.badge_outlined), label: Text(tr('Social profile'), style: sub)),
+            label: label(tr('Become a pro bettor'), style: sub, key: const Key('drawer-pro-bettor'))),
+        NavigationDrawerDestination(icon: Icon(Icons.badge_outlined), label: label(tr('Social profile'), style: sub)),
         const Padding(padding: EdgeInsets.symmetric(horizontal: 28, vertical: 8), child: Divider()),
-        NavigationDrawerDestination(icon: Icon(Icons.tune), label: Text(tr('Settings'))),
+        NavigationDrawerDestination(icon: Icon(Icons.tune), label: label(tr('Settings'))),
       ],
     );
   }

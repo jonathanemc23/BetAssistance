@@ -458,7 +458,7 @@ class _ParlayPageState extends State<ParlayPage> {
             const SizedBox(height: 8),
             SegmentedButton<BetStatus>(
               segments: [
-                ButtonSegment(value: BetStatus.pending, label: Text(tr('Open'))),
+                ButtonSegment(value: BetStatus.pending, label: Text(trc('status', 'Open'))),
                 ButtonSegment(value: BetStatus.won, label: Text(tr('Won'))),
                 ButtonSegment(value: BetStatus.lost, label: Text(tr('Lost'))),
               ],
@@ -619,7 +619,7 @@ class _LegCard extends StatelessWidget {
               onSelected: (v) => v == 'remove' ? onRemove() : onStatus(BetStatusX.parse(v)),
               itemBuilder: (_) => [
                 for (final s in [BetStatus.pending, BetStatus.won, BetStatus.lost, BetStatus.voided])
-                  CheckedPopupMenuItem(value: s.dbValue, checked: l.status == s, child: Text(s == BetStatus.pending ? tr('Open') : s.label)),
+                  CheckedPopupMenuItem(value: s.dbValue, checked: l.status == s, child: Text(s == BetStatus.pending ? trc('status', 'Open') : s.label)),
                 const PopupMenuDivider(),
                 PopupMenuItem(value: 'remove', child: Text(tr('Remove pick'))),
               ],
