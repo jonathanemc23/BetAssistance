@@ -5,6 +5,7 @@ import 'package:bank_track/data/models.dart';
 import 'package:bank_track/data/store.dart';
 import 'package:bank_track/main.dart';
 import 'package:bank_track/ui/match_page.dart';
+import 'package:bank_track/ui/match_visuals.dart';
 import 'package:bank_track/ui/matches_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -232,6 +233,11 @@ void main() {
     // A match opens its own page with tabs.
     await tester.tap(find.text('Everton'));
     await settle(tester);
+    // It opens on the overview: chances from the odds, form and the table.
+    expect(find.text('WIN CHANCES'), findsOneWidget);
+    expect(find.text('FORM GUIDE'), findsOneWidget);
+    await shot('match_overview');
+    await openTab(tester, 'Odds');
     expect(find.text('DraftKings'.toUpperCase()), findsOneWidget);
     expect(find.text('BET 365'), findsOneWidget);
     await shot('match_odds');
@@ -548,7 +554,8 @@ void main() {
     ));
     await settle(tester);
     await openTab(tester, 'Line-ups');
-    expect(find.text('4-2-3-1'), findsOneWidget);
+    expect(find.byType(LineupPitch), findsOneWidget);
+    expect(find.textContaining('4-4-1-1'), findsOneWidget); // the away side, above the pitch
     await shot('match_lineups');
     await openTab(tester, 'Events');
     expect(find.text('First Half begins.'), findsOneWidget);
@@ -560,6 +567,59 @@ void main() {
     await openTab(tester, 'H2H');
     await openTab(tester, 'Odds');
     expect(find.text('DRAFTKINGS'), findsOneWidget);
+  });
+
+  testWidgets('match with shot positions: overview, stat tiles, shot map, table with crests', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    if (shots) await tester.runAsync(loadFonts);
+    Future<void> shot(String name) async {
+      if (shots) await expectLater(find.byType(MatchPage), matchesGoldenFile('screenshots/$name.png'));
+    }
+
+    final store = (await tester.runAsync(seededStore))!;
+    final match = Match(
+      id: '401879260',
+      league: const League('eng.1', 'Premier League'),
+      kickoff: DateTime.utc(2026, 10, 18, 13),
+      home: const Team('Leeds United', 'Leeds', null, '1'),
+      away: const Team('Manchester United', 'Man United', null, '1'),
+      state: MatchState.finished,
+      detail: 'FT',
+      venue: 'Elland Road',
+    );
+    await tester.pumpWidget(MaterialApp(
+      theme: BankTrackApp.theme('olive'),
+      home: MatchPage(match: match, store: store, api: FixturesApi(client: _fixturesClient())),
+    ));
+    await settle(tester);
+    expect(find.text('KEY STATS'), findsOneWidget);
+    expect(find.text('Corners'), findsOneWidget);
+    expect(find.text('Mbeumo 35\''), findsOneWidget); // scorer under the score
+    await shot('match_overview_live');
+    await openTab(tester, 'Stats');
+    expect(find.byType(StatTiles), findsOneWidget);
+    await shot('match_stats_tiles');
+    expect(find.byType(ShotMap, skipOffstage: false), findsOneWidget);
+    if (shots) {
+      final list = find.descendant(of: find.byType(TabBarView), matching: find.byType(Scrollable)).first;
+      await tester.scrollUntilVisible(find.text('SHOT MAP'), 200, scrollable: list);
+      await tester.drag(list, const Offset(0, -120));
+      await tester.pumpAndSettle();
+      await shot('match_shot_map');
+    }
+    await openTab(tester, 'Table');
+    expect(find.text('Leeds United'), findsWidgets);
+    await shot('match_table_crests');
+    await openTab(tester, 'Line-ups');
+    expect(find.byType(LineupPitch), findsOneWidget);
+    expect(find.text('Mbeumo'), findsOneWidget);
+    await shot('match_lineup_pitch');
+    await openTab(tester, 'Events');
+    await shot('match_timeline');
+    await openTab(tester, 'H2H');
+    await shot('match_h2h');
   });
 }
 
@@ -583,9 +643,11 @@ Future<void> openTab(WidgetTester tester, String name) async {
 /// Match summaries: Everton vs Chelsea before kick-off, anything else a
 /// finished Colombian match with line-ups and key events.
 http.Response _summary(Uri url) => http.Response.bytes(
-      File(url.queryParameters['event'] == '401878771'
-              ? 'test/data/espn_summary_pre.json'
-              : 'test/data/espn_summary_col.json')
+      File(switch (url.queryParameters['event']) {
+        '401878771' => 'test/data/espn_summary_pre.json',
+        '401879260' => 'test/data/espn_summary_shots.json',
+        _ => 'test/data/espn_summary_col.json',
+      })
           .readAsBytesSync(),
       200,
       headers: {'content-type': 'application/json; charset=utf-8'},

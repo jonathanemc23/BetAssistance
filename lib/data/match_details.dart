@@ -23,6 +23,10 @@ class MatchDetails {
     this.clock = '',
     this.homeScore,
     this.awayScore,
+    this.shots = const [],
+    this.statValues = const {},
+    this.statNames = const [],
+    this.attendance,
   });
 
   final List<MatchOdds> odds;
@@ -44,6 +48,17 @@ class MatchDetails {
   final MatchState state;
   final String clock;
   final int? homeScore, awayScore;
+
+  /// Every attempt with where it was taken from (ESPN's commentary feed,
+  /// bigger leagues only). Empty when the feed has no shot positions.
+  final List<Shot> shots;
+
+  /// The stats by ESPN's own name ("wonCorners"), as (home, away).
+  final Map<String, (String, String)> statValues;
+
+  /// ESPN's name for each row of [stats], in the same order.
+  final List<String> statNames;
+  final int? attendance;
 
   /// Only the status and score of [m], for matches no feed has details for.
   static MatchDetails statusOf(Match m) => MatchDetails(
@@ -70,7 +85,42 @@ class MatchDetails {
     clock: m.detail,
     homeScore: int.tryParse(m.home.score ?? ''),
     awayScore: int.tryParse(m.away.score ?? ''),
+    shots: shots,
+    statValues: statValues,
+    statNames: statNames,
+    attendance: attendance,
   );
+}
+
+enum ShotKind { goal, onTarget, offTarget, blocked }
+
+/// One attempt at goal. Positions are 0-100 with the attacking team shooting
+/// towards x = 100; y = 100 is the attacker's left touchline.
+class Shot {
+  const Shot({
+    required this.side,
+    required this.kind,
+    required this.x,
+    required this.y,
+    this.goalY,
+    this.endX,
+    this.endY,
+    this.clock = '',
+    this.player = '',
+    this.text = '',
+  });
+
+  /// 'home' or 'away'.
+  final String side;
+  final ShotKind kind;
+  final double x, y;
+
+  /// Where it crossed the goal line, across the goal (same scale as [y]).
+  final double? goalY;
+  final double? endX, endY;
+  final String clock;
+  final String player;
+  final String text;
 }
 
 class NewsItem {
@@ -95,6 +145,7 @@ class TeamInfo {
     this.formation,
     this.starters = const [],
     this.subs = const [],
+    this.color,
   });
   final String id;
   final String name;
@@ -113,24 +164,37 @@ class TeamInfo {
   final String? formation;
   final List<Player> starters;
   final List<Player> subs;
+
+  /// The club colour as 0xRRGGBB, when the feed has one.
+  final int? color;
 }
 
 class Player {
-  const Player(this.name, this.jersey, this.position, {this.subbedIn = false, this.subbedOut = false});
+  const Player(this.name, this.jersey, this.position,
+      {this.subbedIn = false, this.subbedOut = false, this.shortName = ''});
   final String name;
   final String jersey;
   final String position;
   final bool subbedIn;
   final bool subbedOut;
+
+  /// "S. Ichazo", for the line-up pitch.
+  final String shortName;
 }
 
 enum KeyEventKind { goal, yellow, red, sub, period, other }
 
 class KeyEvent {
-  const KeyEvent({required this.clock, required this.kind, required this.text, this.side});
+  const KeyEvent({required this.clock, required this.kind, required this.text, this.side, this.player = '', this.playerOff = ''});
   final String clock;
   final KeyEventKind kind;
   final String text;
+
+  /// The scorer, the booked player or the one coming on, when the feed names one.
+  final String player;
+
+  /// For a substitution, the player going off.
+  final String playerOff;
 
   /// 'home', 'away' or null for match events (kick-off, half-time).
   final String? side;
@@ -167,11 +231,18 @@ class TableRow {
     required this.lost,
     required this.goalDiff,
     required this.points,
+    this.logo,
+    this.winPct = '',
+    this.gamesBehind = '',
   });
   final int rank;
   final String team;
   final String teamId;
   final String played, won, drawn, lost, goalDiff, points;
+  final String? logo;
+
+  /// Leagues without draws or points (basketball, baseball) rank by these.
+  final String winPct, gamesBehind;
 }
 
 /// Parses the summary feed. Sections that are missing or malformed come back
@@ -267,6 +338,7 @@ MatchDetails parseMatchDetails(String body) {
               '${p['position']?['abbreviation'] ?? ''}',
               subbedIn: p['subbedIn'] == true,
               subbedOut: p['subbedOut'] == true,
+              shortName: '${p['athlete']?['shortName'] ?? ''}',
             ),
           ),
     ];
@@ -283,6 +355,7 @@ MatchDetails parseMatchDetails(String body) {
       formation: roster?['formation'] as String?,
       starters: [for (final p in players) if (p.$1) p.$2],
       subs: [for (final p in players) if (!p.$1) p.$2],
+      color: int.tryParse('${t['color'] ?? ''}', radix: 16),
     );
   }
 
@@ -293,6 +366,8 @@ MatchDetails parseMatchDetails(String body) {
                 kind: _kind('${e['type']?['type'] ?? ''}', e['scoringPlay'] == true),
                 text: '${e['text'] ?? e['shortText'] ?? e['type']?['text'] ?? ''}',
                 side: sideOf(e['team']?['id']),
+                player: _try(() => '${(e['participants'] as List).first['athlete']['displayName']}') ?? '',
+                playerOff: _try(() => '${(e['participants'] as List)[1]['athlete']['displayName']}') ?? '',
               ),
           ]) ??
       const <KeyEvent>[];
@@ -316,6 +391,20 @@ MatchDetails parseMatchDetails(String body) {
           _stat(as.firstWhere((a) => a is Map && a['name'] == s['name'], orElse: () => const {}) as Map),
         ),
   ];
+  final statValues = <String, (String, String)>{
+    for (final s in hs)
+      if (s is Map && s['name'] != null)
+        '${s['name']}': (
+          _stat(s),
+          _stat(as.firstWhere((a) => a is Map && a['name'] == s['name'], orElse: () => const {}) as Map),
+        ),
+  };
+  final homeName = '${competitor('home')?['team']?['displayName'] ?? ''}';
+  final shots = safe(() => [
+            for (final c in (json['commentary'] as List))
+              if (c is Map && c['play'] is Map) ?_shot(c['play'] as Map, homeName),
+          ]) ??
+      const <Shot>[];
   final seasonStats = hs.isNotEmpty && hs.every((s) => s is Map && _seasonStatNames.contains(s['name']));
 
   final series = safe(() => (json['seasonseries'] as List).cast<Map<String, dynamic>>()) ?? const [];
@@ -336,9 +425,16 @@ MatchDetails parseMatchDetails(String body) {
           ]..sort((x, y) => (y.date ?? DateTime(0)).compareTo(x.date ?? DateTime(0)))) ??
       const <PastGame>[];
 
-  final group = safe(() => (json['standings']['groups'] as List).first as Map<String, dynamic>);
+  // Several groups (conferences, divisions, cup groups): the one with this match's teams.
+  final groups = safe(() => (json['standings']['groups'] as List).cast<Map<String, dynamic>>()) ?? const [];
+  final teamIds = {for (final c in competitors) '${c['team']?['id'] ?? c['id']}'};
+  final group = groups.where((g) {
+        final entries = safe(() => g['standings']['entries'] as List) ?? const [];
+        return entries.any((e) => e is Map && teamIds.contains('${e['id'] ?? ''}'));
+      }).firstOrNull ??
+      groups.firstOrNull;
   final table = safe(() => [
-            for (final e in (group!['standings']['entries'] as List))
+            for (final (i, e) in (group!['standings']['entries'] as List).indexed)
               () {
                 String st(String n) {
                   for (final s in (e['stats'] as List)) {
@@ -348,7 +444,7 @@ MatchDetails parseMatchDetails(String body) {
                 }
 
                 return TableRow(
-                  rank: int.tryParse(st('rank')) ?? 0,
+                  rank: int.tryParse(st('rank')) ?? i + 1,
                   team: '${e['team'] is Map ? e['team']['displayName'] : e['team']}',
                   teamId: '${e['id'] ?? (e['team'] is Map ? e['team']['id'] : '')}',
                   played: st('gamesPlayed'),
@@ -357,6 +453,9 @@ MatchDetails parseMatchDetails(String body) {
                   lost: st('losses'),
                   goalDiff: st('pointDifferential'),
                   points: st('points'),
+                  logo: safe<String?>(() => (e['logo'] as List).first['href'] as String?),
+                  winPct: st('winPercent'),
+                  gamesBehind: st('gamesBehind'),
                 );
               }(),
           ]..sort((a, b) => a.rank.compareTo(b.rank))) ??
@@ -402,7 +501,51 @@ MatchDetails parseMatchDetails(String body) {
     clock: safe<String?>(() => header!['status']['type']['shortDetail'] as String?) ?? '',
     homeScore: int.tryParse('${competitor('home')?['score'] ?? ''}'),
     awayScore: int.tryParse('${competitor('away')?['score'] ?? ''}'),
+    shots: shots,
+    statValues: statValues,
+    statNames: [for (final s in hs) if (s is Map) '${s['name'] ?? ''}'],
+    attendance: safe<int?>(() => (json['gameInfo']['attendance'] as num?)?.toInt()),
   );
+}
+
+/// A commentary play as a [Shot], or null when it isn't one or has no position.
+Shot? _shot(Map p, String homeName) {
+  final type = '${p['type']?['type'] ?? ''}';
+  final x = (p['fieldPositionX'] as num?)?.toDouble(), y = (p['fieldPositionY'] as num?)?.toDouble();
+  if (x == null || y == null || type == 'own-goal') return null;
+  final ShotKind kind;
+  if (type.startsWith('goal') || type == 'penalty---scored') {
+    kind = ShotKind.goal;
+  } else if (type == 'shot-on-target' || type == 'penalty---saved') {
+    kind = ShotKind.onTarget;
+  } else if (type == 'shot-blocked') {
+    kind = ShotKind.blocked;
+  } else if (type == 'shot-off-target' || type == 'penalty---missed' || type.contains('woodwork') || type.contains('post')) {
+    kind = ShotKind.offTarget;
+  } else {
+    return null;
+  }
+  final team = '${p['team']?['displayName'] ?? ''}';
+  return Shot(
+    side: team == homeName ? 'home' : 'away',
+    kind: kind,
+    x: x,
+    y: y,
+    goalY: (p['goalPositionY'] as num?)?.toDouble(),
+    endX: (p['fieldPosition2X'] as num?)?.toDouble(),
+    endY: (p['fieldPosition2Y'] as num?)?.toDouble(),
+    clock: '${p['clock']?['displayValue'] ?? ''}',
+    player: _try(() => '${(p['participants'] as List).first['athlete']['displayName']}') ?? '',
+    text: '${p['text'] ?? ''}',
+  );
+}
+
+T? _try<T>(T Function() f) {
+  try {
+    return f();
+  } catch (_) {
+    return null;
+  }
 }
 
 const _seasonStatNames = {'goalDifference', 'totalGoals', 'goalAssists', 'goalsConceded'};

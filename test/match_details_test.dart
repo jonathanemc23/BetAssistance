@@ -54,4 +54,21 @@ void main() {
     expect(poss.$2, '59.9%');
     expect(poss.$3, '40.1%');
   });
+
+  test('summary with commentary: every shot with where it was taken from', () {
+    final d = parseMatchDetails(data('espn_summary_shots.json'));
+    // Leeds 1-1 Manchester United: 12 and 13 attempts.
+    expect(d.shots.where((s) => s.side == 'home'), hasLength(12));
+    expect(d.shots.where((s) => s.side == 'away'), hasLength(13));
+    expect(d.shots.where((s) => s.kind == ShotKind.goal), hasLength(2));
+    expect(d.shots.where((s) => s.kind == ShotKind.blocked), hasLength(8));
+    final goal = d.shots.firstWhere((s) => s.kind == ShotKind.goal && s.side == 'away');
+    expect(goal.player, 'Bryan Mbeumo');
+    expect(goal.x, greaterThan(83)); // inside the box
+    expect(d.statValues['wonCorners'], ('2', '3'));
+    expect(d.home.color, isNotNull);
+    expect(d.home.starters.first.shortName, isNotEmpty);
+    expect(d.table.first.logo, startsWith('https://'));
+    expect(d.attendance, 36983);
+  });
 }
