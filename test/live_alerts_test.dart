@@ -148,7 +148,6 @@ void main() {
       }
 
       expect(await step(match(MatchState.scheduled), Duration.zero), isEmpty);
-      expect(sink.asked, 1);
       expect(await step(match(MatchState.live, h: '0', a: '0'), const Duration(minutes: 6)),
           ['Kick-off: Arsenal vs Chelsea']);
       expect(await step(match(MatchState.live, h: '0', a: '0'), const Duration(minutes: 1)), isEmpty);
@@ -158,6 +157,21 @@ void main() {
           ['Full time: Arsenal 0-1 Chelsea']);
       expect(await step(match(MatchState.finished, h: '0', a: '1'), const Duration(minutes: 1)), isEmpty);
       expect(sink.shown, hasLength(3));
+    });
+
+    test('asks for notification access once, when the app starts', () async {
+      final sink = ListSink();
+      LiveAlertService make() => LiveAlertService(
+          store: store, api: FixturesApi(), sink: sink, every: const Duration(hours: 1),
+          clock: () => kickoff.subtract(const Duration(days: 1)), read: (ms) async => {});
+      // No match to follow yet: still asked at start.
+      final first = make()..start();
+      await pumpEventQueue();
+      first.stop();
+      expect(sink.asked, 1);
+      final second = make()..start();
+      await pumpEventQueue();
+      second.stop();
       expect(sink.asked, 1);
     });
 

@@ -45,7 +45,19 @@ class LiveAlertService {
   void start() {
     _timer?.cancel();
     _timer = Timer.periodic(every, (_) => poll());
-    poll();
+    _askOnce().then((_) => poll());
+  }
+
+  /// Asks for notification access once, when the app starts with alerts on,
+  /// so it is allowed before the first match to follow comes up.
+  Future<void> _askOnce() async {
+    try {
+      if (await store.pref(alertsEnabledPref) == '0' || await store.pref(_askedPref) != null) return;
+      await store.setPref(_askedPref, '1');
+      await sink.requestPermission();
+    } catch (e) {
+      debugPrint('Live alerts: $e');
+    }
   }
 
   void stop() {
@@ -74,12 +86,6 @@ class LiveAlertService {
     final seen = MatchSnapshot.decodeAll(await store.pref(_seenPref));
     final watched = watchedMatches(store.bets, store.parlays, now, seen: seen);
     if (watched.isEmpty) return const [];
-    // Asks for notification access once, the first time there is a match to
-    // follow, not at install.
-    if (await store.pref(_askedPref) == null) {
-      await store.setPref(_askedPref, '1');
-      await sink.requestPermission();
-    }
     final current = await _read([for (final w in watched) w.match]);
     final out = <LiveAlert>[];
     for (final w in watched) {
