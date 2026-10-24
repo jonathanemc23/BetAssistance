@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../l10n/l10n.dart';
+import '../logic/community.dart';
 import '../logic/pro_tips.dart';
+import '../logic/stake_stats.dart';
 import '../logic/stats.dart';
 import 'board.dart';
 import 'database.dart';
@@ -59,6 +61,8 @@ class BankStore extends ChangeNotifier {
     avatar = await _db.pref('profile.avatar') ?? '';
     profileName = await _db.pref('profile.name') ?? '';
     await _loadTips();
+    await _loadStake();
+    await _loadCommunity();
     loaded = true;
     notifyListeners();
   }
@@ -185,6 +189,122 @@ class BankStore extends ChangeNotifier {
   Future<void> addTokens(int n) async {
     tokens += n;
     await _saveTips();
+  }
+
+  // Stake builder
+  /// The stats picked in the stake builder, in the order they were added.
+  List<StakePick> stake = [];
+
+  Future<void> _loadStake() async {
+    try {
+      final raw = await _db.pref('stake.picks');
+      stake = [for (final j in (raw == null ? const [] : jsonDecode(raw) as List)) ?StakePick.fromJson(j)];
+    } catch (_) {
+      stake = [];
+    }
+  }
+
+  Future<void> _saveStake() async {
+    notifyListeners();
+    await _db.setPref('stake.picks', jsonEncode([for (final p in stake) p.toJson()]));
+  }
+
+  /// Adds [p] to the stake, in place of a pick on the same match, stat and side.
+  Future<void> addStakePick(StakePick p) async {
+    final i = stake.indexWhere((x) => x.slot == p.slot);
+    if (i >= 0) {
+      stake[i] = p;
+    } else {
+      stake.add(p);
+    }
+    await _saveStake();
+  }
+
+  Future<void> removeStakePick(StakePick p) async {
+    stake.removeWhere((x) => x.slot == p.slot);
+    await _saveStake();
+  }
+
+  Future<void> clearStake() async {
+    stake = [];
+    await _saveStake();
+  }
+
+  // Community
+  /// The user's social profile; null until they make one to enter.
+  SocialProfile? socialProfile;
+  ProChallenge challenge = const ProChallenge();
+
+  /// Bets bought from the community, by listing id.
+  Map<String, Listing> boughtListings = {};
+
+  /// The user's own bets for sale, once they passed the challenge.
+  List<Listing> myListings = [];
+
+  Future<void> _loadCommunity() async {
+    Object? read(String? raw) {
+      try {
+        return raw == null ? null : jsonDecode(raw);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    socialProfile = SocialProfile.fromJson(read(await _db.pref('community.profile')));
+    challenge = ProChallenge.fromJson(read(await _db.pref('community.challenge')));
+    final bought = read(await _db.pref('community.bought'));
+    boughtListings = {
+      if (bought is Map)
+        for (final e in bought.entries) '${e.key}': ?Listing.fromJson(e.value),
+    };
+    final mine = read(await _db.pref('community.selling'));
+    myListings = [if (mine is List) for (final j in mine) ?Listing.fromJson(j)];
+  }
+
+  Future<void> saveSocialProfile(SocialProfile p) async {
+    socialProfile = p;
+    notifyListeners();
+    await _db.setPref('community.profile', jsonEncode(p.toJson()));
+  }
+
+  Future<void> _saveChallenge(ProChallenge c) async {
+    challenge = c;
+    notifyListeners();
+    await _db.setPref('community.challenge', jsonEncode(c.toJson()));
+  }
+
+  Future<void> acceptChallenge() => _saveChallenge(challenge.accept(communityClock()));
+
+  Future<void> restartChallenge() => _saveChallenge(challenge.restart(communityClock()));
+
+  /// Places [bet] in the challenge. The reason it can't be, or null once placed.
+  Future<String?> placeChallengeBet(CommunityBet bet) async {
+    final why = challenge.refuse(bet, communityClock());
+    if (why != null) return why;
+    await _saveChallenge(challenge.place(bet));
+    return null;
+  }
+
+  /// Settles the challenge bets on [matchId] with its final score.
+  Future<void> settleChallenge(String matchId, int home, int away) =>
+      _saveChallenge(challenge.settle(matchId, home, away, communityClock()));
+
+  /// Spends the listing's tokens to see its bet. False when there aren't enough.
+  Future<bool> buyListing(Listing l) async {
+    if (boughtListings.containsKey(l.id)) return true;
+    if (tokens < l.price) return false;
+    tokens -= l.price;
+    boughtListings[l.id] = l;
+    notifyListeners();
+    await _db.setPref('community.bought', jsonEncode({for (final e in boughtListings.entries) e.key: e.value.toJson()}));
+    await _saveTips();
+    return true;
+  }
+
+  Future<void> sellBet(Listing l) async {
+    myListings = [...myListings, l];
+    notifyListeners();
+    await _db.setPref('community.selling', jsonEncode([for (final x in myListings) x.toJson()]));
   }
 
   // Matchboard

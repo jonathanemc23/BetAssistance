@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../l10n/l10n.dart';
 import '../logic/markets.dart';
+import '../logic/stake_stats.dart';
 import 'match_details.dart';
 import 'models.dart';
 import 'request_gate.dart';
@@ -1479,6 +1480,48 @@ class FixturesApi {
           PastGame(date: g.game.date, home: g.game.home, away: g.game.away, score: g.game.score, competition: g.game.competition),
       ],
     );
+  }
+
+  final _games = <String, MatchDetails>{};
+
+  /// Both teams' last [count] games with their box scores (goals, corners,
+  /// cards, shots, fouls), for the stake builder. Soccer only; empty teams
+  /// when the ids are unknown. Finished games never change, so each one is
+  /// read once.
+  Future<StakeStats> stakeStats(Match m, {int count = 6}) async {
+    final d = await details(m);
+    bool before(ScheduleGame g) => g.id != m.id && (g.game.date?.isBefore(m.kickoff) ?? true);
+
+    Future<TeamForm> form(TeamInfo t, String name) async {
+      if (t.id.isEmpty || m.id.startsWith('tsdb:')) return TeamForm(team: name);
+      final now = await _schedule(m.league, t.id);
+      final games = now.games.where(before).toList();
+      if (games.length < count && now.season != null) {
+        games.addAll((await _schedule(m.league, t.id, season: now.season! - 1)).games.where(before));
+      }
+      final picked = games.take(count).toList();
+      final read = await Future.wait([
+        for (final g in picked)
+          () async {
+            var box = _games[g.id];
+            if (box == null) {
+              final body = await _get('$_espn/soccer/all/summary?event=${g.id}');
+              if (body == null) return null;
+              try {
+                box = parseMatchDetails(body);
+              } catch (_) {
+                return null;
+              }
+              _games[g.id] = box;
+            }
+            return statGameOf(box, t.id, date: g.game.date);
+          }(),
+      ]);
+      return TeamForm(team: name, games: [for (final g in read) ?g]);
+    }
+
+    final (home, away) = await (form(d.home, m.home.name), form(d.away, m.away.name)).wait;
+    return StakeStats(home: home, away: away);
   }
 
   static bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;

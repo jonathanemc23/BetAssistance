@@ -17,7 +17,11 @@ import 'package:bank_track/data/fixtures.dart';
 
 import 'fixtures_test.dart' show espnEvent, board;
 import 'slip_reader_test.dart' show screen;
+import 'stake_community_test.dart' show boxSummary;
+import 'package:bank_track/logic/community.dart';
+import 'package:bank_track/logic/pro_tips.dart';
 import 'package:bank_track/logic/slip_reader.dart';
+import 'package:bank_track/logic/stake_stats.dart';
 import 'package:bank_track/ui/slip_import.dart';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -600,6 +604,246 @@ void main() {
     await shot('charts');
   });
 
+  testWidgets('stake builder: match stats, picks from two matches, validate', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    if (shots) await tester.runAsync(loadFonts);
+    Future<void> shot(String name) async {
+      if (shots) await expectLater(find.byType(BankTrackApp), matchesGoldenFile('screenshots/$name.png'));
+    }
+
+    final store = (await tester.runAsync(seededStore))!;
+    await tester.pumpWidget(
+      BankTrackApp(store: store, fixtures: FixturesApi(client: _fixturesClient()), today: DateTime(2026, 10, 18)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    expect(find.text('Community'), findsOneWidget);
+    expect(find.text('Become a pro bettor'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('drawer-stake')));
+    await tester.pumpAndSettle();
+    expect(find.text('Build a stake from match stats'), findsOneWidget);
+
+    // Pick a match: the day's soccer matches.
+    await tester.tap(find.byKey(const Key('stake-pick-match')));
+    await settle(tester);
+    expect(find.text('Everton vs Chelsea'), findsOneWidget);
+    await tester.tap(find.text('Everton vs Chelsea'));
+    await settle(tester);
+
+    // Both teams' last six games with their scores, and a card per stat.
+    expect(find.text('Everton'), findsWidgets);
+    expect(find.byKey(const Key('stake-stat-goals')), findsOneWidget);
+    expect(find.byKey(const Key('stake-stat-corners')), findsOneWidget);
+    await shot('stake_stats');
+    final corners = find.byWidgetPredicate((w) => '${w.key}'.contains('stake-line-corners-match-over-'), skipOffstage: false);
+    await tester.ensureVisible(corners.first);
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(corners.first);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(store.stake, hasLength(1));
+    expect(store.stake.single.stat.name, 'corners');
+    await shot('stake_stats_corners');
+    final goals = find.byWidgetPredicate((w) => '${w.key}'.contains('stake-line-goals-match-over-'), skipOffstage: false);
+    await tester.ensureVisible(goals.first);
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(goals.first);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(store.stake, hasLength(2));
+    await tester.tap(find.byKey(const Key('stake-view')));
+    await tester.pumpAndSettle();
+
+    // A second match in the same stake.
+    expect(find.text('Validate stake (2 picks)'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('stake-add-match')));
+    await settle(tester);
+    await tester.tap(find.text('AFC Bournemouth vs Sunderland'));
+    await settle(tester);
+    expect(find.text('No recent games with stats for these teams yet.'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => store.addStakePick(StakePick(
+          matchId: '3',
+          leagueSlug: 'eng.1',
+          leagueName: 'Premier League',
+          home: 'AFC Bournemouth',
+          away: 'Sunderland',
+          kickoff: DateTime.utc(2026, 10, 18, 16, 30),
+          stat: StakeStat.cards,
+          scope: StakeScope.match,
+          over: true,
+          line: 3.5,
+          hitRate: 0.5,
+          average: 3.4,
+        )));
+    await tester.pumpAndSettle();
+    await shot('stake_builder');
+
+    // Validate: each pick against its match.
+    await tester.tap(find.byKey(const Key('stake-validate')));
+    await settle(tester);
+    expect(find.byKey(const Key('stake-review')), findsOneWidget);
+    expect(find.textContaining('chance that every pick comes in'), findsOneWidget);
+    expect(find.textContaining('of the last 12 games'), findsWidgets);
+    await shot('stake_validated');
+
+    // The stake is kept when the app opens again.
+    expect((await tester.runAsync(() => store.pref('stake.picks')))!, contains('"stat":"corners"'));
+  });
+
+  testWidgets('community: social profile, bets for sale, pro bettor challenge', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    if (shots) await tester.runAsync(loadFonts);
+    Future<void> shot(String name) async {
+      if (shots) await expectLater(find.byType(BankTrackApp), matchesGoldenFile('screenshots/$name.png'));
+    }
+
+    communityClock = () => DateTime.utc(2026, 10, 18, 10);
+    addTearDown(() => communityClock = DateTime.now);
+    final store = (await tester.runAsync(seededStore))!;
+    await tester.pumpWidget(
+      BankTrackApp(store: store, fixtures: FixturesApi(client: _fixturesClient()), today: DateTime(2026, 10, 18)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('drawer-community')));
+    await tester.pumpAndSettle();
+
+    // A social profile first.
+    expect(find.text('Create your social profile'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('community-name')), 'Laura');
+    await tester.enterText(find.byKey(const Key('community-handle')), 'a');
+    await tester.tap(find.byKey(const Key('community-create')));
+    await tester.pumpAndSettle();
+    expect(find.text('3 to 20 letters, digits or _'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('community-handle')), '@Laura_Bets');
+    await tester.enterText(find.byKey(const Key('community-bio')), 'Corners and goals, Premier League.');
+    await shot('community_profile_create');
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('community-create')));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await settle(tester);
+    expect(store.socialProfile!.handle, 'laura_bets');
+
+    // Bets for sale: the pick shows once bought with tokens.
+    expect(find.text('Bets for sale'), findsWidgets);
+    expect(find.textContaining('pick hidden'), findsWidgets);
+    await shot('community_market');
+    final tokens = store.tokens;
+    final buy = find.byWidgetPredicate((w) => '${w.key}'.contains("'buy-"));
+    await tester.tap(buy.first);
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Buy'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(store.boughtListings, hasLength(1));
+    expect(store.tokens, lessThan(tokens));
+    expect(find.text('Log bet'), findsOneWidget);
+    await shot('community_bought');
+
+    // The pro bettor page: the description and the conditions.
+    await openTab(tester, 'Pro bettor');
+    expect(find.text('Become a pro bettor'), findsOneWidget);
+    expect(find.textContaining('place at least 30 bets with a win rate over 60%'), findsOneWidget);
+    expect(find.textContaining("Bets can't be removed or changed"), findsOneWidget);
+    await shot('community_pro_bettor');
+    await tester.scrollUntilVisible(find.byKey(const Key('challenge-accept')), 300, scrollable: find.byType(Scrollable).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('challenge-accept')));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Accept'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('0 of 30 bets'), findsOneWidget);
+
+    // A challenge bet: a match, a market, and a bet that can't be undone.
+    await tester.tap(find.byKey(const Key('challenge-place')));
+    await settle(tester);
+    await tester.tap(find.text('Everton vs Chelsea'));
+    await settle(tester);
+    expect(find.text('Pick your bet'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('market-awayWin'), skipOffstage: false));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('market-awayWin')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('counts as bet 1 of 30'), findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Place bet'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(store.challenge.placed, 1);
+    expect(find.text('1 of 30 bets'), findsOneWidget);
+    expect(find.byKey(const Key('challenge-restart')), findsNothing);
+
+    // Eleven more, five of them settled: the restart button shows.
+    final bets = [
+      for (var i = 0; i < 11; i++)
+        CommunityBet.on(
+          Match(
+            id: 'c$i',
+            league: League('eng.1', 'Premier League'),
+            kickoff: DateTime.utc(2026, 10, 18, 12),
+            home: Team('Home $i', 'Home $i', null, null),
+            away: Team('Away $i', 'Away $i', null, null),
+            state: MatchState.scheduled,
+            detail: '',
+          ),
+          TipLeg(TipMarket.homeWin, 'Home $i to win', 1.7 + i / 50),
+          placed: '$i',
+        ),
+    ];
+    var c = store.challenge;
+    for (final b in bets) {
+      c = c.place(b);
+    }
+    for (var i = 0; i < 6; i++) {
+      c = c.settle('c$i', i == 2 ? 0 : 2, 1, communityClock());
+    }
+    await tester.runAsync(() async {
+      await store.setPref('community.challenge', jsonEncode(c.toJson()));
+      await store.load();
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('12 of 30 bets'), findsOneWidget);
+    expect(find.text('5 of 6 won · 83%'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('challenge-restart'), skipOffstage: false));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('12 of 30 bets', skipOffstage: false));
+    await tester.pumpAndSettle();
+    await shot('community_challenge');
+    await tester.tap(find.byKey(const Key('challenge-restart')));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Restart'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(store.challenge.status(communityClock()), ChallengeStatus.waiting);
+    expect(find.textContaining('You can start again on'), findsOneWidget);
+
+    // The profile.
+    await openTab(tester, 'Profile');
+    expect(find.text('@laura_bets'), findsOneWidget);
+    await shot('community_profile');
+  });
+
   testWidgets('finished match page: line-ups, key events and stats', (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 2.75;
@@ -745,7 +989,30 @@ Future<void> openTab(WidgetTester tester, String name) async {
 
 /// Match summaries: Everton vs Chelsea before kick-off, anything else a
 /// finished Colombian match with line-ups and key events.
-http.Response _summary(Uri url) => http.Response.bytes(
+http.Response _summary(Uri url) {
+  // A game from Everton's or Chelsea's schedule: a box score made from its id.
+  final id = url.queryParameters['event'] ?? '';
+  final past = RegExp(r'^(20\d\d)(368|363)(\d)$').firstMatch(id);
+  if (past != null) {
+    final season = int.parse(past[1]!), team = past[2]!, i = int.parse(past[3]!);
+    final meets = season < 2026 ? i < 2 : i == 0;
+    final opponent = meets ? (team == '368' ? '363' : '368') : '${900 + i}';
+    final (h, a) = i.isEven ? (team, opponent) : (opponent, team);
+    return http.Response(
+      boxSummary(homeId: h, awayId: a, hs: 2, as: i % 3, stats: {
+        'wonCorners': (4 + i, 3 + (i * 2) % 5),
+        'yellowCards': (1 + i % 3, 2),
+        'totalShots': (12 + i, 9 + i),
+        'shotsOnTarget': (5, 3 + i % 3),
+        'foulsCommitted': (10 + i, 12 - i),
+      }),
+      200,
+    );
+  }
+  return _summaryFile(url);
+}
+
+http.Response _summaryFile(Uri url) => http.Response.bytes(
       File(switch (url.queryParameters['event']) {
         '401878771' => 'test/data/espn_summary_pre.json',
         '401879260' => 'test/data/espn_summary_shots.json',

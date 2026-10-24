@@ -215,7 +215,10 @@ class MatchTips {
 /// see [followsOddsRules]. Only the match list's prices and a seed from the
 /// match id go in, so the tips are the same on every page and every visit;
 /// [details] only adds the reasons.
-MatchTips simulateTips(Match match, MatchDetails details) {
+/// Every market a tip can be on for [match], with its price (the
+/// bookmaker's, else a fair price with a usual margin) and the model's
+/// chance. The same on every call: the seed is the match id.
+List<({TipLeg leg, double chance})> pricedMarkets(Match match, MatchDetails details) {
   final rnd = math.Random(match.id.codeUnits.fold<int>(17, (h, c) => (h * 31 + c) & 0x3fffffff));
   final soccer = match.league.knownSport == Sport.soccer;
   final book = [?match.odds, ...details.odds].where((o) => o.home != null && o.away != null).firstOrNull;
@@ -282,6 +285,12 @@ MatchTips simulateTips(Match match, MatchDetails details) {
           return (leg: TipLeg(m, pick, odds, line: line), chance: math.min(0.95, (1 / odds) * (1 + edge)));
         }(),
   ];
+  return candidates;
+}
+
+MatchTips simulateTips(Match match, MatchDetails details) {
+  final candidates = pricedMarkets(match, details);
+  final home = match.home.name, away = match.away.name;
 
   // Tips that can both win together only: never a market and its opposite.
   const opposite = {
