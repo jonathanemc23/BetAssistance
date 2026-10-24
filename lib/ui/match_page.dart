@@ -12,10 +12,10 @@ import 'bet_form.dart';
 import 'format.dart';
 import 'market_sheet.dart';
 import 'match_visuals.dart';
-import 'matchboard_screen.dart';
 import 'matches_screen.dart';
 import 'money_movement.dart';
 import 'parlay_screens.dart';
+import 'pro_tips_page.dart';
 
 /// One match: score header, then tabs for an overview, odds, money movement, stats with a
 /// shot map, key events, line-ups, the league table, head-to-head, teams and news (ESPN
@@ -86,14 +86,10 @@ class _MatchPageState extends State<MatchPage> {
           title: Text(m.league.name),
           actions: [
             FavoriteStar(store: widget.store, match: m),
-            IconButton(
-              tooltip: 'Open in Matchboard',
-              icon: const Icon(Icons.space_dashboard_outlined),
-              onPressed: () async {
-                final board = await widget.store.openBoard(m);
-                if (context.mounted) await openBoard(context, store: widget.store, api: widget.api, board: board);
-              },
+            ProTipsButton(
+              onPressed: () => openProTips(context, store: widget.store, match: m, details: _details),
             ),
+            const SizedBox(width: 4),
             IconButton(
               tooltip: 'Refresh',
               onPressed: _loading ? null : () => _load(refresh: true),
@@ -1592,7 +1588,7 @@ class _TableTabState extends State<_TableTab> {
         ]),
       if (mine.length == 2 && mine.every((r) => r.points.isNotEmpty)) ...[
         const SizedBox(height: 8),
-        Text(_gap(mine[0], mine[1]), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
+        Text(details.tableGroups.length > 1 ? _gapAcross(mine[0], mine[1]) : _gap(mine[0], mine[1]), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
         const SizedBox(height: 14),
       ],
       Row(children: [
@@ -1617,6 +1613,15 @@ class _TableTabState extends State<_TableTab> {
       const SizedBox(height: 8),
       StandingsTable(match: match, details: details, nearby: _around),
     ]);
+  }
+
+  /// The two teams compared on points when they play in different groups.
+  static String _gapAcross(TableRow a, TableRow b) {
+    final pa = int.tryParse(a.points), pb = int.tryParse(b.points);
+    if (pa == null || pb == null || pa == pb) return 'In different groups${pa != null && pa == pb ? ', level on $pa points' : ''}.';
+    final (top, other) = pa > pb ? (a, b) : (b, a);
+    final diff = (pa - pb).abs();
+    return 'In different groups. ${top.team} have $diff point${diff == 1 ? '' : 's'} more than ${other.team}.';
   }
 
   /// How far apart the two teams are, in plain words.
@@ -1674,7 +1679,8 @@ class _PlaceCard extends StatelessWidget {
 }
 
 /// The league table with crests, the match's teams picked out in their side's
-/// colour. [nearby] keeps the two teams and two places either side.
+/// colour. [nearby] keeps the two teams and two places either side. When the
+/// teams play in different groups (Argentina's zones) each group is shown.
 class StandingsTable extends StatelessWidget {
   const StandingsTable({super.key, required this.match, required this.details, this.nearby = false});
   final Match match;
@@ -1683,9 +1689,28 @@ class StandingsTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final groups = details.tableGroups;
+    if (groups.length < 2) return _group(context, details.table);
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final table = details.table;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      for (final (i, g) in groups.indexed) ...[
+        if (i > 0) const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Text(g.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: cs.onSurface)),
+        ),
+        _group(context, g.rows),
+      ],
+    ]);
+  }
+
+  Widget _group(BuildContext context, List<TableRow> table) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     var rows = table;
     final idx = [for (final (i, r) in table.indexed) if (_sideOf(r, match, details) != null) i];
     if (nearby && idx.isNotEmpty) {

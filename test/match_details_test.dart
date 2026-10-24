@@ -41,6 +41,22 @@ void main() {
     expect(d.home.starters, isEmpty);
   });
 
+  test('teams from different zones (Argentina) get both groups, home first', () {
+    final d = parseMatchDetails(data('espn_summary_arg_zones.json'));
+    expect(d.tableGroups, hasLength(2));
+    expect(d.tableGroups[0].title, 'Group with Banfield');
+    expect(d.tableGroups[1].title, 'Group with Lanús');
+    expect(d.tableGroups[0].rows.any((r) => r.team == 'Banfield'), isTrue);
+    expect(d.tableGroups[1].rows.any((r) => r.team == 'Lanús'), isTrue);
+    expect(d.table, hasLength(30));
+    expect(d.table.where((r) => r.team == 'Banfield' || r.team == 'Lanús'), hasLength(2));
+  });
+
+  test('teams in the same group keep one table', () {
+    final d = parseMatchDetails(data('espn_summary_pre.json'));
+    expect(d.tableGroups, isEmpty);
+  });
+
   test('summary after full time: line-ups, key events and match stats', () {
     final d = parseMatchDetails(data('espn_summary_col.json'));
     expect(d.home.formation, '4-2-3-1');

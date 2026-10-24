@@ -284,26 +284,26 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
 
-    // Matchboard: open the match's workspace, ask, and the answer lands on the board.
-    await tester.tap(find.byTooltip('Open in Matchboard'));
+    // Pro tips: free daily tips under the promo, then a Pro tip bought with tokens.
+    await tester.tap(find.text('Pro tips'));
     await settle(tester);
-    expect(find.text('Ask about Everton vs Chelsea'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), 'How are both teams in form?');
-    await tester.tap(find.byTooltip('Send'));
-    await settle(tester);
-    await tester.pump(const Duration(seconds: 5)); // let the "Saved to the board" message go
+    expect(find.text('Get our full bet analysis'), findsOneWidget);
+    expect(find.text('FREE TODAY'), findsOneWidget);
+    await shot('pro_tips_daily');
+    await tester.tap(find.text('See Pro tips'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Who is the favourite?'));
+    expect(store.tokens, BankStore.starterTokens);
+    expect(find.textContaining('Buy prediction'), findsWidgets);
+    await shot('pro_tips_locked');
+    await tester.tap(find.textContaining('Buy prediction').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Buy prediction'));
     await settle(tester);
-    expect(find.textContaining('Market favourite: Chelsea'), findsWidgets);
-    await shot('matchboard_chat');
+    expect(store.unlockedTips, hasLength(1));
+    expect(store.tokens, BankStore.starterTokens - store.unlockedTips.values.single.cost);
+    await shot('pro_tips_unlocked');
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Board (2)'));
-    await tester.pumpAndSettle();
-    expect(find.text('Match summary'), findsOneWidget);
-    expect(find.text('Recent form'), findsOneWidget);
-    await shot('matchboard_board');
     await tester.pageBack();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Log a bet'));
@@ -372,20 +372,15 @@ void main() {
     await tester.tap(find.widgetWithText(Tab, 'Matches'));
     await tester.pumpAndSettle();
 
-    // Bet Tools, from the side menu: Matchboard and the parlay builder.
+    // Bet Tools, from the side menu: Pro tips and the parlay builder.
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Bet Tools'));
     await tester.pumpAndSettle();
     expect(find.text('1 open'), findsOneWidget);
     expect(find.text('Money movement'), findsNothing);
+    expect(find.text('Pro tips'), findsOneWidget);
     await shot('bet_tools');
-    await tester.tap(find.text('Matchboard'));
-    await settle(tester);
-    expect(find.text('Everton vs Chelsea'), findsOneWidget);
-    await shot('matchboard');
-    await tester.pageBack();
-    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Parlay builder'));
     await tester.pumpAndSettle();
@@ -621,6 +616,37 @@ void main() {
     await openTab(tester, 'H2H');
     await shot('match_h2h');
   });
+  _zonesTest();
+}
+
+void _zonesTest() {
+  testWidgets('teams from different zones: both groups in the table', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final shots = Platform.environment['SCREENSHOTS'] == '1';
+    if (shots) await tester.runAsync(loadFonts);
+    final store = (await tester.runAsync(seededStore))!;
+    final match = Match(
+      id: '401841641',
+      league: const League('arg.1', 'Liga Profesional'),
+      kickoff: DateTime.utc(2026, 10, 24, 17, 45),
+      home: const Team('Banfield', 'Banfield', null, null),
+      away: const Team('Lanús', 'Lanús', null, null),
+      state: MatchState.scheduled,
+      detail: '',
+    );
+    await tester.pumpWidget(MaterialApp(
+      theme: BankTrackApp.theme('olive'),
+      home: MatchPage(match: match, store: store, api: FixturesApi(client: _fixturesClient())),
+    ));
+    await settle(tester);
+    await openTab(tester, 'Table');
+    expect(find.text('Group with Banfield'), findsOneWidget);
+    expect(find.text('Group with Lanús', skipOffstage: false), findsOneWidget);
+    expect(find.textContaining('In different groups'), findsOneWidget);
+    if (shots) await expectLater(find.byType(MatchPage), matchesGoldenFile('screenshots/match_table_zones.png'));
+  });
 }
 
 /// Lets network futures complete, then settles the frame.
@@ -646,6 +672,7 @@ http.Response _summary(Uri url) => http.Response.bytes(
       File(switch (url.queryParameters['event']) {
         '401878771' => 'test/data/espn_summary_pre.json',
         '401879260' => 'test/data/espn_summary_shots.json',
+        '401841641' => 'test/data/espn_summary_arg_zones.json',
         _ => 'test/data/espn_summary_col.json',
       })
           .readAsBytesSync(),
