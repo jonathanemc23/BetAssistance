@@ -158,11 +158,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Choose your avatar'), findsOneWidget);
     await tester.runAsync(() async {
-      await tester.tap(find.text('🦁'));
+      await tester.tap(find.byKey(const Key('avatar-person:3')));
       await Future<void>.delayed(const Duration(milliseconds: 200));
     });
     await tester.pumpAndSettle();
-    expect(store.avatar, startsWith('emoji:🦁:'));
+    expect(store.avatar, 'person:3');
     await shot('avatar_picker');
     Navigator.of(tester.element(find.text('Choose your avatar'))).pop();
     await tester.pumpAndSettle();
