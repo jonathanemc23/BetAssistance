@@ -19,9 +19,9 @@ enum Confidence {
         Confidence.medium => 1,
       };
 
-  /// Lowest decimal odds a single Pro tip at this level may have: paid tips
-  /// are value bets, never short prices.
-  double get minOdds => this == Confidence.max ? 1.8 : 1.9;
+  /// Lowest decimal odds a Pro tip at this level may have: the more a tip
+  /// costs, the better its price. Every tip stays at [proMaxOdds] or under.
+  double get minOdds => this == Confidence.max ? 1.8 : 1.6;
 
   /// The level for a free tip, from its chance.
   static Confidence of(double chance) => chance >= 0.6
@@ -31,16 +31,15 @@ enum Confidence {
           : Confidence.medium;
 }
 
-/// The odds rules. Free tips stay between 1.4 and 2.0; Pro tips sell value:
-/// a single at [Confidence.minOdds] or more, or two selections together
-/// above 2.0.
-const freeMinOdds = 1.4, freeMaxOdds = 2.0, comboMinOdds = 2.0;
+/// The odds rules, by what the tip costs: free tips between 1.4 and 2.0,
+/// Medium and High (1 and 2 tokens) between 1.6 and 2.0, and Max (3 tokens)
+/// between 1.8 and 2.0. A Pro tip may be two selections whose combined odds
+/// fit its range.
+const freeMinOdds = 1.4, freeMaxOdds = 2.0, proMaxOdds = 2.0;
 
 bool followsOddsRules(Tip t) => t.free
     ? t.legs.length == 1 && t.odds >= freeMinOdds && t.odds <= freeMaxOdds
-    : t.legs.length == 2
-        ? t.odds > comboMinOdds
-        : t.legs.length == 1 && t.odds >= t.level.minOdds;
+    : t.legs.isNotEmpty && t.legs.length <= 2 && t.odds >= t.level.minOdds && t.odds <= proMaxOdds;
 
 /// The markets a tip can be on, each settled from the final score.
 enum TipMarket {
@@ -328,12 +327,13 @@ MatchTips simulateTips(Match match, MatchDetails details) {
     return tip([c], free: free, level: level ?? Confidence.of(c.chance));
   }
 
-  /// Two selections from different markets, together above 2.0: the
-  /// likeliest such pair. A leg may repeat a market another tip uses, but
-  /// never goes against one.
+  /// Two selections from different markets with combined odds from [min]
+  /// to [proMaxOdds]: the likeliest such pair. A leg may repeat a market
+  /// another tip uses, but never goes against one.
   Tip? combo(Confidence level) {
+    final min = level.minOdds;
     final legs = candidates
-        .where((c) => !used.contains(opposite[c.leg.market]) && c.leg.odds >= 1.2 && c.leg.odds <= 2.6)
+        .where((c) => !used.contains(opposite[c.leg.market]) && c.leg.odds >= 1.15 && c.leg.odds <= 1.75)
         .toList();
     ({TipLeg leg, double chance})? a, b;
     var best = 0.0;
@@ -344,7 +344,7 @@ MatchTips simulateTips(Match match, MatchDetails details) {
         if (mx.group == my.group || opposite[mx] == my || pairs.contains('${mx.name}+${my.name}')) continue;
         if ((implies[mx]?.contains(my) ?? false) || (implies[my]?.contains(mx) ?? false)) continue;
         final odds = x.leg.odds * y.leg.odds;
-        if (odds <= comboMinOdds || odds > 4) continue;
+        if (odds < min || odds > proMaxOdds) continue;
         final p = x.chance * y.chance;
         if (p > best) (best, a, b) = (p, x, y);
       }
@@ -354,21 +354,22 @@ MatchTips simulateTips(Match match, MatchDetails details) {
     return tip([a, b], free: false, level: level);
   }
 
-  // Free tips first, from the short prices; then the Pro tips: the safest
-  // value single at Max, a longer price at High, and a two-selection bet
-  // builder at Medium. Each falls back to the other kind when the match has
-  // no market that fits.
-  final daily = [
-    single(min: freeMinOdds, max: freeMaxOdds, target: 1.5, free: true),
-    single(min: freeMinOdds, max: freeMaxOdds, target: 1.7, free: true),
-  ].nonNulls.where(followsOddsRules).toList();
+  // The Pro tips first, so the paid levels get the best prices: Max a
+  // single from 1.80 to 2.00, High a single from 1.60, and Medium a
+  // two-selection bet builder from 1.60. Each falls back to the other kind
+  // when the match has no market that fits. Then the free tips from what is
+  // left, 1.40 to 2.00.
   final pro = [
-    single(min: Confidence.max.minOdds, max: 2.3, target: 1.85, free: false, level: Confidence.max) ??
+    single(min: Confidence.max.minOdds, max: proMaxOdds, target: 1.9, free: false, level: Confidence.max) ??
         combo(Confidence.max),
-    single(min: Confidence.high.minOdds, max: 2.8, target: 2.1, free: false, level: Confidence.high) ??
+    single(min: Confidence.high.minOdds, max: proMaxOdds, target: 1.75, free: false, level: Confidence.high) ??
         combo(Confidence.high),
     combo(Confidence.medium) ??
-        single(min: Confidence.medium.minOdds, target: 2.6, free: false, level: Confidence.medium),
+        single(min: Confidence.medium.minOdds, max: proMaxOdds, target: 1.7, free: false, level: Confidence.medium),
+  ].nonNulls.where(followsOddsRules).toList();
+  final daily = [
+    single(min: freeMinOdds, max: freeMaxOdds, target: 1.5, free: true),
+    single(min: freeMinOdds, max: freeMaxOdds, target: 1.65, free: true),
   ].nonNulls.where(followsOddsRules).toList();
   return MatchTips(daily: daily, pro: pro);
 }
