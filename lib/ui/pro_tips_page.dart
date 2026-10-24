@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/store.dart';
 import '../logic/pro_tips.dart';
@@ -11,8 +12,8 @@ import 'format.dart';
 import 'matches_screen.dart';
 
 /// Gold used across Pro tips, whatever the app theme.
-const _gold = [Color(0xFFF7D774), Color(0xFFE0A93B), Color(0xFFB9772A)];
-const _onGold = Color(0xFF2A1A05);
+final _gold = [Color(0xFFF7D774), Color(0xFFE0A93B), Color(0xFFB9772A)];
+final _onGold = Color(0xFF2A1A05);
 
 /// The "Pro tips" button at the top of the match page.
 class ProTipsButton extends StatelessWidget {
@@ -29,18 +30,18 @@ class ProTipsButton extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: Ink(
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: _gold, begin: Alignment.topLeft, end: Alignment.bottomRight),
+            gradient: LinearGradient(colors: _gold, begin: Alignment.topLeft, end: Alignment.bottomRight),
             borderRadius: BorderRadius.circular(20),
             boxShadow: [BoxShadow(color: _gold[1].withValues(alpha: 0.45), blurRadius: 10, offset: const Offset(0, 2))],
           ),
           child: InkWell(
             onTap: onPressed,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(Icons.auto_awesome, size: 16, color: _onGold),
                 SizedBox(width: 5),
-                Text('Pro tips', style: TextStyle(color: _onGold, fontWeight: FontWeight.w900, fontSize: 13)),
+                Text(tr('Pro tips'), style: TextStyle(color: _onGold, fontWeight: FontWeight.w900, fontSize: 13)),
               ]),
             ),
           ),
@@ -121,7 +122,7 @@ class _ProTipsPageState extends State<ProTipsPage> {
           final tips = tipsFor(widget.store, widget.match, _details);
           return Scaffold(
             appBar: AppBar(
-              title: const Text('Pro tips'),
+              title: Text(tr('Pro tips')),
               actions: [
                 Padding(
                   padding: const EdgeInsets.only(right: 12),
@@ -150,12 +151,12 @@ class _ProTabBar extends StatelessWidget {
   const _ProTabBar();
 
   @override
-  Widget build(BuildContext context) => const TabBar(tabs: [
-        Tab(text: 'Daily tips'),
+  Widget build(BuildContext context) => TabBar(tabs: [
+        Tab(text: tr('Daily tips')),
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.workspace_premium, size: 18),
           SizedBox(width: 6),
-          Text('Pro tips'),
+          Text(tr('Pro tips')),
         ])),
       ]);
 }
@@ -199,7 +200,7 @@ class TokenCoin extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: const LinearGradient(colors: _gold, begin: Alignment.topLeft, end: Alignment.bottomRight),
+          gradient: LinearGradient(colors: _gold, begin: Alignment.topLeft, end: Alignment.bottomRight),
           border: Border.all(color: _gold[2], width: 1),
         ),
         child: Text('T', style: TextStyle(color: _onGold, fontSize: size * 0.55, fontWeight: FontWeight.w900)),
@@ -262,7 +263,7 @@ class _Teams extends StatelessWidget {
                 score == null
                     ? DateFormat('EEE d MMM · HH:mm').format(m.kickoff.toLocal())
                     : m.state == MatchState.finished
-                        ? 'Full time'
+                        ? tr('Full time')
                         : m.detail,
                 style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
             const SizedBox(height: 2),
@@ -288,7 +289,7 @@ class TipMatchLine extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final m = match;
-    final when = m.state == MatchState.live ? 'Live' : DateFormat.Hm().format(m.kickoff.toLocal());
+    final when = m.state == MatchState.live ? tr('Live') : DateFormat.Hm().format(m.kickoff.toLocal());
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,
@@ -333,19 +334,19 @@ class _DailyTab extends StatelessWidget {
     final n = tips.pro.length;
     return ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 32), children: [
       ProTipsPromo(
-        text: '$n expert pick${n == 1 ? '' : 's'} for this match with the reasons behind them. '
-            'If a Pro tip loses, your tokens come back.',
+        text: trn(n, '{n} expert pick for this match with the reasons behind them. If a Pro tip loses, your tokens come back.',
+            '{n} expert picks for this match with the reasons behind them. If a Pro tip loses, your tokens come back.'),
         onTap: () => DefaultTabController.of(context).animateTo(1),
       ),
       const SizedBox(height: 18),
       Padding(
         padding: const EdgeInsets.only(left: 4, bottom: 8),
-        child: Text('FREE TODAY', style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: cs.primary)),
+        child: Text(tr('FREE TODAY'), style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: cs.primary)),
       ),
       if (tips.daily.isEmpty)
         Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('No free tips for this match.',
+          child: Text(tr('No free tips for this match.'),
               textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
         ),
       for (final t in tips.daily) TipCard(tip: t, store: store, score: score),
@@ -356,8 +357,11 @@ class _DailyTab extends StatelessWidget {
 
 /// The banner that sells Pro tips, on the Daily tips tabs and Home.
 class ProTipsPromo extends StatelessWidget {
-  const ProTipsPromo({super.key, required this.text, required this.onTap, this.title = 'Get our full bet analysis'});
-  final String title;
+  const ProTipsPromo({super.key, required this.text, required this.onTap, this.heading});
+
+  /// The heading; the general one when null.
+  final String? heading;
+  String get title => heading ?? tr('Get our full bet analysis');
   final String text;
   final VoidCallback onTap;
 
@@ -390,10 +394,10 @@ class ProTipsPromo extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: _gold),
+                    gradient: LinearGradient(colors: _gold),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Text('PRO TIPS',
+                  child: Text(tr('PRO TIPS'),
                       style: TextStyle(color: _onGold, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1)),
                 ),
                 const SizedBox(height: 10),
@@ -408,11 +412,11 @@ class ProTipsPromo extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: _gold),
+                    gradient: LinearGradient(colors: _gold),
                     borderRadius: BorderRadius.circular(24),
                   ),
-                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                    Text('See Pro tips', style: TextStyle(color: _onGold, fontWeight: FontWeight.w900)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(tr('See Pro tips'), style: TextStyle(color: _onGold, fontWeight: FontWeight.w900)),
                     Icon(Icons.chevron_right, color: _onGold),
                   ]),
                 ),
@@ -434,8 +438,7 @@ class _PreviewNote extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Text(
-        'Preview: tips are simulated while our prediction model is being built. '
-        'Bet responsibly.',
+        tr('Preview: tips are simulated while our prediction model is being built. Bet responsibly.'),
         textAlign: TextAlign.center,
         style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
       ),
@@ -446,9 +449,7 @@ class _PreviewNote extends StatelessWidget {
 // ---------------------------------------------------------------- Pro tips
 
 /// How Pro tips are priced, under the token balance.
-const proRulesText = 'Every Pro tip is a value bet: Max singles at odds of 1.80 or more, '
-    'High and Medium at 1.90 or more, and bet builders of two selections above 2.00. '
-    'Max costs 3 tokens, High 2 and Medium 1. If the tip loses, the tokens go back to your balance.';
+String get proRulesText => tr('The more a Pro tip costs, the better its odds: Max (3 tokens) from 1.80 to 2.00, High (2 tokens) and Medium (1 token) from 1.60 to 2.00. Free tips go from 1.40 to 2.00. If a Pro tip loses, the tokens go back to your balance.');
 
 /// The token balance with the Get tokens button and the pricing rules.
 class _Wallet extends StatelessWidget {
@@ -468,12 +469,12 @@ class _Wallet extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('${store.tokens} token${store.tokens == 1 ? '' : 's'}',
+              Text(trn(store.tokens, '{n} token', '{n} tokens'),
                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-              Text('Your balance', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              Text(tr('Your balance'), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
             ]),
           ),
-          FilledButton.tonal(onPressed: () => showTokensSheet(context, store), child: const Text('Get tokens')),
+          FilledButton.tonal(onPressed: () => showTokensSheet(context, store), child: Text(tr('Get tokens'))),
         ]),
         const SizedBox(height: 12),
         Text(proRulesText, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
@@ -498,7 +499,7 @@ class _ProTab extends StatelessWidget {
       if (tips.pro.isEmpty)
         Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('No Pro tips for this match yet.',
+          child: Text(tr('No Pro tips for this match yet.'),
               textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
         ),
       for (final t in tips.pro) TipCard(tip: t, store: store, score: score, onBuy: open ? () => buyTip(context, store, t) : null),
@@ -517,18 +518,18 @@ Future<void> buyTip(BuildContext context, BankStore store, Tip t) async {
     context: context,
     builder: (context) => AlertDialog(
       icon: const TokenCoin(size: 36),
-      title: Text('Buy this ${t.level.label} tip?'),
-      content: Text('It costs ${t.cost} token${t.cost == 1 ? '' : 's'} of your ${store.tokens}. '
-          'If the tip loses, you get ${t.cost == 1 ? 'it' : 'them'} back.'),
+      title: Text(tr('Buy this {level} tip?', {'level': t.level.title})),
+      content: Text(trn(t.cost, 'It costs {n} token of your {tokens}. If the tip loses, you get it back.',
+          'It costs {n} tokens of your {tokens}. If the tip loses, you get them back.', {'tokens': store.tokens})),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Buy prediction')),
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('Cancel'))),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('Buy prediction'))),
       ],
     ),
   );
   if (ok != true) return;
   if (await store.unlockTip(t) && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unlocked: ${t.pick}')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Unlocked: {pick}', {'pick': trPick(t.pick)}))));
   }
 }
 
@@ -557,7 +558,7 @@ class LevelPill extends StatelessWidget {
         border: Border.all(color: c.withValues(alpha: 0.7)),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text(level.label.toUpperCase(),
+        Text(level.title.toUpperCase(),
             style: TextStyle(
                 color: dark ? Colors.white : c, fontSize: 10.5, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
         if (showCost) ...[
@@ -582,7 +583,7 @@ class _FreePill extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: c.withValues(alpha: 0.7)),
       ),
-      child: Text('FREE', style: TextStyle(color: c, fontSize: 10.5, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+      child: Text(tr('FREE'), style: TextStyle(color: c, fontSize: 10.5, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
     );
   }
 }
@@ -634,12 +635,12 @@ class TipCard extends StatelessWidget {
     final format = store.settings.oddsFormat;
 
     final facts = Wrap(spacing: 6, runSpacing: 6, children: [
-      _Fact(tip.isCombo ? 'Combined odds' : 'Odds', formatOdds(tip.odds, format)),
-      _Fact('Value', '+${(tip.value * 100).round()}%', color: BankColors.win(context)),
+      _Fact(tip.isCombo ? tr('Combined odds') : tr('Odds'), formatOdds(tip.odds, format)),
+      _Fact(tr('Value'), '+${(tip.value * 100).round()}%', color: BankColors.win(context)),
     ]);
 
     final pick = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(tip.isCombo ? 'Bet builder' : tip.pick,
+      Text(tip.isCombo ? tr('Bet builder') : trPick(tip.pick),
           style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
       if (tip.isCombo)
         for (final l in tip.legs)
@@ -648,7 +649,7 @@ class TipCard extends StatelessWidget {
             child: Row(children: [
               Icon(Icons.check_circle_outline, size: 16, color: level),
               const SizedBox(width: 6),
-              Expanded(child: Text(l.pick, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+              Expanded(child: Text(trPick(l.pick), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
               Text(formatOdds(l.odds, format), style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant)),
             ]),
           ),
@@ -692,12 +693,12 @@ class TipCard extends StatelessWidget {
         ImageFiltered(
           imageFilter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Locked prediction pick', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+            Text(tr('Locked prediction pick'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
             const SizedBox(height: 10),
             Container(height: 8, decoration: BoxDecoration(color: level, borderRadius: BorderRadius.circular(6))),
             const SizedBox(height: 10),
-            const Text('Analysis of form, table and prices behind this pick for the match.'),
-            const Text('More reasons from our model.'),
+            Text(tr('Analysis of form, table and prices behind this pick for the match.')),
+            Text(tr('More reasons from our model.')),
           ]),
         ),
         if (onBuy != null)
@@ -710,7 +711,7 @@ class TipCard extends StatelessWidget {
               style: FilledButton.styleFrom(backgroundColor: _gold[1], foregroundColor: _onGold),
               onPressed: onBuy,
               icon: const Icon(Icons.lock_open, size: 18),
-              label: Text('Buy prediction · ${tip.cost} token${tip.cost == 1 ? '' : 's'}',
+              label: Text(trn(tip.cost, 'Buy prediction · {n} token', 'Buy prediction · {n} tokens'),
                   style: const TextStyle(fontWeight: FontWeight.w900)),
             ),
           )
@@ -718,7 +719,7 @@ class TipCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(20)),
-            child: const Text('Sales closed at kick-off', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: Text(tr('Sales closed at kick-off'), style: TextStyle(fontWeight: FontWeight.w700)),
           ),
       ]),
     ]);
@@ -740,7 +741,7 @@ class TipCard extends StatelessWidget {
           Expanded(
             // The market stays hidden on a locked tip: with the odds it would
             // give the pick away.
-            child: Text(unlocked ? tip.group.toUpperCase() : 'PRO TIP',
+            child: Text(unlocked ? tip.group.toUpperCase() : tr('PRO TIP'),
                 style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1, color: cs.onSurfaceVariant)),
           ),
           if (unlocked && won != null) ...[
@@ -765,7 +766,7 @@ class _Result extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = won ? BankColors.win(context) : BankColors.loss(context);
-    final text = won ? 'Won' : refunded ? 'Lost · $cost refunded' : 'Lost';
+    final text = won ? tr('Won') : refunded ? tr('Lost · {n} refunded', {'n': cost}) : tr('Lost');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(color: c.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(20)),
@@ -794,13 +795,13 @@ Future<void> showTokensSheet(BuildContext context, BankStore store, {int? need})
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 const TokenCoin(size: 56),
                 const SizedBox(height: 10),
-                Text('${store.tokens} token${store.tokens == 1 ? '' : 's'}',
+                Text(trn(store.tokens, '{n} token', '{n} tokens'),
                     style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
                 const SizedBox(height: 6),
                 Text(
                   need != null && store.tokens < need
-                      ? 'This tip needs $need token${need == 1 ? '' : 's'}.'
-                      : 'Tokens are the money inside the app: use them to unlock Pro tips.',
+                      ? trn(need, 'This tip needs {n} token.', 'This tip needs {n} tokens.')
+                      : tr('Tokens are the money inside the app: use them to unlock Pro tips and buy bets in Community.'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                 ),
@@ -809,7 +810,7 @@ Future<void> showTokensSheet(BuildContext context, BankStore store, {int? need})
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(color: cs.surfaceContainerHigh, borderRadius: BorderRadius.circular(14)),
-                  child: Text('Token packs are coming soon.',
+                  child: Text(tr('Token packs are coming soon.'),
                       textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
                 ),
                 const SizedBox(height: 12),
@@ -818,7 +819,7 @@ Future<void> showTokensSheet(BuildContext context, BankStore store, {int? need})
                   child: FilledButton.icon(
                     onPressed: () => store.addTokens(5),
                     icon: const Icon(Icons.add),
-                    label: const Text('Add 5 free test tokens'),
+                    label: Text(tr('Add 5 free test tokens')),
                   ),
                 ),
               ]),
@@ -884,7 +885,7 @@ class _ProTipsHubState extends State<ProTipsHub> {
         listenable: widget.store,
         builder: (context, _) => Scaffold(
           appBar: AppBar(
-            title: const Text('Pro tips'),
+            title: Text(tr('Pro tips')),
             actions: [Padding(padding: const EdgeInsets.only(right: 12), child: TokenChip(store: widget.store))],
           ),
           body: Column(children: [
@@ -911,7 +912,7 @@ class _ProTipsHubState extends State<ProTipsHub> {
       return _HubMessage(
         icon: Icons.cloud_off,
         text: _error!,
-        action: FilledButton.tonal(onPressed: _load, child: const Text('Try again')),
+        action: FilledButton.tonal(onPressed: _load, child: Text(tr('Try again'))),
       );
     }
     // Tips are sold until kick-off.
@@ -951,7 +952,7 @@ class _SearchButton extends StatelessWidget {
             Icon(Icons.search, color: cs.primary),
             const SizedBox(width: 12),
             Expanded(
-              child: Text('Search a match',
+              child: Text(tr('Search a match'),
                   style: theme.textTheme.bodyLarge?.copyWith(color: cs.onSurfaceVariant)),
             ),
             Icon(Icons.auto_awesome, size: 18, color: _gold[1]),
@@ -1003,21 +1004,22 @@ class _HubDaily extends StatelessWidget {
     ];
     return ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 32), children: [
       ProTipsPromo(
-        title: "Today's best value bets",
-        text: '$pro expert pick${pro == 1 ? '' : 's'} for ${tips.length} of today\'s big matches. '
-            'If a Pro tip loses, your tokens come back.',
+        heading: tr("Today's best value bets"),
+        text: trn(pro, "{n} expert pick for {matches} of today's big matches. If a Pro tip loses, your tokens come back.",
+            "{n} expert picks for {matches} of today's big matches. If a Pro tip loses, your tokens come back.",
+            {'matches': tips.length}),
         onTap: () => DefaultTabController.of(context).animateTo(1),
       ),
       const SizedBox(height: 18),
       Padding(
         padding: const EdgeInsets.only(left: 4, bottom: 8),
-        child: Text("RECOMMENDED FOR TODAY'S BIG MATCHES",
+        child: Text(tr("RECOMMENDED FOR TODAY'S BIG MATCHES"),
             style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: cs.primary)),
       ),
       if (free.isEmpty)
         Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('No big matches left today. Search a match to see its tips.',
+          child: Text(tr('No big matches left today. Search a match to see its tips.'),
               textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
         ),
       for (final (m, t) in free) TipCard(tip: t, store: store, match: m, onOpenMatch: () => onOpen(m)),
@@ -1043,7 +1045,7 @@ class _HubPro extends StatelessWidget {
       if (withPro.isEmpty)
         Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('No Pro tips left for today. Search a match to see its tips.',
+          child: Text(tr('No Pro tips left for today. Search a match to see its tips.'),
               textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
         ),
       for (final e in withPro)
@@ -1121,13 +1123,13 @@ class _MatchSearchState extends State<_MatchSearch> {
         title: TextField(
           controller: _query,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Search a team or league', border: InputBorder.none),
+          decoration: InputDecoration(hintText: tr('Search a team or league'), border: InputBorder.none),
           onChanged: (_) => setState(() {}),
         ),
         actions: [
           if (_query.text.isNotEmpty)
             IconButton(
-              tooltip: 'Clear',
+              tooltip: tr('Clear'),
               icon: const Icon(Icons.close),
               onPressed: () => setState(_query.clear),
             ),
@@ -1159,12 +1161,12 @@ class _MatchSearchState extends State<_MatchSearch> {
                   : _HubMessage(
                       icon: Icons.cloud_off,
                       text: _error!,
-                      action: FilledButton.tonal(onPressed: _load, child: const Text('Try again')),
+                      action: FilledButton.tonal(onPressed: _load, child: Text(tr('Try again'))),
                     ))
               : list.isEmpty
                   ? _HubMessage(
                       icon: Icons.search_off,
-                      text: q.isEmpty ? 'No matches today.' : 'No match today for "${_query.text}".',
+                      text: q.isEmpty ? tr('No matches today.') : tr('No match today for "{query}".', {'query': _query.text}),
                     )
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),

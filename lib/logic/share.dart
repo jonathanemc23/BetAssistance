@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../data/models.dart';
 import 'stats.dart';
+import '../l10n/l10n.dart';
 
 /// Share links: the bet is encoded in the link itself (no server), so anyone
 /// with BetPilot can open it and get the same bet pre-filled.
@@ -48,13 +49,13 @@ class BetLink {
     final odds = formatOdds(b.odds, s.oddsFormat);
     final lines = <String>[
       if (b.isParlay) ...[
-        '${b.legs.length}-leg parlay @ $odds',
+        '${trPick('${b.legs.length}-leg parlay')} @ $odds',
         for (final l in b.legs)
-          '• ${l.selection}${l.event.isEmpty ? '' : ' (${l.event})'} @ ${formatOdds(l.odds, s.oddsFormat)}',
+          '• ${trPick(l.selection)}${l.event.isEmpty ? '' : ' (${l.event})'} @ ${formatOdds(l.odds, s.oddsFormat)}',
       ] else
-        '${b.selection}${b.event.isEmpty ? '' : ' (${b.event})'} @ $odds',
+        '${trPick(b.selection)}${b.event.isEmpty ? '' : ' (${b.event})'} @ $odds',
       '',
-      'Open it in BetPilot: ${webLink(b)}',
+      tr('Open it in BetPilot: {link}', {'link': webLink(b)}),
     ];
     return lines.join('\n');
   }

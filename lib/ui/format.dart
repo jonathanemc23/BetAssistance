@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '../data/models.dart';
 
 class Fmt {
-  Fmt(this.settings) : _money = NumberFormat.simpleCurrency(name: settings.currency);
+  Fmt(this.settings) : _money = NumberFormat.simpleCurrency(locale: 'en_US', name: settings.currency);
   final Settings settings;
   final NumberFormat _money;
 
@@ -16,7 +16,7 @@ class Fmt {
 
   String pct(double n) => '${n > 0.0004 ? '+' : n < -0.0004 ? '−' : ''}${(n.abs() * 100).toStringAsFixed(1)}%';
 
-  String compact(double n) => NumberFormat.compact().format(n);
+  String compact(double n) => NumberFormat.compact(locale: 'en_US').format(n);
 
   static String date(String iso) {
     final d = DateTime.tryParse(iso);

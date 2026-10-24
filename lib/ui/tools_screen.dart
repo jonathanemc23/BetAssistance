@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/store.dart';
 import 'parlay_screens.dart';
@@ -21,23 +22,23 @@ class BetToolsScreen extends StatelessWidget {
       builder: (context, _) {
         final open = store.parlays.where((p) => p.isOpen).length;
         return ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [
-          Text('Study a match, build a parlay, then log it.',
+          Text(tr('Study a match, build a parlay, then log it.'),
               style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           const SizedBox(height: 14),
           _ToolCard(
             icon: Icons.auto_awesome,
-            title: 'Pro tips',
-            text: "Value bets for today's big matches, free daily tips, and a search for any other match.",
-            badge: '${store.tokens} token${store.tokens == 1 ? '' : 's'}',
+            title: tr('Pro tips'),
+            text: tr("Value bets for today's big matches, free daily tips, and a search for any other match."),
+            badge: trn(store.tokens, '{n} token', '{n} tokens'),
             highlight: true,
             onTap: () => openProTipsHub(context, store: store, api: api, today: today),
           ),
           const SizedBox(height: 12),
           _ToolCard(
             icon: Icons.account_tree_outlined,
-            title: 'Parlay builder',
-            text: 'Combine picks from the match list or any other match, check them, share them and track the result.',
-            badge: open == 0 ? null : '$open open',
+            title: tr('Parlay builder'),
+            text: tr('Combine picks from the match list or any other match, check them, share them and track the result.'),
+            badge: open == 0 ? null : tr('{n} open', {'n': open}),
             onTap: () => Navigator.of(context)
                 .push(MaterialPageRoute<void>(builder: (_) => ParlaysPage(store: store, api: api))),
           ),

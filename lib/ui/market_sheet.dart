@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../data/models.dart';
 import '../logic/markets.dart';
 import '../logic/stats.dart';
@@ -97,33 +98,33 @@ class _MarketSheetState extends State<_MarketSheet> {
       padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
       child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('Choose a market', style: theme.textTheme.titleLarge),
+          Text(tr('Choose a market'), style: theme.textTheme.titleLarge),
           if (widget.event.isNotEmpty) Text(widget.event, style: theme.textTheme.bodySmall),
           const SizedBox(height: 12),
           Wrap(spacing: 6, runSpacing: 6, children: [
             for (final m in markets)
               ChoiceChip(
-                label: Text(m.label),
+                label: Text(m.name),
                 selected: m.id == _market.id,
                 onSelected: (_) => setState(() => _select(m)),
               ),
           ]),
           const SizedBox(height: 16),
           if (sides.isNotEmpty) ...[
-            Text('Pick', style: theme.textTheme.labelLarge),
+            Text(tr('Pick'), style: theme.textTheme.labelLarge),
             const SizedBox(height: 6),
             Wrap(spacing: 6, runSpacing: 6, children: [
               for (final s in sides)
-                ChoiceChip(label: Text(s), selected: s == _side, onSelected: (_) => setState(() => _side = s)),
+                ChoiceChip(label: Text(trPick(s)), selected: s == _side, onSelected: (_) => setState(() => _side = s)),
             ]),
             const SizedBox(height: 14),
           ],
           if (_market.hasLine) ...[
-            Text(_market.id == 'handicap' ? 'Handicap line' : 'Line', style: theme.textTheme.labelLarge),
+            Text(_market.id == 'handicap' ? tr('Handicap line') : tr('Line'), style: theme.textTheme.labelLarge),
             const SizedBox(height: 6),
             Row(children: [
               IconButton.filledTonal(
-                  tooltip: 'Lower line', onPressed: () => _stepLine(-1), icon: const Icon(Icons.remove)),
+                  tooltip: tr('Lower line'), onPressed: () => _stepLine(-1), icon: const Icon(Icons.remove)),
               const SizedBox(width: 8),
               Expanded(
                 child: TextField(
@@ -135,7 +136,7 @@ class _MarketSheetState extends State<_MarketSheet> {
               ),
               const SizedBox(width: 8),
               IconButton.filledTonal(
-                  tooltip: 'Raise line', onPressed: () => _stepLine(1), icon: const Icon(Icons.add)),
+                  tooltip: tr('Raise line'), onPressed: () => _stepLine(1), icon: const Icon(Icons.add)),
             ]),
             const SizedBox(height: 14),
           ],
@@ -143,7 +144,7 @@ class _MarketSheetState extends State<_MarketSheet> {
             TextField(
               controller: _text,
               textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(hintText: _market.input),
+              decoration: InputDecoration(hintText: _market.hint),
             ),
             const SizedBox(height: 14),
           ],
@@ -152,7 +153,7 @@ class _MarketSheetState extends State<_MarketSheet> {
               controller: _odds,
               keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
               decoration: InputDecoration(
-                labelText: 'Odds',
+                labelText: tr('Odds'),
                 hintText: widget.format == OddsFormat.american ? '+150' : '1.90',
               ),
             ),
@@ -165,7 +166,7 @@ class _MarketSheetState extends State<_MarketSheet> {
               Icon(Icons.check_circle_outline, size: 18, color: cs.primary),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(_valid || !_market.hasText ? _preview : 'Type your pick',
+                child: Text(_valid || !_market.hasText ? trPick(_preview) : tr('Type your pick'),
                     style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
               ),
             ]),
@@ -179,7 +180,7 @@ class _MarketSheetState extends State<_MarketSheet> {
                       MarketPick(_market.id, _preview,
                           odds: widget.askOdds ? parseOdds(_odds.text, widget.format) : null),
                     ),
-            child: const Text('Use this pick'),
+            child: Text(tr('Use this pick')),
           ),
         ]),
       ),

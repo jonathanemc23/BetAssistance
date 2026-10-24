@@ -439,7 +439,7 @@ void main() {
     await shot('pro_tips_hub');
     await tester.tap(find.widgetWithText(Tab, 'Pro tips'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Every Pro tip is a value bet'), findsOneWidget);
+    expect(find.textContaining('The more a Pro tip costs, the better its odds'), findsOneWidget);
     expect(find.textContaining('Buy prediction'), findsWidgets);
     await shot('pro_tips_hub_pro');
     await tester.tap(find.byKey(const Key('search-match')));

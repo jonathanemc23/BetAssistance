@@ -4,11 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../l10n/l10n.dart';
 import '../data/store.dart';
 
 /// The preset avatars: an emoji on a coloured disc.
-const avatarEmojis = ['⚽', '🏀', '⚾', '🎾', '🦁', '🐺', '🦅', '🐯', '🔥', '⭐', '👑', '🎯'];
-const avatarColors = [
+final avatarEmojis = ['⚽', '🏀', '⚾', '🎾', '🦁', '🐺', '🦅', '🐯', '🔥', '⭐', '👑', '🎯'];
+final avatarColors = [
   Color(0xFFC5A059),
   Color(0xFF2E9461),
   Color(0xFF3D7DD8),
@@ -89,7 +90,7 @@ Future<void> showAvatarPicker(BuildContext context, BankStore store) => showModa
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Center(child: ProfileAvatar(store: store, size: 80)),
                 const SizedBox(height: 12),
-                Text('Choose your avatar',
+                Text(tr('Choose your avatar'),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 16),
@@ -124,10 +125,10 @@ Future<void> showAvatarPicker(BuildContext context, BankStore store) => showModa
                     await store.setAvatar('photo:${base64Encode(bytes)}');
                   },
                   icon: const Icon(Icons.photo_library_outlined),
-                  label: const Text('Use a photo'),
+                  label: Text(tr('Use a photo')),
                 ),
                 if (store.avatar.isNotEmpty)
-                  TextButton(onPressed: () => store.setAvatar(''), child: const Text('Remove avatar')),
+                  TextButton(onPressed: () => store.setAvatar(''), child: Text(tr('Remove avatar'))),
               ]),
             ),
           );

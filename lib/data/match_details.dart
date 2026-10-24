@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'fixtures.dart';
+import '../l10n/l10n.dart';
 
 /// Everything ESPN's match summary feed (`.../summary?event=<id>`) knows about
 /// one match: odds from each bookmaker, news, team form, line-ups, key events,
@@ -606,7 +607,7 @@ MatchDetails parseMatchDetails(String body) {
     final header = '${g['header'] ?? ''}';
     if (picked.where((o) => '${o['header'] ?? ''}' == header).length == 1 && header.isNotEmpty) return header;
     final team = rows.where((r) => sideIds.contains(r.teamId)).firstOrNull?.team;
-    return team == null ? header : 'Group with $team';
+    return team == null ? header : tr('Group with {team}', {'team': team});
   }
 
   final news = safe(() => [

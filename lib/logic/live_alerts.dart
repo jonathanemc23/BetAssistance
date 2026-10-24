@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/parlay.dart';
+import '../l10n/l10n.dart';
 
 /// Live alerts for matches the user has an open bet on: kick-off, every
 /// score change and the final result. This file decides what to say; the
@@ -133,27 +134,29 @@ class LiveAlert {
 /// app halfway through a game doesn't replay it; one that is already
 /// finished still reports the result.
 LiveAlert? alertFor(WatchedMatch w, MatchSnapshot? last, Match now) {
-  final picks = w.picks.isEmpty ? '' : 'Your ${w.picks.length == 1 ? 'pick' : 'picks'}: ${w.picks.join(', ')}';
+  final picks = w.picks.isEmpty
+      ? ''
+      : trn(w.picks.length, 'Your pick: {picks}', 'Your picks: {picks}', {'picks': w.picks.map(trPick).join(', ')});
   String line(String extra) => [extra, picks].where((s) => s.isNotEmpty).join('\n');
   final score = '${now.home.name} ${now.home.score ?? 0}-${now.away.score ?? 0} ${now.away.name}';
 
   if (now.state == MatchState.finished) {
     if (last?.state == MatchState.finished) return null;
-    return LiveAlert(AlertKind.finalResult, now.id, 'Full time: $score', line(''));
+    return LiveAlert(AlertKind.finalResult, now.id, tr('Full time: {score}', {'score': score}), line(''));
   }
   if (now.state != MatchState.live || last == null) return null;
   if (last.state != MatchState.live) {
     final started = (now.home.score ?? '0') == '0' && (now.away.score ?? '0') == '0';
-    return LiveAlert(AlertKind.kickoff, now.id, started ? 'Kick-off: ${now.title}' : 'Under way: $score',
+    return LiveAlert(AlertKind.kickoff, now.id, started ? tr('Kick-off: {match}', {'match': now.title}) : tr('Under way: {score}', {'score': score}),
         line(now.detail.isEmpty ? (now.league.name) : '${now.detail} · ${now.league.name}'));
   }
   if (last.home == now.home.score && last.away == now.away.score) return null;
   final before = _total(last.home, last.away), after = _total(now.home.score, now.away.score);
   final title = after < before
-      ? 'Score corrected: $score'
+      ? tr('Score corrected: {score}', {'score': score})
       : w.sport == 'Soccer'
-          ? 'Goal! $score'
-          : 'Score update: $score';
+          ? tr('Goal! {score}', {'score': score})
+          : tr('Score update: {score}', {'score': score});
   return LiveAlert(AlertKind.score, now.id, title, line(now.detail));
 }
 

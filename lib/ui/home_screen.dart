@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/store.dart';
@@ -15,8 +16,8 @@ import 'summary_screen.dart';
 import 'themes.dart';
 
 /// Gold used for Pro tips, whatever the app theme.
-const _gold = [Color(0xFFF7D774), Color(0xFFE0A93B), Color(0xFFB9772A)];
-const _onGold = Color(0xFF2A1A05);
+final _gold = [Color(0xFFF7D774), Color(0xFFE0A93B), Color(0xFFB9772A)];
+final _onGold = Color(0xFF2A1A05);
 
 /// The first tab: who you are and where your bank stands, then the day's
 /// important matches, Pro tips and free tips.
@@ -66,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openSummary() => Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text('Summary')),
+          appBar: AppBar(title: Text(tr('Summary'))),
           body: ListenableBuilder(
             listenable: store,
             builder: (context, _) => SummaryScreen(
@@ -108,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
         _HomeHeader(store: store, onSummary: _openSummary, onLogBet: widget.onLogBet, onOpenBets: widget.onOpenBets),
         const SizedBox(height: 22),
-        _SectionTitle(title: 'Important matches today', action: 'All matches', onAction: widget.onOpenMatches),
+        _SectionTitle(title: tr('Important matches today'), action: tr('All matches'), onAction: widget.onOpenMatches),
         SizedBox(
           height: 156,
           child: matches == null
@@ -118,11 +119,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       : TextButton.icon(
                           onPressed: _load,
                           icon: const Icon(Icons.refresh),
-                          label: const Text("Couldn't load today's matches. Try again"),
+                          label: Text(tr("Couldn't load today's matches. Try again")),
                         ),
                 )
               : matches.isEmpty
-                  ? const _StripMessage(child: Text('No big matches left today.'))
+                  ? _StripMessage(child: Text(tr('No big matches left today.')))
                   : ListView.separated(
                       key: const Key('home-matches'),
                       scrollDirection: Axis.horizontal,
@@ -137,7 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
         ),
         const SizedBox(height: 22),
-        _SectionTitle(title: 'Pro tips', action: 'See all', onAction: () => _openHub(1), gold: true),
+        _SectionTitle(title: tr('Pro tips'), action: tr('See all'), onAction: () => _openHub(1), gold: true),
         _ProBanner(count: pro.length, tokens: store.tokens, onTap: () => _openHub(1)),
         if (pro.isNotEmpty) ...[
           const SizedBox(height: 10),
@@ -159,11 +160,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
         const SizedBox(height: 22),
-        _SectionTitle(title: 'Free tips', action: 'More', onAction: () => _openHub(0)),
+        _SectionTitle(title: tr('Free tips'), action: tr('More'), onAction: () => _openHub(0)),
         if (matches != null && free.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Text('No free tips left for today.',
+            child: Text(tr('No free tips left for today.'),
                 textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ),
         for (final (m, t) in free)
@@ -172,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              'Preview: tips are simulated while our prediction model is being built. Bet responsibly.',
+              tr('Preview: tips are simulated while our prediction model is being built. Bet responsibly.'),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
@@ -199,7 +200,7 @@ class _HomeHeader extends StatelessWidget {
     final fmt = Fmt(store.settings);
     final s = store.stats;
     final hour = DateTime.now().hour;
-    final greeting = hour < 12 ? 'Good morning' : hour < 19 ? 'Good afternoon' : 'Good evening';
+    final greeting = hour < 12 ? tr('Good morning') : hour < 19 ? tr('Good afternoon') : tr('Good evening');
     final openParlays = store.parlays.where((p) => p.isOpen).length;
 
     Widget chip(IconData icon, String text, {VoidCallback? onTap}) => Material(
@@ -238,7 +239,7 @@ class _HomeHeader extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(greeting, style: theme.textTheme.bodySmall?.copyWith(color: fg.withValues(alpha: 0.8))),
-              Text(store.profileName.isEmpty ? 'Welcome back' : store.profileName,
+              Text(store.profileName.isEmpty ? tr('Welcome back') : store.profileName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w800)),
@@ -246,7 +247,7 @@ class _HomeHeader extends StatelessWidget {
           ),
         ]),
         const SizedBox(height: 14),
-        Text('BANK', style: theme.textTheme.labelSmall?.copyWith(color: fg.withValues(alpha: 0.8), letterSpacing: 1.2)),
+        Text(tr('BANK'), style: theme.textTheme.labelSmall?.copyWith(color: fg.withValues(alpha: 0.8), letterSpacing: 1.2)),
         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Flexible(
             child: FittedBox(
@@ -258,16 +259,16 @@ class _HomeHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Text('${fmt.money(s.available)} available',
+          Text(tr('{amount} available', {'amount': fmt.money(s.available)}),
               style: theme.textTheme.bodySmall?.copyWith(color: fg.withValues(alpha: 0.8))),
         ]),
         const SizedBox(height: 14),
         Wrap(spacing: 6, runSpacing: 6, children: [
-          chip(Icons.receipt_long, '${s.pendingCount} open bet${s.pendingCount == 1 ? '' : 's'}', onTap: onOpenBets),
-          if (s.exposure > 0) chip(Icons.hourglass_bottom, '${fmt.money(s.exposure)} at risk'),
+          chip(Icons.receipt_long, trn(s.pendingCount, '{n} open bet', '{n} open bets'), onTap: onOpenBets),
+          if (s.exposure > 0) chip(Icons.hourglass_bottom, tr('{amount} at risk', {'amount': fmt.money(s.exposure)})),
           chip(s.profit >= 0 ? Icons.trending_up : Icons.trending_down, 'P/L ${fmt.money(s.profit, sign: true)}'),
           chip(Icons.percent, 'ROI ${fmt.pct(s.roi)}'),
-          if (openParlays > 0) chip(Icons.account_tree_outlined, '$openParlays open parlay${openParlays == 1 ? '' : 's'}'),
+          if (openParlays > 0) chip(Icons.account_tree_outlined, trn(openParlays, '{n} open parlay', '{n} open parlays')),
         ]),
         const SizedBox(height: 14),
         Row(children: [
@@ -276,7 +277,7 @@ class _HomeHeader extends StatelessWidget {
               style: FilledButton.styleFrom(backgroundColor: fg, foregroundColor: hero.gradient.first),
               onPressed: onSummary,
               icon: const Icon(Icons.dashboard_outlined, size: 18),
-              label: const Text('See summary', style: TextStyle(fontWeight: FontWeight.w800)),
+              label: Text(tr('See summary'), style: TextStyle(fontWeight: FontWeight.w800)),
             ),
           ),
           const SizedBox(width: 10),
@@ -285,7 +286,7 @@ class _HomeHeader extends StatelessWidget {
               style: OutlinedButton.styleFrom(foregroundColor: fg, side: BorderSide(color: fg.withValues(alpha: 0.6))),
               onPressed: onLogBet,
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Log bet'),
+              label: Text(tr('Log bet')),
             ),
           ),
         ]),
@@ -401,7 +402,7 @@ class _MatchBox extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(6)),
-                      child: Text('LIVE ${m.detail}',
+                      child: Text(tr('LIVE {clock}', {'clock': m.detail}),
                           style: TextStyle(color: cs.onError, fontSize: 9.5, fontWeight: FontWeight.w800)),
                     )
                   else
@@ -480,19 +481,20 @@ class _ProBanner extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Value bets for today', style: theme.textTheme.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w900)),
+                  Text(tr('Value bets for today'), style: theme.textTheme.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w900)),
                   Text(
                     count == 0
-                        ? 'Expert picks with the reasons behind them. You have $tokens tokens.'
-                        : '$count big match${count == 1 ? '' : 'es'} with Pro picks at odds of 1.80+. You have $tokens tokens.',
+                        ? tr('Expert picks with the reasons behind them. You have {tokens} tokens.', {'tokens': tokens})
+                        : trn(count, '{n} big match with Pro picks at odds of 1.60 to 2.00. You have {tokens} tokens.',
+                            '{n} big matches with Pro picks at odds of 1.60 to 2.00. You have {tokens} tokens.', {'tokens': tokens}),
                     style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.8)),
                   ),
                 ]),
               ),
               Container(
                 padding: const EdgeInsets.all(6),
-                decoration: const BoxDecoration(gradient: LinearGradient(colors: _gold), shape: BoxShape.circle),
-                child: const Icon(Icons.chevron_right, color: _onGold, size: 20),
+                decoration: BoxDecoration(gradient: LinearGradient(colors: _gold), shape: BoxShape.circle),
+                child: Icon(Icons.chevron_right, color: _onGold, size: 20),
               ),
             ]),
           ),
@@ -548,14 +550,14 @@ class _ProTipBox extends StatelessWidget {
                   style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
               const Spacer(),
               if (unlocked)
-                Text(tip.pick,
+                Text(trPick(tip.pick),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800))
               else
                 Row(children: [
                   Flexible(
-                    child: Text('Value +${(tip.value * 100).round()}%',
+                    child: Text(tr('Value +{pct}%', {'pct': (tip.value * 100).round()}),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.labelLarge
@@ -565,14 +567,14 @@ class _ProTipBox extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: _gold),
+                      gradient: LinearGradient(colors: _gold),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.lock_open, size: 14, color: _onGold),
+                      Icon(Icons.lock_open, size: 14, color: _onGold),
                       const SizedBox(width: 4),
                       Text('${tip.cost}',
-                          style: const TextStyle(color: _onGold, fontWeight: FontWeight.w900, fontSize: 12)),
+                          style: TextStyle(color: _onGold, fontWeight: FontWeight.w900, fontSize: 12)),
                       const SizedBox(width: 3),
                       const TokenCoin(size: 14),
                     ]),
@@ -616,7 +618,7 @@ class _FreeTipRow extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(tip.pick,
+                  Text(trPick(tip.pick),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),

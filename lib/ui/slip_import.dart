@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/parlay.dart';
@@ -54,12 +55,12 @@ Future<void> importSlip(BuildContext context, {required BankStore store, require
   showDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => const AlertDialog(
+    builder: (_) => AlertDialog(
       content: Row(
         children: [
           CircularProgressIndicator(),
           SizedBox(width: 20),
-          Expanded(child: Text('Reading the slip…')),
+          Expanded(child: Text(tr('Reading the slip…'))),
         ],
       ),
     ),
@@ -81,8 +82,8 @@ Future<void> importSlip(BuildContext context, {required BankStore store, require
   showDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => const AlertDialog(
-      content: Row(children: [CircularProgressIndicator(), SizedBox(width: 20), Expanded(child: Text('Finding the matches…'))]),
+    builder: (_) => AlertDialog(
+      content: Row(children: [CircularProgressIndicator(), SizedBox(width: 20), Expanded(child: Text(tr('Finding the matches…')))]),
     ),
   );
   final legs = await linkLegs(api, result.$1);
@@ -90,7 +91,7 @@ Future<void> importSlip(BuildContext context, {required BankStore store, require
   Navigator.of(context, rootNavigator: true).pop();
   var parlay = await store.newParlay(legs: legs);
   if (result.$2 > 0) parlay = await store.saveParlay(parlay.copyWith(stake: result.$2));
-  messenger.showSnackBar(SnackBar(content: Text('Parlay saved with ${result.$1.length} selections'), persist: false));
+  messenger.showSnackBar(SnackBar(content: Text(trn(result.$1.length, 'Parlay saved with {n} selection', 'Parlay saved with {n} selections')), persist: false));
   if (context.mounted) await openParlay(context, store: store, api: api, parlay: parlay);
 }
 
@@ -170,7 +171,7 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
     final total = widget.read.totalOdds;
     final mismatch = total != null && combined != null && (combined - total).abs() / total > 0.02;
     return Scaffold(
-      appBar: AppBar(title: const Text('Check the slip')),
+      appBar: AppBar(title: Text(tr('Check the slip'))),
       body: ListView(
         key: const Key('slip-review'),
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
@@ -185,10 +186,10 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
                 Expanded(
                   child: Text(
                     read > 0
-                        ? 'Read $read selection${read == 1 ? '' : 's'} from the screenshot. Check each one and fix anything that was misread.'
+                        ? trn(read, 'Read {n} selection from the screenshot. Check each one and fix anything that was misread.', 'Read {n} selections from the screenshot. Check each one and fix anything that was misread.')
                         : widget.read.error != null
-                        ? "The text reader didn't work on this phone (${widget.read.error}). Add the selections by hand for now."
-                        : "Couldn't read any selections from this picture. Add them by hand, or try a sharper screenshot of the slip.",
+                        ? tr("The text reader didn't work on this phone ({error}). Add the selections by hand for now.", {'error': widget.read.error})
+                        : tr("Couldn't read any selections from this picture. Add them by hand, or try a sharper screenshot of the slip."),
                     style: TextStyle(color: cs.onSecondaryContainer),
                   ),
                 ),
@@ -205,10 +206,10 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
                 children: [
                   Row(
                     children: [
-                      Text('Selection ${i + 1}', style: theme.textTheme.labelLarge?.copyWith(color: cs.primary)),
+                      Text(tr('Selection {n}', {'n': i + 1}), style: theme.textTheme.labelLarge?.copyWith(color: cs.primary)),
                       const Spacer(),
                       IconButton(
-                        tooltip: 'Remove',
+                        tooltip: tr('Remove'),
                         icon: const Icon(Icons.close),
                         onPressed: _legs.length == 1
                             ? null
@@ -226,7 +227,7 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
                       children: [
                         TextField(
                           controller: l.selection,
-                          decoration: const InputDecoration(labelText: 'Pick'),
+                          decoration: InputDecoration(labelText: tr('Pick')),
                         ),
                         const SizedBox(height: 8),
                         Row(
@@ -235,7 +236,7 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
                               flex: 3,
                               child: TextField(
                                 controller: l.event,
-                                decoration: const InputDecoration(labelText: 'Match'),
+                                decoration: InputDecoration(labelText: tr('Match')),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -244,8 +245,8 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
                                 controller: l.odds,
                                 keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                                 decoration: InputDecoration(
-                                  labelText: 'Odds',
-                                  errorText: l.odds.text.isNotEmpty && _odds(l) == null ? 'Check' : null,
+                                  labelText: tr('Odds'),
+                                  errorText: l.odds.text.isNotEmpty && _odds(l) == null ? tr('Check') : null,
                                 ),
                               ),
                             ),
@@ -268,26 +269,26 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
                 _legs.add(l);
               }),
               icon: const Icon(Icons.add),
-              label: const Text('Add a selection'),
+              label: Text(tr('Add a selection')),
             ),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _stake,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Stake (optional)'),
+            decoration: InputDecoration(labelText: tr('Stake (optional)')),
           ),
           const SizedBox(height: 12),
           if (combined != null)
             Text(
-              'Combined odds ${formatOdds(combined, widget.format)}',
+              tr('Combined odds {odds}', {'odds': formatOdds(combined, widget.format)}),
               style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
             ),
           if (mismatch)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                'The slip says ${formatOdds(total, widget.format)} in total. Check the prices above.',
+                tr('The slip says {odds} in total. Check the prices above.', {'odds': formatOdds(total, widget.format)}),
                 style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
               ),
             ),
@@ -295,7 +296,7 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
           FilledButton.icon(
             onPressed: _valid ? _save : null,
             icon: const Icon(Icons.check),
-            label: const Text('Save as a parlay'),
+            label: Text(tr('Save as a parlay')),
           ),
         ],
       ),

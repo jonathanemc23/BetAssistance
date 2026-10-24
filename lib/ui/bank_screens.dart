@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../data/live_alert_service.dart';
 import '../data/models.dart';
 import '../data/store.dart';
@@ -42,11 +43,11 @@ class _TxSheetState extends State<_TxSheet> {
   Future<void> _save() async {
     final amt = double.tryParse(_amount.text.replaceAll(',', '.'));
     if (amt == null || amt <= 0) {
-      setState(() => _error = 'Enter an amount above zero');
+      setState(() => _error = tr('Enter an amount above zero'));
       return;
     }
     await widget.store.saveTx(BankTx(kind: widget.kind, amount: amt, date: _date, note: _note.text.trim()));
-    if (mounted) Navigator.pop(context, widget.kind == TxKind.deposit ? 'Deposit added' : 'Withdrawal added');
+    if (mounted) Navigator.pop(context, widget.kind == TxKind.deposit ? tr('Deposit added') : tr('Withdrawal added'));
   }
 
   @override
@@ -55,13 +56,13 @@ class _TxSheetState extends State<_TxSheet> {
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(deposit ? 'Add deposit' : 'Add withdrawal', style: Theme.of(context).textTheme.titleLarge),
+        Text(deposit ? tr('Add deposit') : tr('Add withdrawal'), style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 16),
         TextField(
           controller: _amount,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: 'Amount (${widget.store.settings.currency})', errorText: _error),
+          decoration: InputDecoration(labelText: tr('Amount ({currency})', {'currency': widget.store.settings.currency}), errorText: _error),
         ),
         const SizedBox(height: 12),
         InkWell(
@@ -71,14 +72,14 @@ class _TxSheetState extends State<_TxSheet> {
             if (d != null) setState(() => _date = isoDate(d));
           },
           child: InputDecorator(
-            decoration: const InputDecoration(labelText: 'Date', suffixIcon: Icon(Icons.calendar_today, size: 18)),
+            decoration: InputDecoration(labelText: tr('Date'), suffixIcon: Icon(Icons.calendar_today, size: 18)),
             child: Text(Fmt.date(_date)),
           ),
         ),
         const SizedBox(height: 12),
-        TextField(controller: _note, decoration: const InputDecoration(labelText: 'Note (optional), e.g. bookmaker')),
+        TextField(controller: _note, decoration: InputDecoration(labelText: tr('Note (optional), e.g. bookmaker'))),
         const SizedBox(height: 20),
-        FilledButton(onPressed: _save, child: const Text('Save')),
+        FilledButton(onPressed: _save, child: Text(tr('Save'))),
       ]),
     );
   }
@@ -97,26 +98,26 @@ class TransactionsPage extends StatelessWidget {
         final fmt = Fmt(store.settings);
         final s = store.stats;
         return Scaffold(
-          appBar: AppBar(title: const Text('Deposits and withdrawals')),
+          appBar: AppBar(title: Text(tr('Deposits and withdrawals'))),
           body: ListView(children: [
             ListTile(
-              title: const Text('Starting bankroll'),
-              subtitle: Text('from ${Fmt.date(store.settings.startDate)}'),
+              title: Text(tr('Starting bankroll')),
+              subtitle: Text(tr('from {date}', {'date': Fmt.date(store.settings.startDate)})),
               trailing: Text(fmt.money(store.settings.startBankroll)),
             ),
-            ListTile(title: const Text('Deposits'), trailing: Text(fmt.money(s.deposits))),
-            ListTile(title: const Text('Withdrawals'), trailing: Text(fmt.money(s.withdrawals))),
+            ListTile(title: Text(tr('Deposits')), trailing: Text(fmt.money(s.deposits))),
+            ListTile(title: Text(tr('Withdrawals')), trailing: Text(fmt.money(s.withdrawals))),
             ListTile(
-              title: const Text('Betting profit / loss'),
+              title: Text(tr('Betting profit / loss')),
               trailing: Text(fmt.money(s.profit, sign: true), style: TextStyle(color: BankColors.forValue(context, s.profit))),
             ),
             ListTile(
-              title: const Text('Current bankroll', style: TextStyle(fontWeight: FontWeight.w600)),
+              title: Text(tr('Current bankroll'), style: TextStyle(fontWeight: FontWeight.w600)),
               trailing: Text(fmt.money(s.balance), style: const TextStyle(fontWeight: FontWeight.w600)),
             ),
             const Divider(),
             if (store.txs.isEmpty)
-              const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No deposits or withdrawals yet.'))),
+              Padding(padding: EdgeInsets.all(24), child: Center(child: Text(tr('No deposits or withdrawals yet.')))),
             for (final t in store.txs)
               Dismissible(
                 key: ValueKey('tx${t.id}'),
@@ -130,7 +131,7 @@ class TransactionsPage extends StatelessWidget {
                 onDismissed: (_) => store.deleteTx(t),
                 child: ListTile(
                   leading: Icon(t.kind == TxKind.deposit ? Icons.south_west : Icons.north_east),
-                  title: Text(t.kind == TxKind.deposit ? 'Deposit' : 'Withdrawal'),
+                  title: Text(t.kind == TxKind.deposit ? tr('Deposit') : tr('Withdrawal')),
                   subtitle: Text([Fmt.date(t.date), if (t.note.isNotEmpty) t.note].join(' · ')),
                   trailing: Text(
                     '${t.kind == TxKind.deposit ? '+' : '−'}${fmt.money(t.amount)}',
@@ -147,7 +148,7 @@ class TransactionsPage extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: () => showTxSheet(context, store, TxKind.withdrawal),
                     icon: const Icon(Icons.remove),
-                    label: const Text('Withdrawal'),
+                    label: Text(tr('Withdrawal')),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -155,7 +156,7 @@ class TransactionsPage extends StatelessWidget {
                   child: FilledButton.icon(
                     onPressed: () => showTxSheet(context, store, TxKind.deposit),
                     icon: const Icon(Icons.add),
-                    label: const Text('Deposit'),
+                    label: Text(tr('Deposit')),
                   ),
                 ),
               ]),
@@ -228,16 +229,16 @@ class _SettingsPageState extends State<SettingsPage> {
     await widget.store.setPref(aiKeyPref, _aiKey.text.trim());
     await widget.store.setProfileName(_name.text);
     await widget.store.saveSettings(s);
-    if (mounted) Navigator.pop(context, 'Settings saved');
+    if (mounted) Navigator.pop(context, tr('Settings saved'));
   }
 
   @override
   Widget build(BuildContext context) {
-    const gap = SizedBox(height: 14);
+    final gap = SizedBox(height: 14);
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: Text(tr('Settings'))),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        Text('Profile', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        Text(tr('Profile'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 10),
         Row(children: [
           InkWell(
@@ -255,17 +256,35 @@ class _SettingsPageState extends State<SettingsPage> {
               TextField(
                 controller: _name,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Your name'),
+                decoration: InputDecoration(labelText: tr('Your name')),
               ),
               TextButton(
                 onPressed: () => showAvatarPicker(context, widget.store),
-                child: const Text('Change avatar'),
+                child: Text(tr('Change avatar')),
               ),
             ]),
           ),
         ]),
         const SizedBox(height: 24),
-        Text('Theme', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        Text(tr('Language'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 10),
+        ListenableBuilder(
+          listenable: widget.store,
+          builder: (context, _) => SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<AppLanguage>(
+              key: const Key('language'),
+              showSelectedIcon: false,
+              segments: [
+                for (final l in AppLanguage.values) ButtonSegment(value: l, label: Text(l.label)),
+              ],
+              selected: {widget.store.language},
+              onSelectionChanged: (v) => widget.store.setLanguage(v.first),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(tr('Theme'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 10),
         ListenableBuilder(
           listenable: widget.store,
@@ -275,12 +294,12 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
         const SizedBox(height: 24),
-        Text('Bankroll', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        Text(tr('Bankroll'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 10),
         TextField(
           controller: _start,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Starting bankroll'),
+          decoration: InputDecoration(labelText: tr('Starting bankroll')),
         ),
         gap,
         InkWell(
@@ -293,7 +312,7 @@ class _SettingsPageState extends State<SettingsPage> {
             if (d != null) setState(() => _startDate = isoDate(d));
           },
           child: InputDecorator(
-            decoration: const InputDecoration(labelText: 'Start date', suffixIcon: Icon(Icons.calendar_today, size: 18)),
+            decoration: InputDecoration(labelText: tr('Start date'), suffixIcon: Icon(Icons.calendar_today, size: 18)),
             child: Text(Fmt.date(_startDate)),
           ),
         ),
@@ -301,44 +320,41 @@ class _SettingsPageState extends State<SettingsPage> {
         TextField(
           controller: _unit,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-              labelText: 'Unit size', helperText: 'The stake you treat as one unit, used to show profit in units'),
+          decoration: InputDecoration(
+              labelText: tr('Unit size'), helperText: tr('The stake you treat as one unit, used to show profit in units')),
         ),
         gap,
         DropdownButtonFormField<String>(
           initialValue: _currency,
-          decoration: const InputDecoration(labelText: 'Currency'),
+          decoration: InputDecoration(labelText: tr('Currency')),
           items: [for (final c in currencies) DropdownMenuItem(value: c, child: Text(c))],
           onChanged: (v) => setState(() => _currency = v ?? _currency),
         ),
         gap,
         DropdownButtonFormField<OddsFormat>(
           initialValue: _odds,
-          decoration: const InputDecoration(labelText: 'Odds format'),
-          items: const [
-            DropdownMenuItem(value: OddsFormat.decimal, child: Text('Decimal (2.50)')),
-            DropdownMenuItem(value: OddsFormat.american, child: Text('American (+150)')),
+          decoration: InputDecoration(labelText: tr('Odds format')),
+          items: [
+            DropdownMenuItem(value: OddsFormat.decimal, child: Text(tr('Decimal (2.50)'))),
+            DropdownMenuItem(value: OddsFormat.american, child: Text(tr('American (+150)'))),
           ],
           onChanged: (v) => setState(() => _odds = v ?? _odds),
         ),
         const SizedBox(height: 24),
-        Text('Live alerts', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        Text(tr('Live alerts'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         SwitchListTile(
           key: const Key('alerts-switch'),
           contentPadding: EdgeInsets.zero,
           value: _alerts,
           onChanged: _setAlerts,
-          title: const Text('Alerts for matches in open bets'),
-          subtitle: const Text('Kick-off, every goal and the final score for matches in your pending bets and open '
-              'parlays. Checked every minute while BetPilot is open or running in the background.'),
+          title: Text(tr('Alerts for matches in open bets')),
+          subtitle: Text(tr('Kick-off, every goal and the final score for matches in your pending bets and open parlays. Checked every minute while BetPilot is open or running in the background.')),
         ),
         const SizedBox(height: 24),
-        Text('AI chat', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        Text(tr('AI chat'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
         Text(
-          'Optional. With an Anthropic API key the Matchboard chat can answer any question, searching the web for '
-          'news, injuries and anything else. Questions are sent to Anthropic and billed to your own account '
-          '(console.anthropic.com). Without a key the chat answers from the match data only.',
+          tr('Optional. With an Anthropic API key the Matchboard chat can answer any question, searching the web for news, injuries and anything else. Questions are sent to Anthropic and billed to your own account (console.anthropic.com). Without a key the chat answers from the match data only.'),
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 10),
@@ -349,17 +365,17 @@ class _SettingsPageState extends State<SettingsPage> {
           autocorrect: false,
           enableSuggestions: false,
           decoration: InputDecoration(
-            labelText: 'Anthropic API key',
+            labelText: tr('Anthropic API key'),
             hintText: 'sk-ant-…',
             suffixIcon: IconButton(
-              tooltip: _showKey ? 'Hide' : 'Show',
+              tooltip: _showKey ? tr('Hide') : tr('Show'),
               icon: Icon(_showKey ? Icons.visibility_off : Icons.visibility),
               onPressed: () => setState(() => _showKey = !_showKey),
             ),
           ),
         ),
         const SizedBox(height: 24),
-        FilledButton(onPressed: _save, child: const Text('Save settings')),
+        FilledButton(onPressed: _save, child: Text(tr('Save settings'))),
       ]),
     );
   }
@@ -428,14 +444,14 @@ class _ThemeCard extends StatelessWidget {
             const SizedBox(height: 10),
             Row(children: [
               Expanded(
-                child: Text(t.name,
+                child: Text(t.localName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: t.onSurface, fontWeight: FontWeight.w800, fontSize: 15)),
               ),
               if (selected) Icon(Icons.check_circle, color: t.primary, size: 20),
             ]),
-            Text(t.description,
+            Text(t.localDescription,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: t.onSurfaceVariant, fontSize: 11.5)),

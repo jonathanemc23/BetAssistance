@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/store.dart';
@@ -213,7 +214,7 @@ class _BetFormPageState extends State<BetFormPage> {
   Future<(Match, String, double)?> _pickFromMatches() => Navigator.of(context).push<(Match, String, double)>(
         MaterialPageRoute(
           builder: (c) => Scaffold(
-            appBar: AppBar(title: const Text('Pick a selection')),
+            appBar: AppBar(title: Text(tr('Pick a selection'))),
             body: MatchesTabs(
               store: widget.store,
               api: widget.api!,
@@ -276,32 +277,32 @@ class _BetFormPageState extends State<BetFormPage> {
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
     if (_oddsVal == null || _oddsVal! <= 1) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Check the odds')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Check the odds'))));
       return;
     }
     await widget.store.saveBet(_build());
-    if (mounted) Navigator.pop(context, _isNew ? 'Bet logged' : 'Bet updated');
+    if (mounted) Navigator.pop(context, _isNew ? tr('Bet logged') : tr('Bet updated'));
   }
 
   Future<void> _delete() async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Delete this bet?'),
-        content: const Text('It will be removed from your totals and charts.'),
+        title: Text(tr('Delete this bet?')),
+        content: Text(tr('It will be removed from your totals and charts.')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Delete')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Delete'))),
         ],
       ),
     );
     if (ok != true) return;
     await widget.store.deleteBet(widget.bet!);
-    if (mounted) Navigator.pop(context, 'Bet deleted');
+    if (mounted) Navigator.pop(context, tr('Bet deleted'));
   }
 
   String? _oddsValidator(String? v) =>
-      _parse(v ?? '') != null ? null : (_settings.oddsFormat == OddsFormat.american ? 'Use +150 or -110' : 'Above 1.00');
+      _parse(v ?? '') != null ? null : (_settings.oddsFormat == OddsFormat.american ? tr('Use +150 or -110') : tr('Above 1.00'));
 
   void _setDateOffset(int days) =>
       setState(() => _date = isoDate(DateTime.now().subtract(Duration(days: days))));
@@ -314,7 +315,7 @@ class _BetFormPageState extends State<BetFormPage> {
     final oddsHint = american ? '+150' : '2.50';
     final s = _stakeVal, o = _oddsVal;
     final ready = s != null && s > 0 && o != null;
-    const gap = SizedBox(height: 12);
+    final gap = SizedBox(height: 12);
     final today = isoDate(DateTime.now());
     final yesterday = isoDate(DateTime.now().subtract(const Duration(days: 1)));
 
@@ -324,19 +325,19 @@ class _BetFormPageState extends State<BetFormPage> {
         child: CustomScrollView(slivers: [
           SliverToBoxAdapter(
             child: _SlipHeader(
-              title: _isNew ? (widget.template != null ? 'New bet' : 'Log a bet') : 'Edit bet',
+              title: _isNew ? (widget.template != null ? tr('New bet') : tr('Log a bet')) : tr('Edit bet'),
               type: _type,
               onType: _setType,
               returns: ready ? fmt.money(s * o) : '–',
               chips: [
-                'Odds ${o == null ? '–' : formatOdds(o, _settings.oddsFormat)}',
-                'Stake ${s != null && s > 0 ? fmt.money(s) : '–'}',
-                if (ready) 'Profit ${fmt.money(s * (o - 1))}',
-                if (o != null) '${(100 / o).toStringAsFixed(1)}% implied',
+                tr('Odds {odds}', {'odds': o == null ? '–' : formatOdds(o, _settings.oddsFormat)}),
+                tr('Stake {stake}', {'stake': s != null && s > 0 ? fmt.money(s) : '–'}),
+                if (ready) tr('Profit {profit}', {'profit': fmt.money(s * (o - 1))}),
+                if (o != null) tr('{pct}% implied', {'pct': (100 / o).toStringAsFixed(1)}),
               ],
               onShare: () {
                 if (_oddsVal == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add the odds first')));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Add the odds first'))));
                   return;
                 }
                 showShareBet(context, widget.store, _build());
@@ -349,7 +350,7 @@ class _BetFormPageState extends State<BetFormPage> {
             sliver: SliverList.list(children: [
               if (!_parlay) ...[
                 _Label(
-                  'What did you bet on?',
+                  tr('What did you bet on?'),
                   action: widget.api == null
                       ? null
                       : TextButton.icon(
@@ -361,7 +362,7 @@ class _BetFormPageState extends State<BetFormPage> {
                           ),
                           onPressed: _pickSingle,
                           icon: const Icon(Icons.sports_soccer_outlined, size: 18),
-                          label: const Text('Pick from matches'),
+                          label: Text(tr('Pick from matches')),
                         ),
                 ),
                 TextFormField(
@@ -369,9 +370,9 @@ class _BetFormPageState extends State<BetFormPage> {
                   textCapitalization: TextCapitalization.sentences,
                   style: theme.textTheme.titleMedium,
                   decoration: InputDecoration(
-                    hintText: _type == BetType.system ? 'System, e.g. Trixie 2/3' : 'Selection, e.g. Arsenal to win',
+                    hintText: _type == BetType.system ? tr('System, e.g. Trixie 2/3') : tr('Selection, e.g. Arsenal to win'),
                   ),
-                  validator: (v) => (v ?? '').trim().isEmpty ? 'Add what you bet on' : null,
+                  validator: (v) => (v ?? '').trim().isEmpty ? tr('Add what you bet on') : null,
                 ),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -380,8 +381,8 @@ class _BetFormPageState extends State<BetFormPage> {
                     child: ActionChip(
                       avatar: const Icon(Icons.list_alt, size: 18),
                       label: Text(_market.isEmpty || _market == 'other'
-                          ? 'Choose a market: handicap, overs, corners…'
-                          : 'Market: ${marketById(_market).label}'),
+                          ? tr('Choose a market: handicap, overs, corners…')
+                          : tr('Market: {market}', {'market': marketById(_market).name})),
                       onPressed: _chooseMarket,
                     ),
                   ),
@@ -390,11 +391,11 @@ class _BetFormPageState extends State<BetFormPage> {
                 TextFormField(
                   controller: _event,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(hintText: 'Event (optional), e.g. Arsenal vs Chelsea', prefixIcon: Icon(Icons.stadium_outlined)),
+                  decoration: InputDecoration(hintText: tr('Event (optional), e.g. Arsenal vs Chelsea'), prefixIcon: Icon(Icons.stadium_outlined)),
                 ),
                 gap,
                 _SportPicker(value: _sport, onChanged: (v) => setState(() => _sport = v)),
-                const _Label('Odds'),
+                _Label(tr('Odds')),
                 _BigField(
                   controller: _odds,
                   hint: oddsHint,
@@ -403,7 +404,7 @@ class _BetFormPageState extends State<BetFormPage> {
                   validator: _oddsValidator,
                 ),
               ] else ...[
-                _Label('Legs', trailing: o == null ? null : 'Combined ${formatOdds(o, _settings.oddsFormat)}'),
+                _Label(tr('Legs'), trailing: o == null ? null : tr('Combined {odds}', {'odds': formatOdds(o, _settings.oddsFormat)})),
                 for (var i = 0; i < _legs.length; i++)
                   _LegCard(
                     key: ObjectKey(_legs[i]),
@@ -428,23 +429,23 @@ class _BetFormPageState extends State<BetFormPage> {
                         key: const Key('add-leg-from-matches'),
                         onPressed: () => _pickLeg(),
                         icon: const Icon(Icons.sports_soccer_outlined),
-                        label: const Text('Add from matches'),
+                        label: Text(tr('Add from matches')),
                       ),
                     TextButton.icon(
                       onPressed: () => setState(() => _addLeg()),
                       icon: const Icon(Icons.add_circle_outline),
-                      label: Text(widget.api == null ? 'Add leg' : 'Type a leg'),
+                      label: Text(widget.api == null ? tr('Add leg') : tr('Type a leg')),
                     ),
                   ]),
                 ),
               ],
-              const _Label('Stake'),
+              _Label(tr('Stake')),
               _BigField(
                 controller: _stake,
                 hint: '0',
                 icon: Icons.payments_outlined,
                 suffix: _settings.currency,
-                validator: (_) => (_stakeVal ?? 0) > 0 ? null : 'Enter a stake above zero',
+                validator: (_) => (_stakeVal ?? 0) > 0 ? null : tr('Enter a stake above zero'),
               ),
               if (_settings.unit > 0) ...[
                 const SizedBox(height: 10),
@@ -463,12 +464,12 @@ class _BetFormPageState extends State<BetFormPage> {
                   ]),
                 ),
               ],
-              const _Label('When and where'),
+              _Label(tr('When and where')),
               Wrap(spacing: 8, runSpacing: 8, children: [
-                _Pill(label: 'Today', selected: _date == today, onTap: () => _setDateOffset(0)),
-                _Pill(label: 'Yesterday', selected: _date == yesterday, onTap: () => _setDateOffset(1)),
+                _Pill(label: tr('Today'), selected: _date == today, onTap: () => _setDateOffset(0)),
+                _Pill(label: tr('Yesterday'), selected: _date == yesterday, onTap: () => _setDateOffset(1)),
                 _Pill(
-                  label: _date == today || _date == yesterday ? 'Other date' : Fmt.date(_date),
+                  label: _date == today || _date == yesterday ? tr('Other date') : Fmt.date(_date),
                   icon: Icons.calendar_today,
                   selected: _date != today && _date != yesterday,
                   onTap: _pickDate,
@@ -477,9 +478,9 @@ class _BetFormPageState extends State<BetFormPage> {
               gap,
               TextFormField(
                 controller: _book,
-                decoration: const InputDecoration(hintText: 'Bookmaker (optional)', prefixIcon: Icon(Icons.storefront_outlined)),
+                decoration: InputDecoration(hintText: tr('Bookmaker (optional)'), prefixIcon: Icon(Icons.storefront_outlined)),
               ),
-              _Label('Result', trailing: _parlay ? 'Set from the legs' : null),
+              _Label(tr('Result'), trailing: _parlay ? tr('Set from the legs') : null),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 for (final st in BetStatus.values)
                   _Pill(
@@ -494,17 +495,17 @@ class _BetFormPageState extends State<BetFormPage> {
                 TextFormField(
                   controller: _cashout,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(hintText: 'Cash-out amount received'),
+                  decoration: InputDecoration(hintText: tr('Cash-out amount received')),
                   validator: (v) =>
-                      (double.tryParse((v ?? '').replaceAll(',', '.')) ?? -1) >= 0 ? null : 'Enter the amount you received',
+                      (double.tryParse((v ?? '').replaceAll(',', '.')) ?? -1) >= 0 ? null : tr('Enter the amount you received'),
                 ),
               ],
-              const _Label('Notes'),
+              _Label(tr('Notes')),
               TextFormField(
                 controller: _notes,
                 minLines: 2,
                 maxLines: 5,
-                decoration: const InputDecoration(hintText: 'Why you took it, tipster, anything to remember'),
+                decoration: InputDecoration(hintText: tr('Why you took it, tipster, anything to remember')),
               ),
             ]),
           ),
@@ -515,8 +516,8 @@ class _BetFormPageState extends State<BetFormPage> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
           child: _GradientButton(
-            label: _isNew ? 'Log bet' : 'Save changes',
-            sub: ready ? 'Returns ${fmt.money(s * o)}' : null,
+            label: _isNew ? tr('Log bet') : tr('Save changes'),
+            sub: ready ? tr('Returns {amount}', {'amount': fmt.money(s * o)}) : null,
             onTap: _save,
           ),
         ),
@@ -525,7 +526,7 @@ class _BetFormPageState extends State<BetFormPage> {
   }
 }
 
-const _sportEmoji = {
+final _sportEmoji = {
   'Soccer': '⚽', 'Basketball': '🏀', 'American Football': '🏈', 'Tennis': '🎾', 'Baseball': '⚾',
   'Ice Hockey': '🏒', 'MMA': '🥋', 'Boxing': '🥊', 'Cricket': '🏏', 'Golf': '⛳', 'Esports': '🎮', 'Other': '🎯',
 };
@@ -574,9 +575,9 @@ class _SlipHeader extends StatelessWidget {
                 child: Text(title,
                     style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w700)),
               ),
-              IconButton(tooltip: 'Share link', color: fg, icon: const Icon(Icons.ios_share), onPressed: onShare),
+              IconButton(tooltip: tr('Share link'), color: fg, icon: const Icon(Icons.ios_share), onPressed: onShare),
               if (onDelete != null)
-                IconButton(tooltip: 'Delete', color: fg, icon: const Icon(Icons.delete_outline), onPressed: onDelete),
+                IconButton(tooltip: tr('Delete'), color: fg, icon: const Icon(Icons.delete_outline), onPressed: onDelete),
             ]),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -610,7 +611,7 @@ class _SlipHeader extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('POTENTIAL RETURN',
+                Text(tr('POTENTIAL RETURN'),
                     style: theme.textTheme.labelSmall?.copyWith(color: fg.withValues(alpha: 0.75), letterSpacing: 1.4)),
                 const SizedBox(height: 2),
                 Text(returns,
@@ -758,7 +759,7 @@ class _SportPicker extends StatelessWidget {
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                   Text(_sportEmoji[sp] ?? '🎯', style: const TextStyle(fontSize: 24)),
                   const SizedBox(height: 4),
-                  Text(sp == 'American Football' ? 'NFL' : sp,
+                  Text(sp == 'American Football' ? 'NFL' : sportLabel(sp),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -840,7 +841,7 @@ class _LegCard extends StatelessWidget {
                       isDense: true,
                       isExpanded: true,
                       style: theme.textTheme.labelLarge,
-                      items: [for (final sp in sports) DropdownMenuItem(value: sp, child: Text(sp))],
+                      items: [for (final sp in sports) DropdownMenuItem(value: sp, child: Text(sportLabel(sp)))],
                       onChanged: (v) {
                         leg.sport = v ?? leg.sport;
                         onChanged();
@@ -850,20 +851,20 @@ class _LegCard extends StatelessWidget {
                 ),
                 if (onPickMatch != null)
                   IconButton(
-                    tooltip: 'Pick from matches',
+                    tooltip: tr('Pick from matches'),
                     visualDensity: VisualDensity.compact,
                     icon: const Icon(Icons.event_available_outlined, size: 18),
                     onPressed: onPickMatch,
                   ),
                 IconButton(
-                  tooltip: 'Choose a market',
+                  tooltip: tr('Choose a market'),
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.list_alt, size: 18),
                   onPressed: onMarket,
                 ),
                 if (onRemove != null)
                   IconButton(
-                    tooltip: 'Remove leg',
+                    tooltip: tr('Remove leg'),
                     visualDensity: VisualDensity.compact,
                     icon: const Icon(Icons.close, size: 18),
                     onPressed: onRemove,
@@ -877,8 +878,8 @@ class _LegCard extends StatelessWidget {
                   child: TextFormField(
                     controller: leg.selection,
                     textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(hintText: 'Selection', isDense: true),
-                    validator: (v) => (v ?? '').trim().isEmpty ? 'Add the selection' : null,
+                    decoration: InputDecoration(hintText: tr('Selection'), isDense: true),
+                    validator: (v) => (v ?? '').trim().isEmpty ? tr('Add the selection') : null,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -901,7 +902,7 @@ class _LegCard extends StatelessWidget {
                 child: TextFormField(
                   controller: leg.event,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(hintText: 'Event (optional)', isDense: true),
+                  decoration: InputDecoration(hintText: tr('Event (optional)'), isDense: true),
                 ),
               ),
               if (showResult) ...[

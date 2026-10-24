@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/store.dart';
@@ -65,11 +66,11 @@ class _MatchesTabsState extends State<MatchesTabs> {
               ),
             ),
           ),
-          const TabBar(
+          TabBar(
             tabs: [
-              Tab(text: 'Matches'),
-              Tab(text: 'Live'),
-              Tab(text: 'Favorites'),
+              Tab(text: tr('Matches')),
+              Tab(text: tr('Live')),
+              Tab(text: tr('Favorites')),
             ],
           ),
           Expanded(
@@ -179,9 +180,9 @@ class _LiveMatchesState extends State<LiveMatches> {
     final cs = theme.colorScheme;
     final list = _matches;
     final what = switch (widget.sport) {
-      Sport.soccer => 'live matches',
-      Sport.basketball => 'basketball games live',
-      Sport.baseball => 'baseball games live',
+      Sport.soccer => tr('No live matches right now. Pull down to refresh.'),
+      Sport.basketball => tr('No basketball games live right now. Pull down to refresh.'),
+      Sport.baseball => tr('No baseball games live right now. Pull down to refresh.'),
     };
     Widget message(IconData icon, String text) => ListView(
       children: [
@@ -200,12 +201,12 @@ class _LiveMatchesState extends State<LiveMatches> {
       child: list == null
           ? (_error != null ? message(Icons.cloud_off, _error!) : const Center(child: CircularProgressIndicator()))
           : list.isEmpty
-          ? message(sportIcon(widget.sport), 'No $what right now. Pull down to refresh.')
+          ? message(sportIcon(widget.sport), what)
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
                 Text(
-                  '${list.length} live now · updated ${DateFormat.Hm().format(_updated!)}',
+                  tr('{n} live now · updated {time}', {'n': list.length, 'time': DateFormat.Hm().format(_updated!)}),
                   style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
                 ),
                 for (final g in groupByLeague(list)) ...[
@@ -454,7 +455,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                     label: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(_country?.name ?? 'Country', style: const TextStyle(fontWeight: FontWeight.w600)),
+                        Text(_country?.name ?? tr('Country'), style: const TextStyle(fontWeight: FontWeight.w600)),
                         const Icon(Icons.expand_more, size: 18),
                       ],
                     ),
@@ -462,9 +463,9 @@ class _MatchesScreenState extends State<MatchesScreen> {
                   ),
                 ),
               ),
-              IconButton(tooltip: 'Pick a date', icon: const Icon(Icons.calendar_month_outlined), onPressed: _pickDate),
+              IconButton(tooltip: tr('Pick a date'), icon: const Icon(Icons.calendar_month_outlined), onPressed: _pickDate),
               IconButton(
-                tooltip: 'Refresh',
+                tooltip: tr('Refresh'),
                 icon: const Icon(Icons.refresh),
                 onPressed: _loading ? null : () => _load(refresh: true),
               ),
@@ -498,7 +499,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          isToday ? 'Today' : DateFormat.E().format(d),
+                          isToday ? tr('Today') : DateFormat.E().format(d),
                           style: theme.textTheme.labelSmall?.copyWith(color: sel ? cs.onPrimary : cs.onSurfaceVariant),
                         ),
                         Text(
@@ -548,7 +549,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
       return message(
         Icons.wifi_off,
         _error!,
-        action: FilledButton.tonal(onPressed: () => _load(refresh: true), child: const Text('Try again')),
+        action: FilledButton.tonal(onPressed: () => _load(refresh: true), child: Text(tr('Try again'))),
       );
     }
     final list = _matches;
@@ -556,7 +557,14 @@ class _MatchesScreenState extends State<MatchesScreen> {
     if (list.isEmpty) {
       return message(
         sportIcon(widget.sport),
-        'No ${widget.sport == Sport.soccer ? 'matches' : '${widget.sport.title.toLowerCase()} games'} for ${_country?.name} on ${DateFormat.MMMEd().format(_day)}. Try another day or country.',
+        () {
+          final args = {'country': _country?.name, 'day': DateFormat.MMMEd().format(_day)};
+          return switch (widget.sport) {
+            Sport.soccer => tr('No matches for {country} on {day}. Try another day or country.', args),
+            Sport.basketball => tr('No basketball games for {country} on {day}. Try another day or country.', args),
+            Sport.baseball => tr('No baseball games for {country} on {day}. Try another day or country.', args),
+          };
+        }(),
       );
     }
 
@@ -572,7 +580,9 @@ class _MatchesScreenState extends State<MatchesScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
-        Text('${list.length} matches${live > 0 ? ' · $live live' : ''}', style: theme.textTheme.bodySmall),
+        Text(
+            [trn(list.length, '{n} match', '{n} matches'), if (live > 0) tr('{n} live', {'n': live})].join(' · '),
+            style: theme.textTheme.bodySmall),
         for (final slug in slugs) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
@@ -635,7 +645,7 @@ class _MatchCard extends StatelessWidget {
             : DateFormat.Hm().format(m.kickoff.toLocal()),
       MatchState.live => m.detail,
       MatchState.finished =>
-        showDate ? '${DateFormat.MMMd().format(m.kickoff.toLocal())}\n${m.detail.isEmpty ? 'FT' : m.detail}' : 'FT',
+        showDate ? '${DateFormat.MMMd().format(m.kickoff.toLocal())}\n${m.detail.isEmpty ? tr('FT') : m.detail}' : tr('FT'),
       MatchState.other => m.detail,
     };
     final homeWon =
@@ -689,7 +699,7 @@ class _MatchCard extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(6)),
                             child: Text(
-                              'LIVE',
+                              tr('LIVE'),
                               style: TextStyle(color: cs.onError, fontSize: 10, fontWeight: FontWeight.w800),
                             ),
                           ),
@@ -750,7 +760,7 @@ class FavoriteStar extends StatelessWidget {
       final on = store.isFavorite(match.id);
       final cs = Theme.of(context).colorScheme;
       return IconButton(
-        tooltip: on ? 'Remove from favorites' : 'Add to favorites',
+        tooltip: on ? tr('Remove from favorites') : tr('Add to favorites'),
         visualDensity: compact ? VisualDensity.compact : null,
         icon: Icon(
           on ? Icons.star_rounded : Icons.star_outline_rounded,
@@ -763,7 +773,7 @@ class FavoriteStar extends StatelessWidget {
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
-                content: Text(starred ? 'Added to favorites' : 'Removed from favorites'),
+                content: Text(starred ? tr('Added to favorites') : tr('Removed from favorites')),
                 duration: const Duration(seconds: 2),
                 persist: false,
               ),
@@ -837,11 +847,11 @@ class _FavoriteMatchesState extends State<FavoriteMatches> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Remove all favorites?'),
-        content: Text('The $count match${count == 1 ? '' : 'es'} you starred will be taken off this list.'),
+        title: Text(tr('Remove all favorites?')),
+        content: Text(trn(count, 'The {n} match you starred will be taken off this list.', 'The {n} matches you starred will be taken off this list.')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Remove all')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tr('Remove all'))),
         ],
       ),
     );
@@ -871,7 +881,7 @@ class _FavoriteMatchesState extends State<FavoriteMatches> {
           Icon(Icons.star_outline_rounded, size: 48, color: cs.onSurfaceVariant),
           const SizedBox(height: 12),
           Text(
-            'Tap the star on any match to follow it here.',
+            tr('Tap the star on any match to follow it here.'),
             textAlign: TextAlign.center,
             style: TextStyle(color: cs.onSurfaceVariant),
           ),
@@ -936,7 +946,7 @@ class _FavoriteMatchesState extends State<FavoriteMatches> {
               children: [
                 Expanded(
                   child: Text(
-                    '${all.length} favorite${all.length == 1 ? '' : 's'}',
+                    trn(all.length, '{n} favorite', '{n} favorites'),
                     style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
                   ),
                 ),
@@ -944,14 +954,14 @@ class _FavoriteMatchesState extends State<FavoriteMatches> {
                   key: const Key('remove-all-favorites'),
                   onPressed: () => _removeAll(all.length),
                   icon: const Icon(Icons.delete_sweep_outlined),
-                  label: const Text('Remove all'),
+                  label: Text(tr('Remove all')),
                 ),
               ],
             ),
           ),
-          if (live.isNotEmpty) section('Live now', live),
-          if (upcoming.isNotEmpty) section('Upcoming', upcoming),
-          if (done.isNotEmpty) section('Finished', done),
+          if (live.isNotEmpty) section(tr('Live now'), live),
+          if (upcoming.isNotEmpty) section(tr('Upcoming'), upcoming),
+          if (done.isNotEmpty) section(tr('Finished'), done),
         ],
       ),
     );
@@ -1102,7 +1112,7 @@ class _CountryPickerState extends State<_CountryPicker> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: TextField(
-              decoration: const InputDecoration(hintText: 'Search country', prefixIcon: Icon(Icons.search)),
+              decoration: InputDecoration(hintText: tr('Search country'), prefixIcon: Icon(Icons.search)),
               onChanged: (v) {
                 if (_q.isEmpty && _scroll.hasClients) _lastOffset = _scroll.offset;
                 setState(() => _q = v);

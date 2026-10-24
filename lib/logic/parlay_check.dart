@@ -1,6 +1,16 @@
 import '../data/fixtures.dart';
 import '../data/parlay.dart';
+import '../l10n/l10n.dart';
 import 'assistant.dart';
+
+/// The risk level a check gives ('Low', 'Medium', 'High') in the app's
+/// language.
+String riskLabel(String risk) => switch (risk) {
+      'Low' => tr('Low'),
+      'Medium' => tr('Medium'),
+      'High' => tr('High'),
+      _ => risk,
+    };
 
 /// Checks a parlay and explains each selection. The beta ships
 /// [DataParlayChecker], which uses the ESPN match data the app already loads.
@@ -31,20 +41,21 @@ class DataParlayChecker implements ParlayChecker {
     final summary = <String>[];
     final odds = parlay.odds;
     final chance = chances.fold(1.0, (a, c) => a * c);
-    summary.add('${parlay.legs.length} selections at combined odds ${_price(odds)}.');
-    summary.add('Estimated chance that every leg wins: ${_pct(chance)} '
-        '(the price alone implies ${_pct(1 / odds)}).');
+    summary.add(trn(parlay.legs.length, '{n} selection at combined odds {odds}.', '{n} selections at combined odds {odds}.',
+        {'odds': _price(odds)}));
+    summary.add(tr('Estimated chance that every leg wins: {chance} (the price alone implies {implied}).',
+        {'chance': _pct(chance), 'implied': _pct(1 / odds)}));
     final value = chance * odds - 1;
     summary.add(value >= 0
-        ? 'On these numbers the price is fair or better (${_signed(value)} expected per unit staked).'
-        : 'Expected return is ${_signed(value)} per unit staked, as usual for parlays; '
-            'each extra leg adds the bookmaker margin again.');
+        ? tr('On these numbers the price is fair or better ({value} expected per unit staked).', {'value': _signed(value)})
+        : tr('Expected return is {value} per unit staked, as usual for parlays; each extra leg adds the bookmaker margin again.',
+            {'value': _signed(value)}));
     if (chances.isNotEmpty) {
       var weakest = 0;
       for (var i = 1; i < chances.length; i++) {
         if (chances[i] < chances[weakest]) weakest = i;
       }
-      summary.add('Weakest leg: ${parlay.legs[weakest].selection} (${_pct(chances[weakest])}).');
+      summary.add(tr('Weakest leg: {pick} ({chance}).', {'pick': trPick(parlay.legs[weakest].selection), 'chance': _pct(chances[weakest])}));
     }
     final repeated = <String>{};
     final seen = <String>{};
@@ -54,47 +65,47 @@ class DataParlayChecker implements ParlayChecker {
       if (!seen.add(key)) repeated.add(l.event.isEmpty ? l.selection : l.event);
     }
     for (final e in repeated) {
-      summary.add('Two picks from $e: they win or lose together and many bookmakers won\'t combine them.');
+      summary.add(tr("Two picks from {event}: they win or lose together and many bookmakers won't combine them.", {'event': e}));
     }
     final risk = parlay.legs.length >= 6 || odds > 10 || chance < 0.1
         ? 'High'
         : parlay.legs.length >= 4 || odds > 4 || chance < 0.25
             ? 'Medium'
             : 'Low';
-    summary.add('This is a reading of the data, not a guarantee.');
+    summary.add(tr('This is a reading of the data, not a guarantee.'));
     return ParlayCheck(checked: now.toIso8601String(), risk: risk, summary: summary, legs: legs);
   }
 
   /// The check for one leg, plus the market's chance for it when known.
   Future<(LegCheck, double?)> _leg(ParlayLeg leg, DateTime now) async {
-    final lines = <String>['Price ${_price(leg.odds)} implies ${_pct(1 / leg.odds)}.'];
-    if (leg.odds >= 3) lines.add('Long shot: this leg carries most of the risk.');
+    final lines = <String>[tr('Price {odds} implies {chance}.', {'odds': _price(leg.odds), 'chance': _pct(1 / leg.odds)})];
+    if (leg.odds >= 3) lines.add(tr('Long shot: this leg carries most of the risk.'));
     final match = leg.toMatch();
     if (match == null) {
-      lines.add("This match isn't in the fixtures the app follows, so only the price is checked.");
-      return (LegCheck(selection: leg.selection, verdict: 'Price only', tone: LegTone.neutral, lines: lines), null);
+      lines.add(tr("This match isn't in the fixtures the app follows, so only the price is checked."));
+      return (LegCheck(selection: leg.selection, verdict: tr('Price only'), tone: LegTone.neutral, lines: lines), null);
     }
     if (leg.kickoff != null && leg.kickoff!.isBefore(now.toUtc())) {
-      lines.add('Kick-off has passed: check the result and mark the leg.');
+      lines.add(tr('Kick-off has passed: check the result and mark the leg.'));
     }
     final MatchDetails d;
     try {
       d = await api.details(match);
     } catch (_) {
-      lines.add("Couldn't load the match data right now.");
-      return (LegCheck(selection: leg.selection, verdict: 'Price only', tone: LegTone.neutral, lines: lines), null);
+      lines.add(tr("Couldn't load the match data right now."));
+      return (LegCheck(selection: leg.selection, verdict: tr('Price only'), tone: LegTone.neutral, lines: lines), null);
     }
 
     final fair = _fairChance(leg, match, d);
-    var verdict = 'No market data', tone = LegTone.neutral;
+    var verdict = tr('No market data'), tone = LegTone.neutral;
     if (fair != null) {
       final edge = leg.odds * fair - 1;
-      lines.add('Market chance ${_pct(fair)}, fair price ${_price(1 / fair)}.');
+      lines.add(tr('Market chance {chance}, fair price {odds}.', {'chance': _pct(fair), 'odds': _price(1 / fair)}));
       (verdict, tone) = edge >= 0.03
-          ? ('Good price', LegTone.good)
+          ? (tr('Good price'), LegTone.good)
           : edge >= -0.03
-              ? ('Fair price', LegTone.neutral)
-              : ('Below market', LegTone.warning);
+              ? (tr('Fair price'), LegTone.neutral)
+              : (tr('Below market'), LegTone.warning);
     }
     lines.addAll(_context(leg, match, d));
     return (LegCheck(selection: leg.selection, verdict: verdict, tone: tone, lines: lines), fair);
@@ -136,23 +147,29 @@ class DataParlayChecker implements ParlayChecker {
       final r = DataAssistant.recentOf(t);
       final pos = DataAssistant.positionOf(d, t);
       if (r.games == 0 && pos == null) return '';
-      return '$name: ${r.games > 0 ? '${r.w * 3 + r.dr} pts from last ${r.games}' : ''}'
-          '${r.games > 0 && pos != null ? ', ' : ''}${pos != null ? '${pos.$1} in the table' : ''}.';
+      final parts = [
+        if (r.games > 0) tr('{pts} pts from last {n}', {'pts': r.w * 3 + r.dr, 'n': r.games}),
+        if (pos != null) tr('{rank} in the table', {'rank': pos.$1}),
+      ];
+      return '$name: ${parts.join(', ')}.';
     }
 
     if (s.startsWith('over') || s.startsWith('under')) {
       final h = DataAssistant.recentOf(d.home), a = DataAssistant.recentOf(d.away);
       final games = h.games + a.games;
       if (games > 0) {
-        out.add('Over 2.5 in ${h.over25 + a.over25}/$games recent games of both teams; '
-            '${((h.gf + h.ga + a.gf + a.ga) / games).toStringAsFixed(1)} goals a game.');
+        out.add(tr('Over 2.5 in {hits}/{games} recent games of both teams; {avg} goals a game.', {
+          'hits': h.over25 + a.over25,
+          'games': games,
+          'avg': ((h.gf + h.ga + a.gf + a.ga) / games).toStringAsFixed(1),
+        }));
       }
     } else {
       final home = s.contains(m.home.name.toLowerCase()), away = s.contains(m.away.name.toLowerCase());
       if (home || !away) out.add(form(m.home.name, d.home));
       if (away || !home) out.add(form(m.away.name, d.away));
     }
-    if (d.h2hSummary.isNotEmpty) out.add('Head to head: ${d.h2hSummary}.');
+    if (d.h2hSummary.isNotEmpty) out.add(tr('Head to head: {summary}.', {'summary': d.h2hSummary}));
     return out.where((l) => l.isNotEmpty).toList();
   }
 

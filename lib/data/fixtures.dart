@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../l10n/l10n.dart';
 import '../logic/markets.dart';
 import 'match_details.dart';
 import 'models.dart';
@@ -16,11 +17,21 @@ enum Sport {
   basketball('basketball', 'Basketball', 'Basketball', '🏀'),
   baseball('baseball', 'Baseball', 'Baseball', '⚾');
 
-  const Sport(this.espn, this.label, this.title, this.emoji);
+  const Sport(this.espn, this.label, this._title, this.emoji);
   final String espn;
   final String label;
-  final String title;
+  final String _title;
   final String emoji;
+
+  /// The sport's name as the Matches tab shows it, in the app's language.
+  String get title => switch (this) {
+    Sport.soccer => tr('Football'),
+    Sport.basketball => tr('Basketball'),
+    Sport.baseball => tr('Baseball'),
+  };
+
+  /// [title] in English.
+  String get englishTitle => _title;
 
   /// What the totals line counts in this sport: "Over 2.5 goals".
   String get scoreUnit => switch (this) {
@@ -55,9 +66,35 @@ class League {
 }
 
 class Country {
-  const Country(this.code, this.name, this.flag, this.leagues);
+  const Country(this.code, this.englishName, this.flag, this.leagues);
   final String code;
-  final String name;
+  final String englishName;
+
+  /// The country's name in the app's language.
+  String get name => switch (code) {
+    'int' => tr('International'),
+    'bel' => tr('Belgium'),
+    'bra' => tr('Brazil'),
+    'cro' => tr('Croatia'),
+    'eng' => tr('England'),
+    'fra' => tr('France'),
+    'ger' => tr('Germany'),
+    'gre' => tr('Greece'),
+    'ita' => tr('Italy'),
+    'jpn' => tr('Japan'),
+    'ltu' => tr('Lithuania'),
+    'mex' => tr('Mexico'),
+    'ned' => tr('Netherlands'),
+    'srb' => tr('Serbia'),
+    'kor' => tr('South Korea'),
+    'esp' => tr('Spain'),
+    'swe' => tr('Sweden'),
+    'sui' => tr('Switzerland'),
+    'tur' => tr('Turkey'),
+    'usa' => tr('United States'),
+    'featured' => tr('Featured'),
+    _ => englishName,
+  };
   final String flag;
   final List<League> leagues;
 

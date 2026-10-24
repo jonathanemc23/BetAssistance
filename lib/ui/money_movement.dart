@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/odds_history.dart';
@@ -60,22 +61,23 @@ class _MoneyMovementViewState extends State<MoneyMovementView> {
         if (move == null)
           _Verdict(
             icon: Icons.hourglass_empty,
-            title: 'No movement to show yet',
+            title: tr('No movement to show yet'),
             text: widget.details.odds.isEmpty
-                ? 'No bookmaker prices this match yet.'
-                : 'There is no opening line for this match, so the app saves the prices each time you open it. '
-                      'Check back later to see which way they moved.',
+                ? tr('No bookmaker prices this match yet.')
+                : tr('There is no opening line for this match, so the app saves the prices each time you open it. Check back later to see which way they moved.'),
           )
         else ...[
           _Verdict(
             icon: move.flat ? Icons.horizontal_rule : Icons.trending_up,
             title: move.flat
-                ? 'The market has barely moved'
-                : 'Money is moving towards ${move.backed?.label ?? 'one side'}',
+                ? tr('The market has barely moved')
+                : move.backed == null
+                    ? tr('Money is moving towards one side')
+                    : tr('Money is moving towards {side}', {'side': trPick(move.backed!.label)}),
             text: move.fromOpening
-                ? '${move.provider} prices since they opened the market.'
-                : 'Prices seen on this phone since ${DateFormat('d MMM, HH:mm').format(move.since!.toLocal())}'
-                      '${move.provider.isEmpty ? '' : ' (${move.provider})'}.',
+                ? tr('{provider} prices since they opened the market.', {'provider': move.provider})
+                : '${tr('Prices seen on this phone since {time}', {'time': DateFormat('d MMM, HH:mm').format(move.since!.toLocal())})}'
+                    '${move.provider.isEmpty ? '' : ' (${move.provider})'}.',
           ),
           const SizedBox(height: 12),
           for (final o in move.outcomes) _OutcomeRow(move: o, format: fmt),
@@ -86,10 +88,10 @@ class _MoneyMovementViewState extends State<MoneyMovementView> {
         ],
         if (history.length >= 2) ...[
           const SizedBox(height: 20),
-          Text('Prices seen on this phone', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+          Text(tr('Prices seen on this phone'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
           Text(
-            'Chance of each result, from the price each time the match was opened.',
+            tr('Chance of each result, from the price each time the match was opened.'),
             style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 10),
@@ -119,7 +121,7 @@ class _MoneyMovementViewState extends State<MoneyMovementView> {
         ] else if (move != null && move.fromOpening) ...[
           const SizedBox(height: 16),
           Text(
-            'The app also saves the prices each time you open this match, to chart how they move from here.',
+            tr('The app also saves the prices each time you open this match, to chart how they move from here.'),
             style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
         ],
@@ -188,7 +190,7 @@ class _OutcomeRow extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  move.label,
+                  trPick(move.label),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
@@ -197,15 +199,19 @@ class _OutcomeRow extends StatelessWidget {
               Icon(up ? Icons.arrow_upward : (down ? Icons.arrow_downward : Icons.remove), size: 16, color: color),
               const SizedBox(width: 2),
               Text(
-                '$sign${s.abs().toStringAsFixed(1)} pts',
+                tr('{n} pts', {'n': '$sign${s.abs().toStringAsFixed(1)}'}),
                 style: theme.textTheme.labelLarge?.copyWith(color: color, fontWeight: FontWeight.w700),
               ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
-            'Odds ${formatOdds(move.from, format)} to ${formatOdds(move.to, format)}  ·  '
-            'chance ${_pct(move.chanceFrom)} to ${_pct(move.chanceTo)}',
+            tr('Odds {from} to {to}  ·  chance {cfrom} to {cto}', {
+              'from': formatOdds(move.from, format),
+              'to': formatOdds(move.to, format),
+              'cfrom': _pct(move.chanceFrom),
+              'cto': _pct(move.chanceTo),
+            }),
             style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
@@ -231,10 +237,10 @@ class _OutcomeRow extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             up
-                ? 'Shortened: the market moved towards this result.'
+                ? tr('Shortened: the market moved towards this result.')
                 : down
-                ? 'Drifted: the market moved away from this result.'
-                : 'About the same as before.',
+                ? tr('Drifted: the market moved away from this result.')
+                : tr('About the same as before.'),
             style: theme.textTheme.bodySmall?.copyWith(color: color),
           ),
         ],
@@ -255,7 +261,9 @@ class _TotalRow extends StatelessWidget {
     final open = odds.opening!;
     final line = odds.totalLine == null ? '' : ' ${odds.totalLine}';
     String side(String name, double? a, double? b) =>
-        a == null || b == null ? '' : '$name$line ${formatOdds(a, format)} to ${formatOdds(b, format)}';
+        a == null || b == null
+            ? ''
+            : tr('{side} {from} to {to}', {'side': trPick('$name$line'), 'from': formatOdds(a, format), 'to': formatOdds(b, format)});
     final a = fairChances([open.over, open.under]), b = fairChances([odds.over, odds.under]);
     final towards = a == null || b == null || (b[0] - a[0]).abs() < 0.01 ? null : (b[0] > a[0] ? 'Over' : 'Under');
     return Container(
@@ -264,7 +272,7 @@ class _TotalRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Total goals', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+          Text(tr('Total goals'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
           Text(
             [
@@ -275,7 +283,7 @@ class _TotalRow extends StatelessWidget {
           ),
           if (towards != null) ...[
             const SizedBox(height: 4),
-            Text('The market moved towards $towards.', style: theme.textTheme.bodySmall),
+            Text(tr('The market moved towards {side}.', {'side': trPick(towards)}), style: theme.textTheme.bodySmall),
           ],
         ],
       ),
@@ -292,7 +300,7 @@ class _HistoryChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final colors = [cs.primary, cs.outline, cs.tertiary];
-    final names = [match.home.name, 'Draw', match.away.name];
+    final names = [match.home.name, tr('Draw'), match.away.name];
     final series = <List<double?>>[[], [], []];
     for (final h in history) {
       final c = fairChances([h.home, h.draw, h.away]) ?? fairChances([h.home, h.away]);

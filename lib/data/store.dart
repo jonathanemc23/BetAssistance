@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../l10n/l10n.dart';
 import '../logic/pro_tips.dart';
 import '../logic/stats.dart';
 import 'board.dart';
@@ -36,6 +37,10 @@ class BankStore extends ChangeNotifier {
 
   /// Selected look, one of [appThemes] ids. Saved as a preference.
   String themeId = 'olive';
+
+  /// The app's language: the saved choice, else the phone's when the app
+  /// speaks it, else English.
+  AppLanguage language = AppLanguage.en;
   bool loaded = false;
 
   Stats get stats => Stats.compute(settings, bets, txs);
@@ -48,6 +53,9 @@ class BankStore extends ChangeNotifier {
     parlays = await _db.parlays();
     favorites = await _db.favorites();
     themeId = await _db.pref('app.theme') ?? 'olive';
+    final lang = await _db.pref('app.language');
+    language = lang == null ? AppLanguage.device : AppLanguage.byCode(lang);
+    L10n.use(language);
     avatar = await _db.pref('profile.avatar') ?? '';
     profileName = await _db.pref('profile.name') ?? '';
     await _loadTips();
@@ -89,6 +97,15 @@ class BankStore extends ChangeNotifier {
     themeId = id;
     notifyListeners();
     await _db.setPref('app.theme', id);
+  }
+
+  /// Switches the app to [l] straight away and saves the choice.
+  Future<void> setLanguage(AppLanguage l) async {
+    language = l;
+    L10n.use(l);
+    notifyListeners();
+    L10n.rebuildAll();
+    await _db.setPref('app.language', l.name);
   }
 
   Future<void> setAvatar(String value) async {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' hide KeyEvent, TableRow;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/store.dart';
@@ -42,7 +43,10 @@ class _MatchPageState extends State<MatchPage> {
   String? _error;
   bool _loading = true;
 
-  static const _tabs = ['Overview', 'Odds', 'Money', 'Stats', 'Events', 'Line-ups', 'Table', 'H2H', 'Teams', 'News'];
+  static List<String> get _tabs => [
+        tr('Overview'), tr('Odds'), tr('Money'), tr('Stats'), tr('Events'), //
+        tr('Line-ups'), tr('Table'), tr('H2H'), tr('Teams'), tr('News'),
+      ];
 
   @override
   void initState() {
@@ -99,7 +103,7 @@ class _MatchPageState extends State<MatchPage> {
             ),
             const SizedBox(width: 4),
             IconButton(
-              tooltip: 'Refresh',
+              tooltip: tr('Refresh'),
               onPressed: _loading ? null : () => _load(refresh: true),
               icon: const Icon(Icons.refresh),
             ),
@@ -108,7 +112,7 @@ class _MatchPageState extends State<MatchPage> {
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => openBetForm(context, widget.store, template: m.toBetTemplate(), api: widget.api),
           icon: const Icon(Icons.add),
-          label: const Text('Log a bet'),
+          label: Text(tr('Log a bet')),
         ),
         body: Column(children: [
           _Header(match: m, details: _details),
@@ -129,8 +133,8 @@ class _MatchPageState extends State<MatchPage> {
       if (_loading) return const Center(child: CircularProgressIndicator());
       return _Empty(
         icon: Icons.cloud_off,
-        text: _error ?? "Couldn't load this match.",
-        action: FilledButton.tonal(onPressed: _load, child: const Text('Try again')),
+        text: _error ?? tr("Couldn't load this match."),
+        action: FilledButton.tonal(onPressed: _load, child: Text(tr('Try again'))),
       );
     }
     final fmt = widget.store.settings.oddsFormat;
@@ -199,13 +203,13 @@ class _Header extends StatelessWidget {
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Container(width: 6, height: 6, decoration: BoxDecoration(color: cs.onError, shape: BoxShape.circle)),
               const SizedBox(width: 5),
-              Text('LIVE ${m.detail}', style: TextStyle(color: cs.onError, fontSize: 11, fontWeight: FontWeight.w800)),
+              Text(tr('LIVE {clock}', {'clock': m.detail}), style: TextStyle(color: cs.onError, fontSize: 11, fontWeight: FontWeight.w800)),
             ]),
           )
         : Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             decoration: BoxDecoration(color: cs.surface.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(20)),
-            child: Text(m.state == MatchState.scheduled ? 'Kick-off' : m.detail,
+            child: Text(m.state == MatchState.scheduled ? tr('Kick-off') : m.detail,
                 style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
           );
     // Scorers and red cards under each team.
@@ -275,7 +279,7 @@ class _Header extends StatelessWidget {
           [
             DateFormat.yMMMEd().format(m.kickoff.toLocal()),
             if (m.venue != null) m.venue!,
-            if (details?.attendance case final a? when a > 0) '${NumberFormat.decimalPattern().format(a)} fans',
+            if (details?.attendance case final a? when a > 0) tr('{n} fans', {'n': NumberFormat.decimalPattern().format(a)}),
           ].join(' · '),
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
@@ -291,7 +295,7 @@ String _surname(String name) => name.trim().isEmpty ? '' : name.trim().split(' '
 /// "6-2-4" -> "6W 2D 4L"
 String _wdl(String record) {
   final p = record.split('-');
-  return p.length == 3 ? '${p[0]}W ${p[1]}D ${p[2]}L' : record;
+  return p.length == 3 ? '${p[0]}${trForm('W')} ${p[1]}${trForm('D')} ${p[2]}${trForm('L')}' : record;
 }
 
 class _Empty extends StatelessWidget {
@@ -379,51 +383,50 @@ class _OverviewTab extends StatelessWidget {
     final parts = <Widget>[
       if (book != null)
         _Section(
-          title: 'Win chances',
+          title: tr('Win chances'),
           trailing: Text(book.provider, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
           child: _WinChances(match: m, odds: book, format: format),
         ),
       if (liveStats)
         _Section(
-          title: 'Key stats',
+          title: tr('Key stats'),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             StatTiles(values: d.statValues, max: 6),
-            more('All stats', _statsTab),
+            more(tr('All stats'), _statsTab),
           ]),
         ),
       if (d.shots.isNotEmpty)
         _Section(
-          title: 'Shot map',
+          title: tr('Shot map'),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             ShotMap(shots: d.shots, home: m.home, away: m.away, compact: true),
-            more('Every shot', _statsTab),
+            more(tr('Every shot'), _statsTab),
           ]),
         ),
       if (hasForm)
         _Section(
-          title: 'Form guide',
+          title: tr('Form guide'),
           child: Column(children: [
             for (final (i, (t, inf)) in teams.indexed) ...[
               if (i == 1) Divider(height: 24, color: cs.outlineVariant),
               _FormGuideRow(team: t, info: inf, position: _position(inf), games: _TeamGame.of(t.name, inf)),
             ],
-            more('Latest results', _teamsTab),
+            more(tr('Latest results'), _teamsTab),
           ]),
         ),
       if (d.table.isNotEmpty) ...[
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text('TABLE', style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: cs.primary)),
+          child: Text(tr('TABLE'), style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: cs.primary)),
         ),
         StandingsTable(match: m, details: d, nearby: true),
-        more('Full table', _tableTab),
+        more(tr('Full table'), _tableTab),
       ],
     ];
     if (parts.isEmpty) {
-      return const _Empty(
+      return _Empty(
         icon: Icons.info_outline,
-        text: "This league's feed only has the kick-off time and score, so there are no stats, "
-            'line-ups or table for this match.',
+        text: tr("This league's feed only has the kick-off time and score, so there are no stats, line-ups or table for this match."),
       );
     }
     return _list(parts);
@@ -454,7 +457,7 @@ class _WinChances extends StatelessWidget {
     final p = [for (final r in raw) r / sum];
     final hasDraw = odds.draw != null;
     final colors = [cs.primary, if (hasDraw) cs.outline, cs.tertiary];
-    final labels = [match.home.shortName, if (hasDraw) 'Draw', match.away.shortName];
+    final labels = [match.home.shortName, if (hasDraw) tr('Draw'), match.away.shortName];
     final prices = [odds.home!, ?odds.draw, odds.away!];
     return Column(children: [
       ClipRRect(
@@ -515,28 +518,28 @@ class _OddsTab extends StatelessWidget {
         if (pick != null) onPick(pick.selection, pick.odds!);
       },
       icon: const Icon(Icons.list_alt),
-      label: const Text('More markets: handicap, corners, cards…'),
+      label: Text(tr('More markets: handicap, corners, cards…')),
     );
     return _list([
       if (books.isEmpty) ...[
         const SizedBox(height: 24),
         Icon(Icons.percent, size: 40, color: theme.colorScheme.onSurfaceVariant),
         const SizedBox(height: 8),
-        Text('No bookmaker prices for this match yet. You can still add any market with your own odds.',
+        Text(tr('No bookmaker prices for this match yet. You can still add any market with your own odds.'),
             textAlign: TextAlign.center, style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
         const SizedBox(height: 16),
       ] else ...[
-        Text('Tap a price to log it as a bet or add it to a parlay.', style: theme.textTheme.bodySmall),
+        Text(tr('Tap a price to log it as a bet or add it to a parlay.'), style: theme.textTheme.bodySmall),
         const SizedBox(height: 8),
       ],
       more,
       const SizedBox(height: 10),
       for (final o in books)
         _Section(
-          title: o.provider.isEmpty ? 'Odds' : o.provider,
+          title: o.provider.isEmpty ? tr('Odds') : o.provider,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             if (o.count > 0) ...[
-              Text('Match result', style: theme.textTheme.labelLarge),
+              Text(tr('Match result'), style: theme.textTheme.labelLarge),
               const SizedBox(height: 6),
               OddsRow(
                 odds: o,
@@ -549,13 +552,13 @@ class _OddsTab extends StatelessWidget {
             ],
             if (o.totalLine != null && (o.over != null || o.under != null)) ...[
               const SizedBox(height: 12),
-              Text('Total ${m.league.knownSport.scoreUnit} ${_num(o.totalLine!)}', style: theme.textTheme.labelLarge),
+              Text(tr('Total {unit} {line}', {'unit': trUnit(m.league.knownSport.scoreUnit), 'line': _num(o.totalLine!)}), style: theme.textTheme.labelLarge),
               const SizedBox(height: 6),
               Row(children: [
                 if (o.over != null)
                   Expanded(
                     child: _PriceButton(
-                      label: 'Over',
+                      label: tr('Over'),
                       price: o.over!,
                       format: format,
                       onTap: () => onPick('Over ${_num(o.totalLine!)} ${m.league.knownSport.scoreUnit}', o.over!),
@@ -565,7 +568,7 @@ class _OddsTab extends StatelessWidget {
                 if (o.under != null)
                   Expanded(
                     child: _PriceButton(
-                      label: 'Under',
+                      label: tr('Under'),
                       price: o.under!,
                       format: format,
                       onTap: () => onPick('Under ${_num(o.totalLine!)} ${m.league.knownSport.scoreUnit}', o.under!),
@@ -575,14 +578,14 @@ class _OddsTab extends StatelessWidget {
             ],
             if (o.extras.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text('More markets', style: theme.textTheme.labelLarge),
+              Text(tr('More markets'), style: theme.textTheme.labelLarge),
               const SizedBox(height: 6),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 for (final (label, price) in o.extras)
                   SizedBox(
                     width: (MediaQuery.sizeOf(context).width - 32 - 28 - 8) / 2,
                     child: _PriceButton(
-                      label: label.replaceFirst('Double chance ', ''),
+                      label: trPick(label).replaceFirst('${tr('Double chance')} ', ''),
                       price: price,
                       format: format,
                       onTap: () => onPick(_extraSelection(label, m), price),
@@ -649,7 +652,7 @@ class _NewsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (news.isEmpty) return const _Empty(icon: Icons.newspaper, text: 'No news for this match yet.');
+    if (news.isEmpty) return _Empty(icon: Icons.newspaper, text: tr('No news for this match yet.'));
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return _list([
@@ -746,7 +749,7 @@ class _TeamsTabState extends State<_TeamsTab> {
     final match = widget.match, details = widget.details;
     final teams = [(match.home, details.home), (match.away, details.away)];
     if (teams.every((t) => t.$2.form.isEmpty && t.$2.lastGames.isEmpty && t.$2.leaders.isEmpty && t.$2.record.isEmpty)) {
-      return const _Empty(icon: Icons.groups, text: 'No team info for this match.');
+      return _Empty(icon: Icons.groups, text: tr('No team info for this match.'));
     }
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -754,7 +757,7 @@ class _TeamsTabState extends State<_TeamsTab> {
     final games = _TeamGame.of(team.name, info);
     return _list([
       _Section(
-        title: 'Form guide',
+        title: tr('Form guide'),
         child: Column(children: [
           for (final (i, (t, inf)) in teams.indexed) ...[
             if (i == 1) Divider(height: 24, color: cs.outlineVariant),
@@ -774,12 +777,12 @@ class _TeamsTabState extends State<_TeamsTab> {
       const SizedBox(height: 12),
       if (games.isNotEmpty)
         _Section(
-          title: 'Latest results',
+          title: tr('Latest results'),
           child: Column(children: [for (final g in games) _ResultRow(game: g)]),
         ),
       if (info.leaders.isNotEmpty)
         _Section(
-          title: 'Top players',
+          title: tr('Top players'),
           child: Column(children: [
             for (final (cat, player, value) in info.leaders)
               Padding(
@@ -850,7 +853,7 @@ class _FormGuideRow extends StatelessWidget {
     final gf = scored.fold<int>(0, (a, g) => a + g.gf!), ga = scored.fold<int>(0, (a, g) => a + g.ga!);
     final facts = [
       ?position,
-      if (info.points.isNotEmpty) '${info.points} pts',
+      if (info.points.isNotEmpty) tr('{n} pts', {'n': info.points}),
       if (info.record.isNotEmpty) _wdl(info.record),
     ];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -875,8 +878,10 @@ class _FormGuideRow extends StatelessWidget {
         ]),
         const SizedBox(height: 6),
         Text(
-          'Last ${recent.length}: ${w * 3 + d} of ${recent.length * 3} points'
-          '${scored.isEmpty ? '' : ' · scored $gf, conceded $ga in ${scored.length}'}',
+          [
+            tr('Last {n}: {pts} of {max} points', {'n': recent.length, 'pts': w * 3 + d, 'max': recent.length * 3}),
+            if (scored.isNotEmpty) tr('scored {gf}, conceded {ga} in {n}', {'gf': gf, 'ga': ga, 'n': scored.length}),
+          ].join(' · '),
           style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
         ),
       ],
@@ -901,7 +906,7 @@ class _FormBlock extends StatelessWidget {
       margin: const EdgeInsets.only(right: 6),
       alignment: Alignment.center,
       decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
-      child: Text(result, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
+      child: Text(trForm(result), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
     );
   }
 }
@@ -918,7 +923,7 @@ class _ResultRow extends StatelessWidget {
     final g = game;
     final sub = [
       if (g.game.date != null) DateFormat('d MMM').format(g.game.date!.toLocal()),
-      g.home ? 'Home' : 'Away',
+      g.home ? tr('Home') : tr('Away'),
       if (g.game.competition.isNotEmpty) g.game.competition,
     ].join(' · ');
     return Padding(
@@ -928,7 +933,7 @@ class _ResultRow extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${g.home ? 'vs' : 'at'} ${g.opponent}',
+            Text(g.home ? tr('vs {team}', {'team': g.opponent}) : tr('at {team}', {'team': g.opponent}),
                 maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
             Text(sub,
                 maxLines: 1,
@@ -963,7 +968,7 @@ class _FormChip extends StatelessWidget {
       margin: const EdgeInsets.only(right: 6),
       alignment: Alignment.center,
       decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(7)),
-      child: Text(result, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
+      child: Text(trForm(result), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
     );
   }
 }
@@ -1015,8 +1020,8 @@ class _LineupsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final teams = [details.home, details.away];
     if (teams.every((t) => t.starters.isEmpty)) {
-      return const _Empty(
-          icon: Icons.format_list_numbered, text: 'Line-ups usually appear about an hour before kick-off.');
+      return _Empty(
+          icon: Icons.format_list_numbered, text: tr('Line-ups usually appear about an hour before kick-off.'));
     }
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -1074,7 +1079,7 @@ class _LineupsTab extends StatelessWidget {
               for (final p in t.starters) player(p),
               if (t.subs.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text('Substitutes', style: theme.textTheme.labelLarge),
+                Text(tr('Substitutes'), style: theme.textTheme.labelLarge),
                 for (final p in t.subs) player(p),
               ],
             ]),
@@ -1093,17 +1098,20 @@ class _EventsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final events = details.events.where((e) => e.kind != KeyEventKind.other).toList();
-    if (events.isEmpty) return const _Empty(icon: Icons.timeline, text: 'Goals, cards and subs appear once the match starts.');
+    if (events.isEmpty) return _Empty(icon: Icons.timeline, text: tr('Goals, cards and subs appear once the match starts.'));
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
     // One side of the timeline: what happened, with the icon nearest the line.
     Widget detail(KeyEvent e, bool home) {
       final (title, sub) = switch (e.kind) {
-        KeyEventKind.goal => (e.player.isEmpty ? 'Goal' : e.player, 'Goal'),
-        KeyEventKind.yellow => (e.player.isEmpty ? 'Yellow card' : e.player, 'Yellow card'),
-        KeyEventKind.red => (e.player.isEmpty ? 'Red card' : e.player, 'Red card'),
-        KeyEventKind.sub => (e.player.isEmpty ? 'Substitution' : e.player, e.playerOff.isEmpty ? 'On' : 'Off: ${e.playerOff}'),
+        KeyEventKind.goal => (e.player.isEmpty ? tr('Goal') : e.player, tr('Goal')),
+        KeyEventKind.yellow => (e.player.isEmpty ? tr('Yellow card') : e.player, tr('Yellow card')),
+        KeyEventKind.red => (e.player.isEmpty ? tr('Red card') : e.player, tr('Red card')),
+        KeyEventKind.sub => (
+            e.player.isEmpty ? tr('Substitution') : e.player,
+            e.playerOff.isEmpty ? tr('On') : tr('Off: {player}', {'player': e.playerOff})
+          ),
         _ => (e.text, ''),
       };
       final goal = e.kind == KeyEventKind.goal;
@@ -1213,7 +1221,7 @@ class _EventsTab extends StatelessWidget {
   }
 
   /// "First Half begins." stays as the feed has it; empty texts get a name.
-  static String _periodLabel(KeyEvent e) => e.text.isNotEmpty ? e.text : 'Match event';
+  static String _periodLabel(KeyEvent e) => e.text.isNotEmpty ? e.text : tr('Match event');
 }
 
 class _EventIcon extends StatelessWidget {
@@ -1247,7 +1255,7 @@ class _StatsTab extends StatelessWidget {
   final Match match;
   final MatchDetails details;
 
-  static const _groups = [
+  static final _groups = [
     ('Attack', ['shot', 'on goal', 'on target', 'corner', 'offside', 'penalt', 'cross']),
     ('Passing', ['pass', 'long ball']),
     ('Defence', ['save', 'tackle', 'intercept', 'clearance', 'block']),
@@ -1256,7 +1264,7 @@ class _StatsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (details.stats.isEmpty) return const _Empty(icon: Icons.bar_chart, text: 'No stats for this match yet.');
+    if (details.stats.isEmpty) return _Empty(icon: Icons.bar_chart, text: tr('No stats for this match yet.'));
     final possession = details.stats.where((s) => s.$1.toLowerCase().contains('possession')).firstOrNull;
     final grouped = <String, List<(String, String, String)>>{};
     for (final (i, s) in details.stats.indexed) {
@@ -1275,19 +1283,25 @@ class _StatsTab extends StatelessWidget {
       ],
       if (details.shots.isNotEmpty)
         _Section(
-          title: 'Shot map',
+          title: tr('Shot map'),
           child: ShotMap(shots: details.shots, home: match.home, away: match.away),
         )
       else if (!details.statsAreSeason && details.statValues['shotsOnTarget'] != null)
         _Section(
-          title: 'Shots',
+          title: tr('Shots'),
           child: _ShotCounts(match: match, details: details),
         ),
       for (final g in [..._groups.map((g) => g.$1), 'Other'])
         if (grouped[g] case final rows?)
           _Section(
-            title: g,
-            child: Column(children: [for (final (label, h, a) in rows) _StatRow(label: _title(label), home: h, away: a)]),
+            title: switch (g) {
+              'Attack' => tr('Attack'),
+              'Passing' => tr('Passing'),
+              'Defence' => tr('Defence'),
+              'Discipline' => tr('Discipline'),
+              _ => tr('Other'),
+            },
+            child: Column(children: [for (final (label, h, a) in rows) _StatRow(label: trStat(_title(label)), home: h, away: a)]),
           ),
     ]);
   }
@@ -1329,7 +1343,7 @@ class _StatsHeader extends StatelessWidget {
       child: Column(children: [
         Row(children: [
           Expanded(child: team(match.home, details.home, cs.primary)),
-          Text(details.statsAreSeason ? 'Season so far' : 'This match',
+          Text(details.statsAreSeason ? tr('Season so far') : tr('This match'),
               style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
           Expanded(child: team(match.away, details.away, cs.tertiary, end: true)),
         ]),
@@ -1364,7 +1378,12 @@ class _ShotCounts extends StatelessWidget {
       final blocked = n('blockedShots', home);
       final off = (n('totalShots', home) - on - blocked).clamp(0, 40);
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text('${t.shortName} · $on on target, $off off target${blocked > 0 ? ', $blocked blocked' : ''}',
+        Text(
+            [
+              t.shortName,
+              tr('{on} on target, {off} off target', {'on': on, 'off': off}) +
+                  (blocked > 0 ? tr(', {n} blocked', {'n': blocked}) : ''),
+            ].join(' · '),
             style: theme.textTheme.labelLarge?.copyWith(color: home ? cs.primary : cs.tertiary)),
         const SizedBox(height: 6),
         GoalMouth(shots: const [], onTarget: on, offTarget: off),
@@ -1378,7 +1397,7 @@ class _ShotCounts extends StatelessWidget {
       const SizedBox(height: 10),
       const ShotLegend(),
       const SizedBox(height: 6),
-      Text("This league's feed gives shot counts but not where they were taken, so the circles are spread evenly.",
+      Text(tr("This league's feed gives shot counts but not where they were taken, so the circles are spread evenly."),
           style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
     ]);
   }
@@ -1408,7 +1427,7 @@ class _PossessionBar extends StatelessWidget {
         );
     String pct(double v) => '${v.toStringAsFixed(v % 1 == 0 ? 0 : 1)}%';
     return Column(children: [
-      Text('Possession', style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+      Text(tr('Possession'), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
       const SizedBox(height: 6),
       ClipRRect(
         borderRadius: BorderRadius.circular(10),
@@ -1500,7 +1519,7 @@ class _H2HTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (details.h2h.isEmpty) {
-      return const _Empty(icon: Icons.compare_arrows, text: 'No recent meetings between these teams.');
+      return _Empty(icon: Icons.compare_arrows, text: tr('No recent meetings between these teams.'));
     }
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -1540,21 +1559,21 @@ class _H2HTab extends StatelessWidget {
     return _list([
       Padding(
         padding: const EdgeInsets.only(left: 4, bottom: 8),
-        child: Text('LAST ${details.h2h.length} MEETINGS',
+        child: Text(tr('LAST {n} MEETINGS', {'n': details.h2h.length}),
             style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: cs.primary)),
       ),
       Row(children: [
         tile(TeamLogo(url: match.home.logo ?? details.home.logo, name: match.home.name, size: 28), hw,
-            '${match.home.shortName} wins', cs.primary),
+            tr('{team} wins', {'team': match.home.shortName}), cs.primary),
         const SizedBox(width: 8),
-        tile(Icon(Icons.handshake_outlined, color: cs.onSurfaceVariant), dr, 'Draws', cs.outline),
+        tile(Icon(Icons.handshake_outlined, color: cs.onSurfaceVariant), dr, tr('Draws'), cs.outline),
         const SizedBox(width: 8),
         tile(TeamLogo(url: match.away.logo ?? details.away.logo, name: match.away.name, size: 28), aw,
-            '${match.away.shortName} wins', cs.tertiary),
+            tr('{team} wins', {'team': match.away.shortName}), cs.tertiary),
       ]),
       const SizedBox(height: 12),
       _Section(
-        title: 'Head to head',
+        title: tr('Head to head'),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (details.h2hSummary.isNotEmpty) ...[
             Text(details.h2hSummary, style: theme.textTheme.titleSmall),
@@ -1584,7 +1603,7 @@ class _TableTabState extends State<_TableTab> {
   @override
   Widget build(BuildContext context) {
     final details = widget.details, match = widget.match;
-    if (details.table.isEmpty) return const _Empty(icon: Icons.table_rows, text: 'No league table for this competition.');
+    if (details.table.isEmpty) return _Empty(icon: Icons.table_rows, text: tr('No league table for this competition.'));
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final mine = details.table.where((r) => _sideOf(r, match, details) != null).toList();
@@ -1604,7 +1623,7 @@ class _TableTabState extends State<_TableTab> {
       ],
       Row(children: [
         Expanded(
-          child: Text((details.tableTitle.isEmpty ? 'Table' : details.tableTitle).toUpperCase(),
+          child: Text((details.tableTitle.isEmpty ? tr('Table') : details.tableTitle).toUpperCase(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: cs.primary)),
@@ -1613,9 +1632,9 @@ class _TableTabState extends State<_TableTab> {
           SegmentedButton<bool>(
             showSelectedIcon: false,
             style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            segments: const [
-              ButtonSegment(value: false, label: Text('Full')),
-              ButtonSegment(value: true, label: Text('Nearby')),
+            segments: [
+              ButtonSegment(value: false, label: Text(tr('Full'))),
+              ButtonSegment(value: true, label: Text(tr('Nearby'))),
             ],
             selected: {_around},
             onSelectionChanged: (s) => setState(() => _around = s.first),
@@ -1629,21 +1648,24 @@ class _TableTabState extends State<_TableTab> {
   /// The two teams compared on points when they play in different groups.
   static String _gapAcross(TableRow a, TableRow b) {
     final pa = int.tryParse(a.points), pb = int.tryParse(b.points);
-    if (pa == null || pb == null || pa == pb) return 'In different groups${pa != null && pa == pb ? ', level on $pa points' : ''}.';
+    if (pa == null || pb == null || pa == pb) {
+      return pa != null && pa == pb ? tr('In different groups, level on {n} points.', {'n': pa}) : tr('In different groups.');
+    }
     final (top, other) = pa > pb ? (a, b) : (b, a);
     final diff = (pa - pb).abs();
-    return 'In different groups. ${top.team} have $diff point${diff == 1 ? '' : 's'} more than ${other.team}.';
+    return trn(diff, 'In different groups. {top} have {n} point more than {other}.',
+        'In different groups. {top} have {n} points more than {other}.', {'top': top.team, 'other': other.team});
   }
 
   /// How far apart the two teams are, in plain words.
   static String _gap(TableRow a, TableRow b) {
     final pa = int.tryParse(a.points), pb = int.tryParse(b.points);
     final places = (a.rank - b.rank).abs();
-    if (pa == null || pb == null) return '$places place${places == 1 ? '' : 's'} apart.';
-    if (pa == pb) return 'Level on $pa points, $places place${places == 1 ? '' : 's'} apart.';
+    if (pa == null || pb == null) return trn(places, '{n} place apart.', '{n} places apart.');
+    if (pa == pb) return trn(places, 'Level on {pts} points, {n} place apart.', 'Level on {pts} points, {n} places apart.', {'pts': pa});
     final (top, other) = pa > pb ? (a, b) : (b, a);
     final diff = (pa - pb).abs();
-    return '${top.team} lead ${other.team} by $diff point${diff == 1 ? '' : 's'}.';
+    return trn(diff, '{top} lead {other} by {n} point.', '{top} lead {other} by {n} points.', {'top': top.team, 'other': other.team});
   }
 }
 
@@ -1680,7 +1702,7 @@ class _PlaceCard extends StatelessWidget {
             Text(_ordinal(row.rank),
                 style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900, color: c, height: 1.1)),
             Text(row.team, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
-            Text('${row.points} pts · GD ${row.goalDiff}',
+            Text(tr('{pts} pts · GD {gd}', {'pts': row.points, 'gd': row.goalDiff}),
                 style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
           ]),
         ),
@@ -1751,8 +1773,8 @@ class StandingsTable extends StatelessWidget {
           child: Row(children: [
             SizedBox(width: 28, child: Text('#', textAlign: TextAlign.center, style: head)),
             const SizedBox(width: 34),
-            Expanded(child: Text('TEAM', style: head)),
-            for (final (h, w) in cols) cell(h, w, head),
+            Expanded(child: Text(tr('TEAM'), style: head)),
+            for (final (h, w) in cols) cell(trTableHead(h), w, head),
           ]),
         ),
         for (final (i, r) in rows.indexed)

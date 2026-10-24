@@ -2,15 +2,16 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 
 /// Pitch colours: the same in every theme, like a real pitch.
-const _grass = Color(0xFF2F7A45);
-const _grassDark = Color(0xFF2A6E3E);
-const _lines = Color(0xD9FFFFFF);
+final _grass = Color(0xFF2F7A45);
+final _grassDark = Color(0xFF2A6E3E);
+final _lines = Color(0xD9FFFFFF);
 
 /// Shots on target are red, as on TV graphics.
-const shotRed = Color(0xFFE53935);
+final shotRed = Color(0xFFE53935);
 
 // ---------------------------------------------------------------- Stat tiles
 
@@ -129,7 +130,7 @@ class _StatTile extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            spec.label,
+            trStat(spec.label),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
@@ -214,7 +215,7 @@ class _ShotMapState extends State<ShotMap> {
     String count(String side) {
       final mine = widget.shots.where((s) => s.side == side);
       final on = mine.where((s) => s.kind == ShotKind.onTarget || s.kind == ShotKind.goal).length;
-      return '${mine.length} shots · $on on target';
+      return tr('{n} shots · {on} on target', {'n': mine.length, 'on': on});
     }
 
     final compact = widget.compact;
@@ -226,7 +227,7 @@ class _ShotMapState extends State<ShotMap> {
             showSelectedIcon: false,
             style: const ButtonStyle(visualDensity: VisualDensity.compact),
             segments: [
-              const ButtonSegment(value: '', label: Text('Both')),
+              ButtonSegment(value: '', label: Text(tr('Both'))),
               ButtonSegment(
                 value: 'home',
                 label: Text(widget.home.shortName, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -302,7 +303,7 @@ class _ShotMapState extends State<ShotMap> {
           _ShotCaption(shot: s, team: s.side == 'home' ? widget.home : widget.away)
         else
           Text(
-            'Tap a circle to see who took the shot.',
+            tr('Tap a circle to see who took the shot.'),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
@@ -326,14 +327,14 @@ class _ShotMapState extends State<ShotMap> {
         if (!compact) ...[
           const SizedBox(height: 14),
           Text(
-            'WHERE THE SHOTS WENT',
+            tr('WHERE THE SHOTS WENT'),
             style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1, color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
           GoalMouth(shots: shots, selected: _selected),
           const SizedBox(height: 6),
           Text(
-            "Across the goal is from the feed; the height isn't, so shots are spread up and down.",
+            tr("Across the goal is from the feed; the height isn't, so shots are spread up and down."),
             style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
         ],
@@ -362,10 +363,10 @@ class _ShotCaption extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final what = switch (shot.kind) {
-      ShotKind.goal => 'Goal',
-      ShotKind.onTarget => 'Saved',
-      ShotKind.offTarget => 'Missed',
-      ShotKind.blocked => 'Blocked',
+      ShotKind.goal => tr('Goal'),
+      ShotKind.onTarget => tr('Saved'),
+      ShotKind.offTarget => tr('Missed'),
+      ShotKind.blocked => tr('Blocked'),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -418,10 +419,10 @@ class ShotLegend extends StatelessWidget {
       spacing: 14,
       runSpacing: 6,
       children: [
-        item(ShotKind.goal, 'Goal'),
-        item(ShotKind.onTarget, 'On target'),
-        item(ShotKind.offTarget, 'Off target'),
-        item(ShotKind.blocked, 'Blocked'),
+        item(ShotKind.goal, tr('Goal')),
+        item(ShotKind.onTarget, tr('On target')),
+        item(ShotKind.offTarget, tr('Off target')),
+        item(ShotKind.blocked, tr('Blocked')),
       ],
     );
   }
@@ -437,7 +438,7 @@ class _ShotDot extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: size + 6,
     height: size + 6,
-    decoration: const BoxDecoration(color: _grass, shape: BoxShape.circle),
+    decoration: BoxDecoration(color: _grass, shape: BoxShape.circle),
     child: CustomPaint(painter: _DotPainter(kind, size / 2)),
   );
 }

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../data/fixtures.dart';
+import '../l10n/l10n.dart';
 
 /// How sure a tip is, and the price of a Pro tip at that level.
 enum Confidence {
@@ -10,6 +11,13 @@ enum Confidence {
 
   const Confidence(this.label);
   final String label;
+
+  /// [label] in the app's language.
+  String get title => switch (this) {
+        Confidence.max => tr('Max'),
+        Confidence.high => tr('High'),
+        Confidence.medium => tr('Medium'),
+      };
 
   /// Tokens to unlock a Pro tip at this level. Safer tips cost more; a tip
   /// that loses gives its tokens back.
@@ -80,11 +88,11 @@ enum TipMarket {
       };
 
   String get group => switch (this) {
-        homeWin || draw || awayWin => 'Match result',
-        homeOrDraw || awayOrDraw => 'Double chance',
-        over15 || over25 || under25 || under35 || overLine || underLine => 'Total',
-        bttsYes || bttsNo => 'Both teams to score',
-        homeScores || awayScores => 'Team to score',
+        homeWin || draw || awayWin => tr('Match result'),
+        homeOrDraw || awayOrDraw => tr('Double chance'),
+        over15 || over25 || under25 || under35 || overLine || underLine => tr('Total'),
+        bttsYes || bttsNo => tr('Both teams to score'),
+        homeScores || awayScores => tr('Team to score'),
       };
 }
 
@@ -132,7 +140,7 @@ class Tip {
   bool get isCombo => legs.length > 1;
   TipMarket get market => legs.first.market;
   String get pick => legs.map((l) => l.pick).join(' & ');
-  String get group => isCombo ? 'Bet builder · ${legs.length} selections' : market.group;
+  String get group => isCombo ? tr('Bet builder · {n} selections', {'n': legs.length}) : market.group;
   Confidence get confidence => level;
   int get cost => level.cost;
   int get percent => (chance * 100).round();
@@ -376,17 +384,22 @@ MatchTips simulateTips(Match match, MatchDetails details) {
 
 List<String> _marketReason(TipMarket m, double p, String home, String away) => [
       switch (m) {
-        TipMarket.homeWin => '$home win this ${(p * 100).round()}% of the time in our simulation.',
-        TipMarket.awayWin => '$away come out on top in ${(p * 100).round()}% of simulated games.',
-        TipMarket.draw => 'An even game: the sides are close on the prices.',
-        TipMarket.homeOrDraw => '$home avoid defeat in ${(p * 100).round()}% of simulated games.',
-        TipMarket.awayOrDraw => '$away avoid defeat in ${(p * 100).round()}% of simulated games.',
-        TipMarket.over15 || TipMarket.over25 || TipMarket.overLine => 'Both attacks point to an open game.',
-        TipMarket.under25 || TipMarket.under35 || TipMarket.underLine => 'A tight, low-scoring game is the likeliest script.',
-        TipMarket.bttsYes => 'Each side scores often and concedes often.',
-        TipMarket.bttsNo => 'At least one side struggles to score.',
-        TipMarket.homeScores => '$home rarely go a home game without a goal.',
-        TipMarket.awayScores => '$away find the net in most of their games.',
+        TipMarket.homeWin =>
+          tr('{team} win this {pct}% of the time in our simulation.', {'team': home, 'pct': (p * 100).round()}),
+        TipMarket.awayWin =>
+          tr('{team} come out on top in {pct}% of simulated games.', {'team': away, 'pct': (p * 100).round()}),
+        TipMarket.draw => tr('An even game: the sides are close on the prices.'),
+        TipMarket.homeOrDraw =>
+          tr('{team} avoid defeat in {pct}% of simulated games.', {'team': home, 'pct': (p * 100).round()}),
+        TipMarket.awayOrDraw =>
+          tr('{team} avoid defeat in {pct}% of simulated games.', {'team': away, 'pct': (p * 100).round()}),
+        TipMarket.over15 || TipMarket.over25 || TipMarket.overLine => tr('Both attacks point to an open game.'),
+        TipMarket.under25 || TipMarket.under35 || TipMarket.underLine =>
+          tr('A tight, low-scoring game is the likeliest script.'),
+        TipMarket.bttsYes => tr('Each side scores often and concedes often.'),
+        TipMarket.bttsNo => tr('At least one side struggles to score.'),
+        TipMarket.homeScores => tr('{team} rarely go a home game without a goal.', {'team': home}),
+        TipMarket.awayScores => tr('{team} find the net in most of their games.', {'team': away}),
       },
     ];
 
@@ -398,17 +411,22 @@ List<String> _reasons(Match match, MatchDetails d) {
         .where((r) => (info.id.isNotEmpty && r.teamId == info.id) || r.team == t.name)
         .firstOrNull;
     final parts = [
-      if (info.form.isNotEmpty) 'form ${info.form.split('').join(' ')}',
-      if (pos != null) '${pos.rank}${_suffix(pos.rank)} in the table${pos.points.isEmpty ? '' : ' on ${pos.points} pts'}',
+      if (info.form.isNotEmpty) tr('form {form}', {'form': info.form.split('').join(' ')}),
+      if (pos != null)
+        pos.points.isEmpty
+            ? tr('{rank} in the table', {'rank': ordinal(pos.rank)})
+            : tr('{rank} in the table on {pts} pts', {'rank': ordinal(pos.rank), 'pts': pos.points}),
     ];
     if (parts.isNotEmpty) out.add('${t.name}: ${parts.join(', ')}.');
   }
   return out;
 }
 
-String _suffix(int n) {
-  if (n % 100 >= 11 && n % 100 <= 13) return 'th';
-  return switch (n % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', _ => 'th' };
+/// 1st, 2nd... in English; 1.º, 2.º... in Spanish.
+String ordinal(int n) {
+  if (L10n.spanish) return '$n.º';
+  if (n % 100 >= 11 && n % 100 <= 13) return '${n}th';
+  return '$n${switch (n % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', _ => 'th' }}';
 }
 
 /// A Pro tip the user paid for, kept as it was bought. [result] is 'won'

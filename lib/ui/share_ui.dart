@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../l10n/l10n.dart';
 import '../data/models.dart';
 import '../data/store.dart';
 import '../logic/share.dart';
@@ -19,10 +20,9 @@ Future<void> showShareBet(BuildContext context, BankStore store, Bet bet) {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text('Share this bet', style: theme.textTheme.titleLarge),
+            Text(tr('Share this bet'), style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
-            Text('Anyone with BetPilot who opens the link gets the same bet ready to log. '
-                'Your result and notes are not included.',
+            Text(tr('Anyone with BetPilot who opens the link gets the same bet ready to log. Your result and notes are not included.'),
                 style: theme.textTheme.bodySmall),
             const SizedBox(height: 12),
             Container(
@@ -38,12 +38,12 @@ Future<void> showShareBet(BuildContext context, BankStore store, Bet bet) {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.copy),
-                  label: const Text('Copy link'),
+                  label: Text(tr('Copy link')),
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: link));
                     if (c.mounted) {
                       Navigator.pop(c);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied')));
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Link copied'))));
                     }
                   },
                 ),
@@ -52,12 +52,12 @@ Future<void> showShareBet(BuildContext context, BankStore store, Bet bet) {
               Expanded(
                 child: FilledButton.icon(
                   icon: const Icon(Icons.share),
-                  label: const Text('Share'),
+                  label: Text(tr('Share')),
                   onPressed: () {
                     Navigator.pop(c);
                     SharePlus.instance.share(ShareParams(
                       text: BetLink.shareText(bet, store.settings),
-                      subject: 'Bet from BetPilot',
+                      subject: tr('Bet from BetPilot'),
                     ));
                   },
                 ),
@@ -82,25 +82,25 @@ Future<Bet?> showPasteLink(BuildContext context) async {
     context: context,
     builder: (c) => StatefulBuilder(
       builder: (c, setState) => AlertDialog(
-        title: const Text('Open a bet link'),
+        title: Text(tr('Open a bet link')),
         content: TextField(
           controller: ctrl,
           minLines: 2,
           maxLines: 4,
-          decoration: InputDecoration(hintText: 'Paste the link or message', errorText: error),
+          decoration: InputDecoration(hintText: tr('Paste the link or message'), errorText: error),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(tr('Cancel'))),
           FilledButton(
             onPressed: () {
               final b = decode();
               if (b == null) {
-                setState(() => error = "That doesn't look like a BetPilot bet link");
+                setState(() => error = tr("That doesn't look like a BetPilot bet link"));
               } else {
                 Navigator.pop(c, b);
               }
             },
-            child: const Text('Open'),
+            child: Text(tr('Open')),
           ),
         ],
       ),
@@ -110,15 +110,15 @@ Future<Bet?> showPasteLink(BuildContext context) async {
   return bet;
 }
 
-String betTitle(Bet b) => b.isParlay ? '${b.legs.length}-leg parlay' : b.selection;
+String betTitle(Bet b) => b.isParlay ? tr('{n}-leg parlay', {'n': b.legs.length}) : trPick(b.selection);
 
 String betSubtitle(Bet b) {
-  if (b.isParlay) return b.legs.map((l) => l.selection).join(' · ');
+  if (b.isParlay) return b.legs.map((l) => trPick(l.selection)).join(' · ');
   return b.event;
 }
 
 String betMeta(Bet b, Fmt fmt) => [
       Fmt.date(b.date),
-      if (!b.isParlay) b.sport,
+      if (!b.isParlay) sportLabel(b.sport),
       if (b.book.isNotEmpty) b.book,
     ].join(' · ');
