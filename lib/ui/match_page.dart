@@ -62,7 +62,7 @@ class _MatchPageState extends State<MatchPage> {
     try {
       final d = await widget.api.details(widget.match, refresh: refresh);
       if (mounted) setState(() => _details = d);
-      _loadHistory(d);
+      _loadMore(d);
     } on FixturesException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -70,12 +70,35 @@ class _MatchPageState extends State<MatchPage> {
     }
   }
 
-  /// The last ten results and meetings, read after the page is up: the
-  /// summary only has five results and this season's meetings.
-  Future<void> _loadHistory(MatchDetails d) async {
-    final h = await widget.api.history(widget.match, d);
-    if (h != null && mounted && identical(_details, d)) setState(() => _details = d.withHistory(h));
+  /// Read after the page is up, each shown as soon as it is in: the last
+  /// ten results and meetings (the summary only has five results and this
+  /// season's meetings), and what the summary lacks for some leagues, such
+  /// as the table ([FixturesApi.extras]).
+  Future<void> _loadMore(MatchDetails d) async {
+    MatchHistory? history;
+    MatchDetails? extras;
+    void show() {
+      if (!mounted || _shownFrom != d) return;
+      var shown = extras ?? d;
+      if (history != null) shown = shown.withHistory(history!);
+      setState(() => _details = shown);
+    }
+
+    _shownFrom = d;
+    await Future.wait([
+      widget.api.history(widget.match, d).then((h) {
+        history = h;
+        if (h != null) show();
+      }, onError: (Object _) {}),
+      widget.api.extras(widget.match, d).then((e) {
+        extras = e;
+        if (e != null) show();
+      }),
+    ]);
   }
+
+  /// The details [_loadMore] is adding to; a refresh starts again.
+  MatchDetails? _shownFrom;
 
   void _pick(String selection, double odds) {
     final m = widget.match;

@@ -43,7 +43,15 @@ target iOS later.
 - **Matches**: football, basketball and baseball fixtures for a country on
   any day, from ESPN's free public scoreboard feed (no key) and TheSportsDB's
   free feed. Country list and league slugs are in `lib/data/fixtures.dart`;
-  tap a match to log a bet on it, or pick one from the bet form.
+  tap a match to log a bet on it, or pick one from the bet form. A country's
+  ESPN leagues show first while TheSportsDB's (free key: about 30 requests a
+  minute, two thirds kept for what's on screen) are still coming, and a new
+  tap drops the requests of the one before. Live football is one request to
+  ESPN's all-leagues scoreboard (league ids in `lib/data/espn_leagues.dart`).
+  Favorites fill in each league's scores as they arrive. Leagues without a
+  table in ESPN's match summary get one from ESPN's standings feed (the
+  latest stage that has one), and TheSportsDB leagues (Cyprus, Ecuador's
+  Serie B) get a table, form and meetings worked out from the season's rounds.
 - **Share links**: a bet is encoded in the link itself
   (`https://jonathanemc23.github.io/BetAssistance/b/#<code>`). The page shows
   the bet and opens it in the app pre-filled; the app also opens

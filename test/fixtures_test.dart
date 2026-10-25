@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -55,6 +56,13 @@ Map<String, Object?> espnEvent(
 };
 
 String board(List<Map<String, Object?>> events) => jsonEncode({'leagues': [], 'events': events});
+
+/// [event] as ESPN's all-leagues scoreboard lists it: tagged with the
+/// league's numeric id (eng.1 is 700, esp.1 740) in its uid.
+Map<String, Object?> inLeague(String leagueId, Map<String, Object?> event) => {
+  ...event,
+  'uid': 's:600~l:$leagueId~e:${event['id']}',
+};
 
 void main() {
   const pl = League('eng.1', 'Premier League');
@@ -180,10 +188,38 @@ void main() {
     expect(defaultCountry(null).name, 'England');
   });
 
-  test('live matches come from every league, live only, A to Z', () async {
+  test('live football comes from ESPN in one request, live only, A to Z', () async {
+    final urls = <Uri>[];
     final api = FixturesApi(
       client: MockClient((req) async {
+        urls.add(req.url);
+        if (req.url.path.endsWith('/soccer/all/scoreboard')) {
+          return http.Response(
+            board([
+              inLeague('700', espnEvent('1', '2026-10-18T14:00Z', 'Chelsea', 'Fulham', state: 'in', detail: "30'")),
+              inLeague('700', espnEvent('2', '2026-10-18T17:00Z', 'Arsenal', 'Spurs')),
+              inLeague('740', espnEvent('3', '2026-10-18T14:00Z', 'Barcelona', 'Girona', state: 'in', detail: "10'")),
+              // A league the app doesn't list.
+              inLeague('99999', espnEvent('4', '2026-10-18T14:00Z', 'Nowhere', 'Elsewhere', state: 'in')),
+            ]),
+            200,
+          );
+        }
+        return http.Response(board([]), 200);
+      }),
+    );
+    final live = await api.liveMatches();
+    expect(live.map((m) => m.title), ['Barcelona vs Girona', 'Chelsea vs Fulham']);
+    expect(live.first.league.slug, 'esp.1');
+    expect(urls.where((u) => u.host.contains('espn')), hasLength(1));
+  });
+
+  test('live matches come from every league when the all-leagues board is down', () async {
+    final api = FixturesApi(
+      retryDelay: Duration.zero,
+      client: MockClient((req) async {
         final slug = req.url.pathSegments[req.url.pathSegments.length - 2];
+        if (slug == 'all') return http.Response('', 503);
         if (req.url.queryParameters.containsKey('dates')) return http.Response(board([]), 200);
         return switch (slug) {
           'eng.1' => http.Response(
@@ -385,9 +421,12 @@ void main() {
     String at(Duration d) => '${now.add(d).toIso8601String().substring(0, 16)}Z';
     final urls = <Uri>[];
     final api = FixturesApi(
+      retryDelay: Duration.zero,
       client: MockClient((req) async {
-        urls.add(req.url);
         final slug = req.url.pathSegments[req.url.pathSegments.length - 2];
+        // Without the all-leagues board, leagues are read one by one.
+        if (slug == 'all') return http.Response('', 503);
+        urls.add(req.url);
         return switch (slug) {
           'eng.1' => http.Response(
               board([espnEvent('1', at(const Duration(minutes: -30)), 'Chelsea', 'Fulham', state: 'in', detail: "30'")]),
@@ -417,6 +456,7 @@ void main() {
     final api = FixturesApi(
       retryDelay: Duration.zero,
       client: MockClient((req) async {
+        if (req.url.path.contains('/all/')) return http.Response('', 503);
         if (req.url.path.contains('/eng.1/')) {
           if (down) throw const SocketException('reset');
           return http.Response(board([espnEvent('1', kickoff, 'Chelsea', 'Fulham', state: 'in', detail: "30'")]), 200);
@@ -494,6 +534,251 @@ void main() {
     expect(sportsDbStatus('OT', hasScore: true), (MatchState.live, 'OT'));
     expect(sportsDbStatus('IN7', hasScore: true), (MatchState.live, 'IN7'));
     expect(sportsDbStatus('AOT', hasScore: true), (MatchState.finished, 'AOT'));
+  });
+  test("a country's ESPN matches show before TheSportsDB's are in", () async {
+    final tsdb = Completer<void>();
+    final api = FixturesApi(
+      client: MockClient((req) async {
+        final u = req.url;
+        if (u.host.contains('thesportsdb')) {
+          await tsdb.future;
+          if (u.queryParameters['d'] == '2026-10-18') {
+            return http.Response(
+              jsonEncode({
+                'events': [tsdbEvent('7', '2026-10-18T15:00:00', 'Vasco', 'Remo', status: 'FT', hs: '2', as: '0')],
+              }),
+              200,
+            );
+          }
+          return http.Response('{"events":null}', 200);
+        }
+        if (u.path.contains('/bra.1/') && u.queryParameters['dates'] == '20261018') {
+          return http.Response(board([espnEvent('1', '2026-10-18T15:00Z', 'Flamengo', 'Santos')]), 200);
+        }
+        return http.Response(board([]), 200);
+      }),
+    );
+    final partial = <List<String>>[];
+    final full = api.matches(
+      countryByCode('bra')!,
+      DateTime(2026, 10, 18),
+      onPartial: (ms) => partial.add([for (final m in ms) m.title]),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(partial, [
+      ['Flamengo vs Santos'],
+    ]);
+    tsdb.complete();
+    expect((await full).map((m) => m.title), ['Flamengo vs Santos', 'Vasco vs Remo']);
+  });
+
+  test('a starred match its day list leaves out is looked up on its own', () async {
+    final api = FixturesApi(
+      client: MockClient((req) async {
+        final u = req.url;
+        if (u.path.endsWith('lookupevent.php') && u.queryParameters['id'] == '55') {
+          return http.Response(
+            jsonEncode({
+              'events': [
+                tsdbEvent(
+                  '55',
+                  '2026-10-17T16:00:00',
+                  'Apollon Limassol',
+                  'Nea Salamis',
+                  status: 'FT',
+                  hs: '4',
+                  as: '2',
+                ),
+              ],
+            }),
+            200,
+          );
+        }
+        if (u.path.endsWith('/eng.1/summary')) {
+          return http.Response(
+            jsonEncode({
+              'header': {
+                'competitions': [
+                  {
+                    'status': {
+                      'type': {'state': 'post', 'shortDetail': 'FT'},
+                    },
+                    'competitors': [
+                      {
+                        'homeAway': 'home',
+                        'score': '2',
+                        'team': {'id': '1'},
+                      },
+                      {
+                        'homeAway': 'away',
+                        'score': '1',
+                        'team': {'id': '2'},
+                      },
+                    ],
+                  },
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        if (u.host.contains('thesportsdb')) return http.Response('{"events":null}', 200);
+        return http.Response(board([]), 200);
+      }),
+    );
+    Match saved(String id, League l, String home, String away) => Match(
+      id: id,
+      league: l,
+      kickoff: DateTime.utc(2026, 10, 17, 16),
+      home: Team(home, home, null, null),
+      away: Team(away, away, null, null),
+      state: MatchState.scheduled,
+      detail: '',
+    );
+    final updates = <String>[];
+    final found = await api.refreshMatches([
+      saved('tsdb:55', leagueBySlug('tsdb.4630')!, 'Apollon Limassol', 'Nea Salamis'),
+      saved('77', pl, 'Aston Villa', 'Man City'),
+    ], onUpdate: (u) => updates.addAll(u.keys));
+    expect(
+      {for (final e in found.entries) e.key: (e.value.state, e.value.home.score, e.value.away.score)},
+      {'tsdb:55': (MatchState.finished, '4', '2'), '77': (MatchState.finished, '2', '1')},
+    );
+    expect(updates.toSet(), {'tsdb:55', '77'});
+  });
+
+  test('a table from results: points, then goal difference, then goals', () {
+    Match result(String home, String away, int hs, int as) => Match(
+      id: '$home-$away',
+      league: pl,
+      kickoff: DateTime.utc(2026, 10, 1),
+      home: Team(home, home, null, '$hs'),
+      away: Team(away, away, null, '$as'),
+      state: MatchState.finished,
+      detail: 'FT',
+    );
+    final results = [result('A', 'B', 2, 0), result('C', 'A', 1, 1), result('B', 'C', 3, 0), result('D', 'A', 0, 0)];
+    final table = tableFromResults(results);
+    expect(
+      [for (final r in table) '${r.rank} ${r.team} ${r.played} ${r.points} ${r.goalDiff}'],
+      ['1 A 3 5 +2', '2 B 2 3 +1', '3 D 1 1 0', '4 C 2 1 -3'],
+    );
+    final a = teamFromResults('A', results);
+    expect((a.form, a.record, a.lastGames.length), ('WDD', '1-2-0', 3));
+  });
+
+  test('a league whose current stage has no table yet shows the stage before (Ecuador)', () async {
+    Map<String, Object?> entry(String id, String name, int rank, int pts) => {
+      'team': {'id': id, 'displayName': name},
+      'stats': [
+        {'name': 'rank', 'displayValue': '$rank'},
+        {'name': 'gamesPlayed', 'displayValue': '30'},
+        {'name': 'points', 'displayValue': '$pts'},
+      ],
+    };
+    final urls = <Uri>[];
+    final api = FixturesApi(
+      client: MockClient((req) async {
+        final u = req.url;
+        if (!u.path.endsWith('/ecu.1/standings')) return http.Response(board([]), 200);
+        urls.add(u);
+        final stage = u.queryParameters['seasontype'];
+        return http.Response(
+          jsonEncode({
+            'children': stage == '1'
+                ? [
+                    {
+                      'name': 'First Stage',
+                      'standings': {
+                        'entries': [entry('2', 'Emelec', 2, 50), entry('1', 'Independiente del Valle', 1, 74)],
+                      },
+                    },
+                  ]
+                : [],
+            'seasons': [
+              {
+                'year': 2026,
+                'types': [
+                  {'id': '1', 'name': 'First Stage', 'hasStandings': true},
+                  {'id': '2', 'name': 'Final Stage', 'hasStandings': true},
+                ],
+              },
+            ],
+          }),
+          200,
+        );
+      }),
+    );
+    final m = Match(
+      id: '401',
+      league: leagueBySlug('ecu.1')!,
+      kickoff: DateTime.utc(2026, 10, 25, 19),
+      home: const Team('Emelec', 'Emelec', null, null),
+      away: const Team('Guayaquil City FC', 'Guayaquil City', null, null),
+      state: MatchState.scheduled,
+      detail: '',
+    );
+    final d = await api.extras(
+      m,
+      const MatchDetails(
+        home: TeamInfo(id: '2', name: 'Emelec'),
+      ),
+    );
+    expect(d?.tableTitle, 'First Stage');
+    expect([for (final r in d!.table) r.team], ['Independiente del Valle', 'Emelec']);
+    expect([for (final u in urls) u.queryParameters['seasontype']], [null, '2', '1']);
+  });
+
+  test('a TheSportsDB match gets a table, form and meetings from its rounds (Cyprus)', () async {
+    final api = FixturesApi(
+      client: MockClient((req) async {
+        final u = req.url;
+        if (u.path.endsWith('eventspastleague.php')) {
+          return http.Response(
+            jsonEncode({
+              'events': [
+                {
+                  ...tsdbEvent('3', '2026-10-10T16:00:00', 'AEL', 'Omonia', status: 'FT', hs: '1', as: '0'),
+                  'intRound': '2',
+                  'strSeason': '2026-2027',
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        if (u.path.endsWith('eventsround.php')) {
+          return http.Response(
+            jsonEncode({
+              'events': u.queryParameters['r'] == '1'
+                  ? [
+                      tsdbEvent('1', '2026-10-03T16:00:00', 'AEL', 'Apollon', status: 'FT', hs: '2', as: '2'),
+                      tsdbEvent('2', '2026-10-03T18:00:00', 'Omonia', 'Anorthosis', status: 'FT', hs: '3', as: '0'),
+                    ]
+                  : [
+                      tsdbEvent('3', '2026-10-10T16:00:00', 'AEL', 'Omonia', status: 'FT', hs: '1', as: '0'),
+                      tsdbEvent('4', '2026-10-10T18:00:00', 'Apollon', 'Anorthosis', status: 'FT', hs: '0', as: '1'),
+                    ],
+            }),
+            200,
+          );
+        }
+        return http.Response('{"events":null}', 200);
+      }),
+    );
+    final m = Match(
+      id: 'tsdb:9',
+      league: leagueBySlug('tsdb.4630')!,
+      kickoff: DateTime.utc(2026, 10, 17, 16),
+      home: const Team('Omonia', 'Omonia', null, null),
+      away: const Team('AEL', 'AEL', null, null),
+      state: MatchState.scheduled,
+      detail: '',
+    );
+    final d = (await api.extras(m, await api.details(m)))!;
+    expect([for (final r in d.table) '${r.team} ${r.points}'], ['AEL 4', 'Omonia 3', 'Anorthosis 3', 'Apollon 1']);
+    expect((d.home.form, d.away.form), ('LW', 'WD'));
+    expect(d.h2h.map((g) => '${g.home} ${g.score} ${g.away}'), ['AEL 1-0 Omonia']);
   });
 }
 

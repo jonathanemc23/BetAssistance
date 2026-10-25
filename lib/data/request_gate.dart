@@ -22,15 +22,20 @@ class RequestGate {
 
   int _running = 0;
   DateTime? _pausedUntil;
-  final _urgent = Queue<Completer<void>>();
-  final _normal = Queue<Completer<void>>();
+  final _urgent = Queue<_Turn>();
+  final _normal = Queue<_Turn>();
   final _starts = Queue<DateTime>();
   Timer? _wake;
 
   /// Runs [task] when its turn comes. With a per-minute limit, a background
   /// task that would have to wait for the next minute throws [GateFull]
   /// instead, keeping the last few starts for urgent ones.
-  Future<T> run<T>(Future<T> Function() task, {bool urgent = false}) async {
+  ///
+  /// Urgent tasks go newest first: the screen the user just opened beats
+  /// the one they left. A waiting task whose [wanted] turns false (the user
+  /// moved on) throws [Unwanted] when its turn comes, without using a start.
+  Future<T> run<T>(Future<T> Function() task, {bool urgent = false, bool Function()? wanted}) async {
+    if (wanted != null && !wanted()) throw const Unwanted();
     final cap = perMinute;
     if (!urgent && (_paused || (cap != null && _recent + _urgent.length + _normal.length >= cap - reserve))) {
       throw const GateFull();
@@ -38,10 +43,14 @@ class RequestGate {
     if (_urgent.isEmpty && (urgent || _normal.isEmpty) && _free(urgent)) {
       _take();
     } else {
-      final turn = Completer<void>();
-      (urgent ? _urgent : _normal).add(turn);
+      final turn = _Turn(wanted);
+      if (urgent) {
+        _urgent.addFirst(turn);
+      } else {
+        _normal.add(turn);
+      }
       _next();
-      await turn.future;
+      await turn.done.future;
     }
     try {
       return await task();
@@ -86,9 +95,11 @@ class RequestGate {
   }
 
   void _next() {
+    _dropUnwanted(_urgent);
+    _dropUnwanted(_normal);
     while ((_urgent.isNotEmpty && _free(true)) || (_urgent.isEmpty && _normal.isNotEmpty && _free(false))) {
       _take();
-      (_urgent.isNotEmpty ? _urgent : _normal).removeFirst().complete();
+      (_urgent.isNotEmpty ? _urgent : _normal).removeFirst().done.complete();
     }
     // Waiting on a pause or the per-minute limit: look again when the pause
     // ends or the oldest start leaves the window.
@@ -104,6 +115,25 @@ class RequestGate {
       });
     }
   }
+
+  static void _dropUnwanted(Queue<_Turn> queue) {
+    queue.removeWhere((t) {
+      if (t.wanted == null || t.wanted!()) return false;
+      t.done.completeError(const Unwanted());
+      return true;
+    });
+  }
+}
+
+class _Turn {
+  _Turn(this.wanted);
+  final bool Function()? wanted;
+  final done = Completer<void>();
+}
+
+/// A waiting request nobody wants any more: the user left the screen.
+class Unwanted implements Exception {
+  const Unwanted();
 }
 
 /// A background request skipped to stay within a feed's per-minute limit.

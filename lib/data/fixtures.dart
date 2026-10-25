@@ -1,10 +1,13 @@
 import 'dart:convert';
+import 'dart:isolate';
+import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
 import '../l10n/l10n.dart';
 import '../logic/markets.dart';
 import '../logic/stake_stats.dart';
+import 'espn_leagues.dart';
 import 'match_details.dart';
 import 'models.dart';
 import 'request_gate.dart';
@@ -504,12 +507,24 @@ class Match {
 }
 
 /// Parses one ESPN scoreboard response. Unknown or malformed events are skipped.
-List<Match> parseScoreboard(String body, League league) {
+List<Match> parseScoreboard(String body, League league) => _parseEvents(body, (_) => league);
+
+/// Parses ESPN's all-leagues soccer scoreboard (`soccer/all/scoreboard`),
+/// keeping the events of the leagues in [espnSoccerLeagueIds].
+List<Match> parseAllScoreboard(String body) => _parseEvents(body, (e) {
+  final id = RegExp(r'~l:(\d+)~').firstMatch('${e['uid'] ?? ''}')?.group(1);
+  final slug = id == null ? null : espnSoccerLeagueIds[id];
+  return slug == null ? null : leagueBySlug(slug);
+});
+
+List<Match> _parseEvents(String body, League? Function(Map<String, dynamic> event) leagueOf) {
   final json = jsonDecode(body);
   if (json is! Map<String, dynamic>) return const [];
   final out = <Match>[];
   for (final e in (json['events'] as List? ?? const [])) {
     try {
+      final league = leagueOf(e as Map<String, dynamic>);
+      if (league == null) continue;
       final comp = (e['competitions'] as List).first as Map<String, dynamic>;
       final teams = (comp['competitors'] as List).cast<Map<String, dynamic>>();
       Map<String, dynamic> side(String s) => teams.firstWhere((t) => t['homeAway'] == s, orElse: () => teams.first);
@@ -891,44 +906,70 @@ int _easternOffset(DateTime utc) {
 class FixturesApi {
   FixturesApi({http.Client? client, int tsdbPerMinute = 25, this.retryDelay = const Duration(seconds: 1)})
     : _client = client ?? http.Client(),
-      _tsdbGate = RequestGate(2, perMinute: tsdbPerMinute, reserve: 12);
+      // Background reads get at most a third of TheSportsDB's minute, so a
+      // tap on a country always finds room.
+      _tsdbGate = RequestGate(3, perMinute: tsdbPerMinute, reserve: tsdbPerMinute * 2 ~/ 3);
   final http.Client _client;
 
   /// Wait before trying a dropped request again.
   final Duration retryDelay;
 
   /// A few requests at a time per feed; see [RequestGate].
-  final _espnGate = RequestGate(8, urgentSlots: 3);
+  final _espnGate = RequestGate(10, urgentSlots: 5);
   final RequestGate _tsdbGate;
 
-  /// TheSportsDB answers, by URL, kept five minutes: its free feed allows
-  /// few requests, so the same list is read once.
+  /// TheSportsDB answers, by URL: its free feed allows few requests, so the
+  /// same list is read once. See [_tsdbKeep] for how long.
   final _tsdbBodies = <String, (DateTime, String)>{};
 
-  /// Requests on their way, and whether they were urgent.
-  final _tsdbPending = <String, (bool, Future<String?>)>{};
+  /// Requests on their way.
+  final _tsdbPending = <String, _Pending>{};
+
+  /// How long a TheSportsDB answer stays good: a day list of the past for
+  /// hours (those results are in), a round or a future day for half an
+  /// hour, and what is being played now for five minutes.
+  static Duration _tsdbKeep(String url, DateTime now) {
+    final day = RegExp(r'[?&]d=(\d{4}-\d{2}-\d{2})').firstMatch(url)?.group(1);
+    final date = day == null ? null : DateTime.tryParse('${day}T00:00:00Z');
+    final today = DateTime.utc(now.year, now.month, now.day);
+    if (date != null && date.isBefore(today.subtract(const Duration(days: 1)))) return const Duration(hours: 6);
+    if (date != null && date.isAfter(today.add(const Duration(days: 1)))) return const Duration(minutes: 30);
+    if (url.contains('eventsround.php')) return const Duration(minutes: 30);
+    return const Duration(minutes: 5);
+  }
 
   /// One feed request through its gate. Null when it failed; throws
-  /// [GateFull] when a background TheSportsDB request was skipped.
-  Future<String?> _get(String url, {bool urgent = false}) {
+  /// [GateFull] when a background TheSportsDB request was skipped, and
+  /// [Unwanted] when nobody wanted it any more by its turn.
+  Future<String?> _get(String url, {bool urgent = false, bool Function()? wanted}) {
     if (!url.startsWith(_tsdb)) {
-      return _fetch(_espnGate, url, urgent: urgent).catchError((Object _) => null, test: (e) => e is Throttled);
+      return _fetch(
+        _espnGate,
+        url,
+        urgent: urgent,
+        wanted: wanted,
+      ).catchError((Object _) => null, test: (e) => e is Throttled);
     }
+    final now = DateTime.now().toUtc();
     final hit = _tsdbBodies[url];
-    if (hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 5)) return Future.value(hit.$2);
+    if (hit != null && now.difference(hit.$1) < _tsdbKeep(url, now)) return Future.value(hit.$2);
     // What's on screen never waits behind, or is skipped with, a background
     // request for the same list.
     final pending = _tsdbPending[url];
-    if (pending != null && (pending.$1 || !urgent)) return pending.$2;
+    if (pending != null && (pending.urgent || !urgent)) {
+      pending.wanters.add(wanted);
+      return pending.body;
+    }
+    final entry = _Pending(urgent, wanted);
     Future<String?> load() async {
       try {
-        return await _fetch(_tsdbGate, url, urgent: urgent);
+        return await _fetch(_tsdbGate, url, urgent: urgent, wanted: entry.wanted);
       } on Throttled {
         // Cloudflare turns every request away for a while (its 1015).
         _tsdbGate.pause(const Duration(minutes: 1));
         if (!urgent) throw const GateFull();
         try {
-          return await _fetch(_tsdbGate, url, urgent: true);
+          return await _fetch(_tsdbGate, url, urgent: true, wanted: entry.wanted);
         } on Throttled {
           return null;
         }
@@ -936,12 +977,13 @@ class FixturesApi {
     }
 
     final started = load().then((body) {
-      if (body != null) _tsdbBodies[url] = (DateTime.now(), body);
+      if (body != null) _tsdbBodies[url] = (DateTime.now().toUtc(), body);
       return body;
     });
-    _tsdbPending[url] = (urgent, started);
+    entry.body = started;
+    _tsdbPending[url] = entry;
     return started.whenComplete(() {
-      if (_tsdbPending[url]?.$2 == started) _tsdbPending.remove(url);
+      if (_tsdbPending[url] == entry) _tsdbPending.remove(url);
     });
   }
 
@@ -950,13 +992,13 @@ class FixturesApi {
   /// server closed, a handshake cut short) even with full signal, and now and
   /// then a feed sits on a request for half a minute. The wait holds no place
   /// in the gate.
-  Future<String?> _fetch(RequestGate gate, String url, {required bool urgent}) async {
+  Future<String?> _fetch(RequestGate gate, String url, {required bool urgent, bool Function()? wanted}) async {
     try {
-      return await gate.run(() => _fetchOnce(url, const Duration(seconds: 8)), urgent: urgent);
+      return await gate.run(() => _fetchOnce(url, const Duration(seconds: 8)), urgent: urgent, wanted: wanted);
     } on _Dropped {
       await Future<void>.delayed(retryDelay);
       try {
-        return await gate.run(() => _fetchOnce(url, const Duration(seconds: 15)), urgent: urgent);
+        return await gate.run(() => _fetchOnce(url, const Duration(seconds: 12)), urgent: urgent, wanted: wanted);
       } on _Dropped {
         return null;
       }
@@ -979,6 +1021,7 @@ class FixturesApi {
     return null;
   }
 
+  /// Lists from [matches], with when each stops being good.
   final _cache = <String, (DateTime, List<Match>)>{};
 
   static const _espn = 'https://site.api.espn.com/apis/site/v2/sports';
@@ -994,11 +1037,12 @@ class FixturesApi {
 
   /// The lists of the round with [id]'s last result and the round with its
   /// next fixture (often the same one). Empty when they couldn't be read.
-  Future<List<String>> _roundUrls(int id, {bool urgent = false}) async {
+  Future<List<String>> _roundUrls(int id, {bool urgent = false, bool Function()? wanted}) async {
     final hit = _tsdbRounds[id];
     if (hit != null && DateTime.now().difference(hit.$1) < const Duration(hours: 1)) return hit.$2;
     final bodies = await Future.wait([
-      for (final kind in ['eventspastleague', 'eventsnextleague']) _get('$_tsdb/$kind.php?id=$id', urgent: urgent),
+      for (final kind in ['eventspastleague', 'eventsnextleague'])
+        _get('$_tsdb/$kind.php?id=$id', urgent: urgent, wanted: wanted),
     ]);
     if (bodies.every((b) => b == null)) return const [];
     final urls = <String>{};
@@ -1024,11 +1068,16 @@ class FixturesApi {
   /// whole rounds around now too: the one with the league's last result and
   /// the one with its next fixture. Null when nothing could be read; throws
   /// [GateFull] when only skipped requests were left.
-  Future<List<Match>?> _sportsDb(League league, List<DateTime> dates, {bool urgent = false}) async {
+  Future<List<Match>?> _sportsDb(
+    League league,
+    List<DateTime> dates, {
+    bool urgent = false,
+    bool Function()? wanted,
+  }) async {
     var skipped = false;
     Future<String?> get(String url) async {
       try {
-        return await _get(url, urgent: urgent);
+        return await _get(url, urgent: urgent, wanted: wanted);
       } on GateFull {
         skipped = true;
         return null;
@@ -1048,7 +1097,7 @@ class FixturesApi {
     if (full) {
       List<String> rounds;
       try {
-        rounds = await _roundUrls(id, urgent: urgent);
+        rounds = await _roundUrls(id, urgent: urgent, wanted: wanted);
       } on GateFull {
         rounds = const [];
       }
@@ -1057,6 +1106,7 @@ class FixturesApi {
       }
     }
     if (!read && skipped) throw const GateFull();
+    if (!read && wanted != null && !wanted()) throw const Unwanted();
     if (!read) return null;
     final seen = <String>{};
     return [
@@ -1072,11 +1122,13 @@ class FixturesApi {
   /// request through the gates. Returns the ESPN and TheSportsDB matches,
   /// and false when every request failed. [urgent] requests (what's on
   /// screen) go before background ones; the slugs of leagues that couldn't
-  /// be read (failed, or a background request skipped) go in [unread].
+  /// be read (failed, a background request skipped, or no longer [wanted])
+  /// go in [unread].
   Future<(List<Match>, List<Match>, bool)> _fetchAll(
     List<(League, String)> espn, {
     List<(League, List<DateTime>)> tsdb = const [],
     bool urgent = false,
+    bool Function()? wanted,
     Set<String>? unread,
   }) async {
     var failures = 0, skips = 0;
@@ -1085,6 +1137,10 @@ class FixturesApi {
       try {
         list = await job();
       } on GateFull {
+        skips++;
+        unread?.add(league.slug);
+        return const [];
+      } on Unwanted {
         skips++;
         unread?.add(league.slug);
         return const [];
@@ -1102,10 +1158,10 @@ class FixturesApi {
     final results = await Future.wait([
       for (final (league, url) in espn)
         read(league, () async {
-          final body = await _get(url, urgent: urgent);
+          final body = await _get(url, urgent: urgent, wanted: wanted);
           return body == null ? null : parseScoreboard(body, league);
         }),
-      for (final (league, dates) in tsdb) read(league, () => _sportsDb(league, dates, urgent: urgent)),
+      for (final (league, dates) in tsdb) read(league, () => _sportsDb(league, dates, urgent: urgent, wanted: wanted)),
     ]);
     final total = results.length;
     return (
@@ -1121,65 +1177,166 @@ class FixturesApi {
   /// each feed is read for the dates the local day overlaps and filtered
   /// locally. Only [country]'s leagues in [sport] are read (all of them
   /// when null). Throws only if every request failed.
-  Future<List<Match>> matches(Country country, DateTime day, {Sport? sport, bool refresh = false}) async {
+  ///
+  /// ESPN answers in a second or two; TheSportsDB's free feed can make a
+  /// request wait for its per-minute limit. So when ESPN's part is in first,
+  /// [onPartial] gets it to show while TheSportsDB's is still coming.
+  /// Requests still waiting when [wanted] turns false (the user picked
+  /// another country or day) are dropped. A list with leagues that couldn't
+  /// be read is kept only briefly, so the next tap tries them again.
+  Future<List<Match>> matches(
+    Country country,
+    DateTime day, {
+    Sport? sport,
+    bool refresh = false,
+    bool urgent = true,
+    void Function(List<Match> partial)? onPartial,
+    bool Function()? wanted,
+  }) async {
     final local = DateTime(day.year, day.month, day.day);
     final leagues = country.leaguesIn(sport);
     final key = '${country.code}-${sport?.name ?? 'all'}-${_ymd(local)}';
     final hit = _cache[key];
-    if (!refresh && hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 2)) return hit.$2;
+    if (!refresh && hit != null && DateTime.now().isBefore(hit.$1)) return hit.$2;
 
-    final (espn, tsdb, ok) = await _fetchAll(
-      urgent: true,
-      [
-        for (final l in leagues)
-          if (l.onEspn)
-            for (final d in espnDatesFor(local)) (l, '${_feed(l)}/scoreboard?dates=${_ymd(d)}'),
-      ],
-      tsdb: [
-        for (final l in leagues)
-          if (l.tsdb != null) (l, sportsDbDatesFor(local)),
-      ],
-    );
+    List<Match> build(List<Match> espn, List<Match> tsdb) {
+      final seen = <String>{};
+      return [
+        for (final m in mergeSportsDb(espn, tsdb))
+          if (seen.add(m.id) && _sameDay(m.kickoff.toLocal(), local)) m,
+      ]..sort((a, b) {
+        final c = a.kickoff.compareTo(b.kickoff);
+        return c != 0 ? c : a.home.name.compareTo(b.home.name);
+      });
+    }
+
+    final espnLeagues = [
+      for (final l in leagues)
+        if (l.onEspn)
+          for (final d in espnDatesFor(local)) (l, '${_feed(l)}/scoreboard?dates=${_ymd(d)}'),
+    ];
+    final tsdbLeagues = [
+      for (final l in leagues)
+        if (l.tsdb != null) (l, sportsDbDatesFor(local)),
+    ];
+    final unread = <String>{};
+    var tsdbDone = false;
+    final espnPart = _fetchAll(espnLeagues, urgent: urgent, wanted: wanted, unread: unread);
+    final tsdbPart = _fetchAll(const [], tsdb: tsdbLeagues, urgent: urgent, wanted: wanted, unread: unread)
+      ..whenComplete(() => tsdbDone = true);
+    final (espn, _, espnOk) = await espnPart;
+    if (onPartial != null && espnLeagues.isNotEmpty && !tsdbDone) {
+      final shown = build(espn, const []);
+      if (shown.isNotEmpty) onPartial(shown);
+    }
+    final (_, tsdb, tsdbOk) = await tsdbPart;
+    final ok = espnLeagues.isEmpty
+        ? tsdbOk
+        : tsdbLeagues.isEmpty
+        ? espnOk
+        : espnOk || tsdbOk;
     if (!ok) {
       throw const FixturesException("Couldn't load matches. Check your connection and try again.");
     }
-    final results = [mergeSportsDb(espn, tsdb)];
-    final seen = <String>{};
-    final list =
-        [
-          for (final m in results.expand((r) => r))
-            if (seen.add(m.id) && _sameDay(m.kickoff.toLocal(), local)) m,
-        ]..sort((a, b) {
-          final c = a.kickoff.compareTo(b.kickoff);
-          return c != 0 ? c : a.home.name.compareTo(b.home.name);
-        });
-    _cache[key] = (DateTime.now(), list);
+    final list = build(espn, tsdb);
+    if (wanted == null || wanted()) {
+      _cache[key] = (
+        DateTime.now().add(unread.isEmpty ? const Duration(minutes: 2) : const Duration(seconds: 20)),
+        list,
+      );
+    }
     return list;
   }
 
   /// The latest version of each of [saved] (starred matches), by id, read
-  /// from its league's list for its day. Matches no feed has are left out.
-  Future<Map<String, Match>> refreshMatches(List<Match> saved, {bool refresh = false}) async {
-    final groups = <String, (League, DateTime)>{};
+  /// from its league's list for its day. Each league's answer goes to
+  /// [onUpdate] as soon as it is in, so one slow league doesn't hold the
+  /// others back. A match its day list leaves out (TheSportsDB's free lists
+  /// stop at three matches) is looked up on its own once it should have
+  /// started. Matches no feed has are left out.
+  Future<Map<String, Match>> refreshMatches(
+    List<Match> saved, {
+    bool refresh = false,
+    bool urgent = true,
+    void Function(Map<String, Match> update)? onUpdate,
+  }) async {
+    final groups = <String, (League, DateTime, List<Match>)>{};
     for (final m in saved) {
       final d = m.kickoff.toLocal();
-      groups['${m.league.slug}|${_ymd(d)}'] = (m.league, DateTime(d.year, d.month, d.day));
+      groups
+          .putIfAbsent('${m.league.slug}|${_ymd(d)}', () => (m.league, DateTime(d.year, d.month, d.day), []))
+          .$3
+          .add(m);
     }
     final out = <String, Match>{};
+    final now = DateTime.now();
     await Future.wait([
-      for (final (l, d) in groups.values)
+      for (final (l, d, mine) in groups.values)
         () async {
+          final found = <String, Match>{};
           try {
-            final list = await matches(Country('league:${l.slug}', l.name, '', [l]), d, refresh: refresh);
+            final list = await matches(
+              Country('league:${l.slug}', l.name, '', [l]),
+              d,
+              refresh: refresh,
+              urgent: urgent,
+            );
             for (final m in list) {
-              out[m.id] = m;
+              found[m.id] = m;
             }
           } on FixturesException {
             // Keep what was saved for this league.
           }
+          final missing = [
+            for (final m in mine)
+              if (!found.containsKey(m.id) && m.kickoff.isBefore(now)) m,
+          ];
+          for (final m in await Future.wait(missing.map((m) => _lookup(m, urgent: urgent)))) {
+            if (m != null) found[m.id] = m;
+          }
+          final update = {for (final m in mine) m.id: ?found[m.id]};
+          out.addAll(update);
+          if (update.isNotEmpty) onUpdate?.call(update);
         }(),
     ]);
     return out;
+  }
+
+  final _lookups = <String, (DateTime, Match)>{};
+
+  /// [m] as its feed has it now, read on its own: TheSportsDB's event
+  /// lookup, or ESPN's match summary. Null when it couldn't be read.
+  /// Finished matches are kept for good, others a minute.
+  Future<Match?> _lookup(Match m, {bool urgent = true}) async {
+    final hit = _lookups[m.id];
+    if (hit != null &&
+        (hit.$2.state == MatchState.finished || DateTime.now().difference(hit.$1) < const Duration(minutes: 1))) {
+      return hit.$2;
+    }
+    Match? found;
+    try {
+      if (m.id.startsWith('tsdb:')) {
+        final body = await _get('$_tsdb/lookupevent.php?id=${m.id.substring(5)}', urgent: urgent);
+        found = body == null ? null : parseSportsDb(body, m.league).where((e) => e.id == m.id).firstOrNull;
+      } else if (m.league.onEspn) {
+        final body = await _get('${_feed(m.league)}/summary?event=${m.id}', urgent: urgent);
+        if (body != null) {
+          final d = parseMatchDetails(body);
+          if (d.state != MatchState.other || d.clock.isNotEmpty) {
+            found = m.withStatus(
+              d.state,
+              d.clock,
+              d.state == MatchState.scheduled ? null : d.homeScore?.toString(),
+              d.state == MatchState.scheduled ? null : d.awayScore?.toString(),
+            );
+          }
+        }
+      }
+    } catch (_) {
+      found = null;
+    }
+    if (found != null) _lookups[m.id] = (DateTime.now(), found);
+    return found;
   }
 
   final _days = <String, (DateTime, List<Match>, Set<String>)>{};
@@ -1260,12 +1417,20 @@ class FixturesApi {
   final _live = <Sport, _LiveState>{};
 
   /// Every [sport] match being played right now across all the leagues the
-  /// app knows, sorted alphabetically. Cached for 30 seconds. Every league is
-  /// read once every ten minutes (or when [full]); in between, only the
-  /// leagues with a match live or about to kick off, so refreshing every
-  /// minute stays a handful of requests. A league that can't be read keeps
-  /// the matches it had, so a dropped request never empties part of the list.
-  Future<List<Match>> liveMatches({Sport sport = Sport.soccer, bool refresh = false, bool full = false}) async {
+  /// app knows, sorted alphabetically. Cached for 30 seconds. Football's
+  /// ESPN leagues come in one request, ESPN's all-leagues scoreboard; the
+  /// rest are read league by league: all of them once every ten minutes (or
+  /// when [full]), in between only the leagues with a match live or about to
+  /// kick off, so refreshing every minute stays a handful of requests. A
+  /// league that can't be read keeps the matches it had, so a dropped
+  /// request never empties part of the list. When ESPN is in before
+  /// TheSportsDB, [onPartial] gets the list so far.
+  Future<List<Match>> liveMatches({
+    Sport sport = Sport.soccer,
+    bool refresh = false,
+    bool full = false,
+    void Function(List<Match> partial)? onPartial,
+  }) async {
     final st = _live.putIfAbsent(sport, _LiveState.new);
     final hit = st.list;
     if (!refresh && !full && hit != null && DateTime.now().difference(hit.$1) < const Duration(seconds: 30)) {
@@ -1285,46 +1450,92 @@ class FixturesApi {
     final today = now.toUtc();
     final tsdbDays = [if (today.hour < 8) today.subtract(const Duration(days: 1)), today];
     final unread = <String>{};
-    final (espn, tsdb, ok) = await _fetchAll(
-      [
-        for (final l in leagues)
-          if (l.onEspn) (l, '${_feed(l)}/scoreboard'),
-      ],
-      tsdb: [
-        for (final l in leagues)
-          if (l.tsdb != null) (l, tsdbDays),
-      ],
-      unread: unread,
-    );
+    final tsdbLeagues = [
+      for (final l in leagues)
+        if (l.tsdb != null) (l, tsdbDays),
+    ];
+    var tsdbDone = false;
+    final tsdbPart = _fetchAll(const [], tsdb: tsdbLeagues, unread: unread)..whenComplete(() => tsdbDone = true);
+
+    final board = sport == Sport.soccer ? await _allLeaguesBoard() : null;
+    final onBoard = board == null ? const <String>{} : espnSoccerLeagueIds.values.toSet();
+    final espnLeagues = [
+      for (final l in leagues)
+        if (l.onEspn && !onBoard.contains(l.slug)) (l, '${_feed(l)}/scoreboard'),
+    ];
+    final (espn, _, espnOk) = await _fetchAll(espnLeagues, unread: unread);
+
+    List<Match> merge(List<Match> tsdb, {required bool final_}) {
+      final fresh = <String, List<Match>>{
+        for (final slug in onBoard) slug: [],
+        for (final (l, _) in espnLeagues)
+          if (!unread.contains(l.slug)) l.slug: [],
+        if (final_)
+          for (final (l, _) in tsdbLeagues)
+            if (!unread.contains(l.slug)) l.slug: [],
+      };
+      for (final m in mergeSportsDb([...?board, ...espn], tsdb)) {
+        fresh[m.league.slug]?.add(m);
+      }
+      st.byLeague.addAll(fresh);
+      final seen = <String>{};
+      return [
+        for (final m in st.byLeague.values.expand((ms) => ms))
+          if (m.state == MatchState.live && seen.add(m.id)) m,
+      ]..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    }
+
+    if (onPartial != null && !tsdbDone && (board != null || espnLeagues.isNotEmpty)) {
+      onPartial(merge(const [], final_: false));
+    }
+    final (_, tsdb, tsdbOk) = await tsdbPart;
+    final ok =
+        board != null ||
+        (espnLeagues.isNotEmpty && espnOk) ||
+        (tsdbLeagues.isNotEmpty && tsdbOk) ||
+        (espnLeagues.isEmpty && tsdbLeagues.isEmpty && sport != Sport.soccer);
     if (!ok && st.byLeague.isEmpty) {
       throw const FixturesException("Couldn't load live matches. Check your connection and try again.");
     }
     if (everything && ok) st.full = now;
-    final fresh = <String, List<Match>>{
-      for (final l in leagues)
-        if (!unread.contains(l.slug)) l.slug: [],
-    };
-    for (final m in mergeSportsDb(espn, tsdb)) {
-      fresh[m.league.slug]?.add(m);
-    }
-    st.byLeague.addAll(fresh);
-    final all = st.byLeague.values.expand((ms) => ms);
+    final list = merge(tsdb, final_: true);
     final soon = now.add(const Duration(minutes: 15)), started = now.subtract(const Duration(hours: 4));
     st.leagues = {
       // Couldn't be read: try again on the next refresh.
       ...unread,
-      for (final m in all)
+      for (final m in st.byLeague.values.expand((ms) => ms))
         if (m.state == MatchState.live ||
             (m.state == MatchState.scheduled && m.kickoff.isBefore(soon) && m.kickoff.isAfter(started)))
           m.league.slug,
     };
-    final seen = <String>{};
-    final list = [
-      for (final m in all)
-        if (m.state == MatchState.live && seen.add(m.id)) m,
-    ]..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
     st.list = (DateTime.now(), list);
     return list;
+  }
+
+  /// Today's matches in every football league ESPN carries, in one request
+  /// (about 2 MB, read off the main isolate), kept to the app's leagues.
+  /// Null when it couldn't be read.
+  Future<List<Match>?> _allLeaguesBoard() async {
+    final body = await _get('$_espn/soccer/all/scoreboard?limit=1000', urgent: true);
+    if (body == null) return null;
+    try {
+      return body.length > 300000 ? await Isolate.run(() => parseAllScoreboard(body)) : parseAllScoreboard(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The live version of the match with [id], when the live list read in
+  /// the last minute has it: the favorites show it at once.
+  Match? liveNow(String id) {
+    for (final st in _live.values) {
+      final hit = st.list;
+      if (hit == null || DateTime.now().difference(hit.$1) > const Duration(minutes: 1)) continue;
+      for (final m in hit.$2) {
+        if (m.id == id) return m;
+      }
+    }
+    return null;
   }
 
   final _details = <String, (DateTime, MatchDetails)>{};
@@ -1354,6 +1565,127 @@ class FixturesApi {
     } catch (_) {
       throw const FixturesException("Couldn't load this match. Check your connection and try again.");
     }
+  }
+
+  final _tables = <String, (DateTime, List<TableGroup>)>{};
+
+  /// What the match page shows beyond [d], read once the page is up: a
+  /// league table when the summary has none (ESPN leaves it empty for some
+  /// leagues and stages, such as Ecuador's), and for matches only
+  /// TheSportsDB has, a table, each team's form and latest results and
+  /// this season's meetings, all worked out from the season's results.
+  /// Null when there's nothing to add.
+  Future<MatchDetails?> extras(Match m, MatchDetails d) async {
+    try {
+      if (m.id.startsWith('tsdb:') && m.league.tsdb != null) return await _sportsDbExtras(m, d);
+      if (d.table.isNotEmpty || !m.league.onEspn) return null;
+      final groups = await _espnTable(m.league);
+      if (groups.isEmpty) return null;
+      bool mine(TableRow r) =>
+          r.teamId == d.home.id || r.teamId == d.away.id || r.team == m.home.name || r.team == m.away.name;
+      final picked = [
+        for (final g in groups)
+          if (g.rows.any(mine)) g,
+      ];
+      final shown = picked.isEmpty ? [groups.first] : picked;
+      return d.withExtras(
+        table: [for (final g in shown) ...g.rows],
+        tableTitle: shown.first.title,
+        tableGroups: shown.length < 2 ? const [] : shown,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// [league]'s table from ESPN's standings feed: the current stage, or
+  /// when that has no rows yet, the latest stage of the season that has.
+  /// Kept half an hour.
+  Future<List<TableGroup>> _espnTable(League league) async {
+    final hit = _tables[league.slug];
+    if (hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 30)) return hit.$2;
+    final base = 'https://site.api.espn.com/apis/v2/sports/${league.knownSport.espn}/${league.slug}/standings';
+    final body = await _get(base, urgent: true);
+    if (body == null) return const [];
+    var (groups, stages) = parseStandings(body);
+    if (groups.isEmpty && stages.isNotEmpty) {
+      // The season's stages, latest first: the first one with rows.
+      final year = stages.map((s) => s.$1).reduce(math.max);
+      for (final (_, type, name) in stages.where((s) => s.$1 == year).toList().reversed.take(3)) {
+        final older = await _get('$base?season=$year&seasontype=$type', urgent: true);
+        if (older == null) continue;
+        final (found, _) = parseStandings(older);
+        if (found.isEmpty) continue;
+        groups = [
+          for (final g in found) TableGroup(title: g.title.isEmpty || found.length == 1 ? name : g.title, rows: g.rows),
+        ];
+        break;
+      }
+    }
+    _tables[league.slug] = (DateTime.now(), groups);
+    return groups;
+  }
+
+  /// [m]'s table, team form and meetings from its TheSportsDB league's
+  /// results this season, read round by round (the free key cuts every
+  /// other list short). Rounds are shared by every match of the league.
+  Future<MatchDetails?> _sportsDbExtras(Match m, MatchDetails d) async {
+    final results = await _seasonResults(m.league);
+    if (results.isEmpty) return null;
+    final table = tableFromResults(results);
+    final h2h = [
+      for (final g in results.reversed)
+        if (g.id != m.id &&
+            g.state == MatchState.finished &&
+            ((g.home.name == m.home.name && g.away.name == m.away.name) ||
+                (g.home.name == m.away.name && g.away.name == m.home.name)))
+          PastGame(date: g.kickoff, home: g.home.name, away: g.away.name, score: '${g.home.score}-${g.away.score}'),
+    ];
+    final before = [
+      for (final g in results)
+        if (g.id != m.id && g.kickoff.isBefore(m.kickoff)) g,
+    ];
+    return d.withExtras(
+      table: table.isEmpty ? null : table,
+      tableTitle: table.isEmpty ? null : m.league.name,
+      home: teamFromResults(m.home.name, before, logo: m.home.logo),
+      away: teamFromResults(m.away.name, before, logo: m.away.logo),
+      h2h: h2h,
+    );
+  }
+
+  final _seasons = <int, (DateTime, List<Match>)>{};
+
+  /// Every match of [league]'s current TheSportsDB season up to its latest
+  /// round, oldest first. Empty when it couldn't be read. Kept half an hour.
+  Future<List<Match>> _seasonResults(League league) async {
+    final id = league.tsdb!;
+    final hit = _seasons[id];
+    if (hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 30)) return hit.$2;
+    final body = await _get('$_tsdb/eventspastleague.php?id=$id', urgent: true);
+    if (body == null) return const [];
+    final Map<String, dynamic> last;
+    try {
+      last = ((jsonDecode(body) as Map<String, dynamic>)['events'] as List).first as Map<String, dynamic>;
+    } catch (_) {
+      return const [];
+    }
+    final round = int.tryParse('${last['intRound']}') ?? 0, season = '${last['strSeason'] ?? ''}';
+    // Cup and play-off rounds come numbered 0 or in the hundreds.
+    if (round < 1 || round > 50 || season.isEmpty) return const [];
+    final bodies = await Future.wait([
+      for (var r = 1; r <= round; r++)
+        _get('$_tsdb/eventsround.php?id=$id&r=$r&s=${Uri.encodeQueryComponent(season)}', urgent: true),
+    ]);
+    if (bodies.any((b) => b == null)) return const [];
+    final seen = <String>{};
+    final list = [
+      for (final b in bodies)
+        for (final g in parseSportsDb(b!, league))
+          if (seen.add(g.id)) g,
+    ]..sort((a, b) => a.kickoff.compareTo(b.kickoff));
+    _seasons[id] = (DateTime.now(), list);
+    return list;
   }
 
   /// The leagues whose matches are the day's important ones, most important
@@ -1535,6 +1867,17 @@ class _LiveState {
   var leagues = <String>{};
   final byLeague = <String, List<Match>>{};
   (DateTime, List<Match>)? list;
+}
+
+/// A TheSportsDB request on its way, and who is waiting for it: it is
+/// dropped from the queue only once none of them wants it.
+class _Pending {
+  _Pending(this.urgent, bool Function()? wanted) : wanters = [wanted];
+  final bool urgent;
+  final List<bool Function()?> wanters;
+  late Future<String?> body;
+
+  bool wanted() => wanters.any((w) => w == null || w());
 }
 
 /// A request worth trying again.
