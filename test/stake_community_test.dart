@@ -151,12 +151,13 @@ void main() {
       return c;
     }
 
-    test('only an accepted challenge takes bets, at 1.40 or more, before kick-off', () {
+    test('only an accepted challenge takes bets, over 1.60, before kick-off', () {
       expect(const ProChallenge().refuse(bet(1), now), isNotNull);
       final c = const ProChallenge().accept(now);
       expect(c.status(now), ChallengeStatus.active);
       expect(c.refuse(bet(1), now), isNull);
-      expect(c.refuse(bet(1, odds: 1.3), now), contains('1.40'));
+      expect(c.refuse(bet(1, odds: 1.6), now), contains('1.60'));
+      expect(c.refuse(bet(1, odds: 1.61), now), isNull);
       expect(c.refuse(bet(1), DateTime.utc(2030, 1, 3)), isNotNull);
       expect(c.place(bet(1)).refuse(bet(1), now), isNotNull);
     });
@@ -227,6 +228,39 @@ void main() {
       expect(a.single.bet.leg.odds, inInclusiveRange(1.5, 2.6));
       expect(a.single.price, listingPrice(a.single.bet.leg.odds));
       expect(Listing.fromJson(jsonDecode(jsonEncode(a.single.toJson())))!.seller.handle, a.single.seller.handle);
+    });
+
+    test('the hottest bets are the ones bought most; free bets are open and cost nothing', () {
+      final ms = [for (var i = 0; i < 6; i++) match(id: '40187877$i', kickoff: DateTime.utc(2030, 1, 1))];
+      final listings = demoListings(ms, day: '2030-01-01');
+      final hot = hottest(listings);
+      expect(hot, hasLength(3));
+      expect(hot.first.buyers, listings.map((l) => l.buyers).reduce((a, b) => a > b ? a : b));
+      final free = demoFreeBets(ms, day: '2030-01-01');
+      expect(free, isNotEmpty);
+      expect(free.every((l) => l.free && l.seller.followers > 0), isTrue);
+      final back = Listing.fromJson(jsonDecode(jsonEncode(free.first.toJson())))!;
+      expect(back.free, isTrue);
+      expect(back.seller.followers, free.first.seller.followers);
+    });
+
+    test('a free bet: before kick-off, once per market, 3 a day', () {
+      final now = DateTime.utc(2030, 1, 1, 9);
+      Listing post(int i, {DateTime? kickoff}) => Listing(
+            seller: const ProSeller('laura_bets', 'Laura', 'person:3', 0, 0),
+            bet: CommunityBet.on(match(id: 'f$i', kickoff: kickoff ?? DateTime.utc(2030, 1, 1, 20)),
+                TipLeg(TipMarket.homeWin, 'Everton to win', 1.9),
+                placed: now.toIso8601String()),
+            price: 0,
+            mine: true,
+          );
+      expect(refuseFreeBet([], post(1).bet, now), isNull);
+      expect(refuseFreeBet([], post(1, kickoff: DateTime.utc(2030, 1, 1, 8)).bet, now), isNotNull);
+      expect(refuseFreeBet([post(1)], post(1).bet, now), contains('already'));
+      expect(refuseFreeBet([post(1), post(2), post(3)], post(4).bet, now), contains('3 free bets'));
+      final won = post(1).settle(2, 0);
+      expect(won.bet.won, isTrue);
+      expect(won.free, isTrue);
     });
   });
 }

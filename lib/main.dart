@@ -20,7 +20,6 @@ import 'ui/home_screen.dart';
 import 'ui/matches_screen.dart';
 import 'ui/themes.dart';
 import 'ui/share_ui.dart';
-import 'ui/stake_builder.dart';
 import 'ui/tools_screen.dart';
 
 Future<void> main() async {
@@ -132,13 +131,9 @@ class _HomeShellState extends State<HomeShell> {
 
     final actions = <VoidCallback>[
       _openTools,
-      () => openStakeBuilder(context, store: store, api: widget.fixtures, today: widget.today),
       () => openCommunity(context, store: store, api: widget.fixtures, today: widget.today),
-      () => openCommunity(context, store: store, api: widget.fixtures, today: widget.today, tab: 1),
-      () => openCommunity(context, store: store, api: widget.fixtures, today: widget.today, tab: 2),
       _openSettings,
     ];
-    final sub = Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w400);
     // Long names (and long translations) end in an ellipsis, not an overflow.
     Widget label(String text, {Key? key, TextStyle? style}) => ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 200),
@@ -152,21 +147,10 @@ class _HomeShellState extends State<HomeShell> {
           padding: const EdgeInsets.fromLTRB(28, 20, 16, 12),
           child: const BrandTitle(size: 36),
         ),
-        NavigationDrawerDestination(icon: Icon(Icons.handyman_outlined), label: label(tr('Bet Tools'))),
         NavigationDrawerDestination(
-            icon: Icon(Icons.query_stats), label: label(tr('Stake builder'), key: const Key('drawer-stake'))),
-        const Padding(padding: EdgeInsets.symmetric(horizontal: 28, vertical: 8), child: Divider()),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 4, 16, 8),
-          child: Text(tr('Community'), style: Theme.of(context).textTheme.titleSmall),
-        ),
+            icon: Icon(Icons.handyman_outlined), label: label(tr('Bet Tools'), key: const Key('drawer-tools'))),
         NavigationDrawerDestination(
-            icon: Icon(Icons.storefront_outlined),
-            label: label(tr('Bets for sale'), style: sub, key: const Key('drawer-community'))),
-        NavigationDrawerDestination(
-            icon: Icon(Icons.workspace_premium_outlined),
-            label: label(tr('Become a pro bettor'), style: sub, key: const Key('drawer-pro-bettor'))),
-        NavigationDrawerDestination(icon: Icon(Icons.badge_outlined), label: label(tr('Social profile'), style: sub)),
+            icon: Icon(Icons.groups_2_outlined), label: label(tr('Community'), key: const Key('drawer-community'))),
         const Padding(padding: EdgeInsets.symmetric(horizontal: 28, vertical: 8), child: Divider()),
         NavigationDrawerDestination(icon: Icon(Icons.tune), label: label(tr('Settings'))),
       ],

@@ -14,16 +14,20 @@ target iOS later.
   1.80-2.00, High (2) and Medium (1) 1.60-2.00, as a single or two
   selections together (`followsOddsRules` in `lib/logic/pro_tips.dart`).
   The day's page lists tips for the important matches and has a match search.
-- **Stake builder** (Bet Tools or the side menu): goals, corners, cards,
+- **Stake builder** (inside Bet Tools): goals, corners, cards,
   shots and fouls over each team's last six games, read from ESPN's box
   scores (`FixturesApi.stakeStats`). Pick over/under lines from one or more
   matches; Validate checks each pick by its hit rate before kick-off and by
   the match's own stats once it starts (`lib/logic/stake_stats.dart`).
-- **Community** (side menu): a social profile is needed to enter; bets for
-  sale bought with tokens; the pro bettor challenge (30 bets that can't be
-  changed, 60% to pass, a week's wait after a fail or a restart, restart
-  allowed from 10 bets; `lib/logic/community.dart`). There is no server yet:
-  profiles, sellers and their bets are simulated on the phone.
+- **Community** (side menu, under Bet Tools): a community profile is needed
+  to join. The community page has a Become a pro bettor button on top (how
+  the challenge works and its requirements: 30 bets that can't be changed,
+  each with odds over 1.60, 60% to pass, a week's wait after a fail or a
+  restart, restart allowed from 10 bets), then the hottest bets to buy with
+  tokens, then free bets bettors post to gain followers (follow them, or post
+  up to 3 of your own a day; `lib/logic/community.dart`). In the app,
+  profiles, sellers and their bets are still simulated on the phone; the
+  server that shares them is in `backend/` (see below).
 - **Languages**: English and Spanish, picked in Settings (the phone's
   language by default). Every text goes through `tr()` in `lib/l10n/`;
   `test/l10n_test.dart` fails when a text has no Spanish.
@@ -106,3 +110,10 @@ install that on a real phone, since later signed releases can't update it.
 To sign CI builds with the release key, add two repository secrets:
 `KEYSTORE_BASE64` (`base64 -w0 android/app/banktrack-release.jks`) and
 `KEY_PROPERTIES` (the contents of `android/key.properties`).
+
+## Community server (`backend/`)
+
+Spring Boot 4 (Java 21) with PostgreSQL. It holds what can't live on one
+phone: shared profiles and follows, free bets and bets for sale, the token
+ledger, and the pro bettor challenge, settled from final scores on the server
+so nobody can fake a pass. See [backend/README.md](backend/README.md).
