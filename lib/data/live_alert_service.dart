@@ -31,7 +31,8 @@ class LiveAlertService {
     this.every = const Duration(minutes: 1),
     Future<Map<String, Match>> Function(List<Match>)? read,
     DateTime Function()? clock,
-  })  : _read = read ?? ((ms) => api.refreshMatches(ms, refresh: true)),
+  })  : // A background read: what's on screen goes first.
+        _read = read ?? ((ms) => api.refreshMatches(ms, refresh: true, urgent: false)),
         _clock = clock ?? DateTime.now;
 
   final BankStore store;

@@ -150,8 +150,7 @@ class _LiveMatchesState extends State<LiveMatches> {
 
   Future<void> _load({bool refresh = false, bool full = false}) async {
     final sport = widget.sport;
-    try {
-      final list = await widget.api.liveMatches(sport: sport, refresh: refresh, full: full);
+    void show(List<Match> list) {
       if (mounted && sport == widget.sport) {
         setState(() {
           _matches = list;
@@ -159,6 +158,11 @@ class _LiveMatchesState extends State<LiveMatches> {
           _updated = DateTime.now();
         });
       }
+    }
+
+    try {
+      // ESPN's matches show while TheSportsDB's are still on their way.
+      show(await widget.api.liveMatches(sport: sport, refresh: refresh, full: full, onPartial: show));
     } on FixturesException catch (e) {
       if (mounted && sport == widget.sport) setState(() => _error = e.message);
     }
@@ -376,8 +380,20 @@ class _MatchesScreenState extends State<MatchesScreen> {
       _error = null;
       if (!refresh) _matches = null;
     });
+    // A newer tap (another country or day) drops this one's waiting requests.
+    bool wanted() => mounted && req == _request;
     try {
-      final list = await widget.api.matches(country, _day, sport: widget.sport, refresh: refresh);
+      final list = await widget.api.matches(
+        country,
+        _day,
+        sport: widget.sport,
+        refresh: refresh,
+        wanted: wanted,
+        // ESPN's leagues show while TheSportsDB's are still on their way.
+        onPartial: (partial) {
+          if (wanted()) setState(() => _matches = partial);
+        },
+      );
       if (mounted && req == _request) setState(() => _matches = list);
     } catch (e) {
       if (mounted && req == _request) setState(() => _error = e.toString());
@@ -825,12 +841,35 @@ class _FavoriteMatchesState extends State<FavoriteMatches> {
     if (mounted) setState(() {});
   }
 
+  bool _busy = false;
+
   Future<void> _load({bool refresh = false}) async {
     final saved = [for (final f in widget.store.favorites) f.toMatch()];
     _loadedIds = {for (final m in saved) m.id};
     if (saved.isEmpty) return;
-    final current = await widget.api.refreshMatches(saved, refresh: refresh);
-    if (mounted) setState(() => _current = {..._current, ...current});
+    // What the live list read a moment ago shows straight away.
+    final live = {for (final m in saved) m.id: ?widget.api.liveNow(m.id)};
+    if (live.isNotEmpty) {
+      _current = {..._current, ...live};
+      // The first load runs before the first build, which shows it anyway.
+      if (refresh && mounted) setState(() {});
+    }
+    // A slow read is still going when the minute comes round: let it finish
+    // rather than piling another on top.
+    if (_busy && refresh) return;
+    _busy = true;
+    try {
+      await widget.api.refreshMatches(
+        saved,
+        refresh: refresh,
+        // Each league's scores show as soon as they are in.
+        onUpdate: (update) {
+          if (mounted) setState(() => _current = {..._current, ...update});
+        },
+      );
+    } finally {
+      _busy = false;
+    }
   }
 
   void _openMatch(Match m) => Navigator.of(context).push(

@@ -1197,8 +1197,42 @@ http.Client _fixturesClient() => MockClient((req) async {
   if (req.url.pathSegments.last == 'summary') return _summary(req.url);
   if (req.url.pathSegments.last == 'schedule') return _schedule(req.url);
   final slug = req.url.pathSegments[req.url.pathSegments.length - 2];
+  if (slug == 'all') {
+    // Every football league's board, used by the Live tab.
+    return http.Response(
+      board([
+        {
+          ...espnEvent(
+            '2',
+            '2026-10-18T14:00:00Z',
+            'Arsenal',
+            'Tottenham Hotspur',
+            state: 'in',
+            detail: "67'",
+            hs: '2',
+            as: '1',
+          ),
+          'uid': 's:600~l:700~e:2',
+        },
+        {
+          ...espnEvent(
+            '9',
+            '2026-10-18T14:00:00Z',
+            'Real Madrid',
+            'Getafe',
+            state: 'in',
+            detail: "12'",
+            hs: '0',
+            as: '0',
+          ),
+          'uid': 's:600~l:740~e:9',
+        },
+      ]),
+      200,
+    );
+  }
   if (!req.url.queryParameters.containsKey('dates')) {
-    // Today's scoreboard, used by the Live tab.
+    // Today's scoreboard of one league.
     return http.Response(
       board(switch (slug) {
         'eng.1' => [espnEvent('2', '2026-10-18T14:00:00Z', 'Arsenal', 'Tottenham Hotspur', state: 'in', detail: "67'", hs: '2', as: '1')],

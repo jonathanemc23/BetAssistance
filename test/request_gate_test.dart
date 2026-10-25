@@ -61,4 +61,24 @@ void main() {
     release.complete();
     await Future.wait(background);
   });
+
+  test('the newest urgent request goes first, and one nobody wants is dropped', () async {
+    final gate = RequestGate(1);
+    final release = Completer<void>();
+    final order = <String>[];
+    var leftFirstCountry = false;
+    final busy = gate.run(urgent: true, () async {
+      order.add('busy');
+      await release.future;
+    });
+    final first = gate.run(urgent: true, wanted: () => !leftFirstCountry, () async => order.add('first'));
+    final second = gate.run(urgent: true, () async => order.add('second'));
+    final dropped = expectLater(first, throwsA(isA<Unwanted>()));
+    leftFirstCountry = true;
+    release.complete();
+    await busy;
+    await second;
+    await dropped;
+    expect(order, ['busy', 'second']);
+  });
 }

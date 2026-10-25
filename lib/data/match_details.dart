@@ -123,6 +123,39 @@ class MatchDetails {
     statNames: statNames,
     attendance: attendance,
   );
+
+  /// These details with what [FixturesApi.extras] found: a league table
+  /// when they had none, and for matches only TheSportsDB has, each team's
+  /// form and latest results and this season's meetings.
+  MatchDetails withExtras({
+    List<TableRow>? table,
+    String? tableTitle,
+    List<TableGroup>? tableGroups,
+    TeamInfo? home,
+    TeamInfo? away,
+    List<PastGame>? h2h,
+  }) => MatchDetails(
+    odds: odds,
+    news: news,
+    home: home ?? this.home,
+    away: away ?? this.away,
+    events: events,
+    stats: stats,
+    statsAreSeason: statsAreSeason,
+    h2hSummary: h2h != null && h2h.length > this.h2h.length ? '' : h2hSummary,
+    h2h: h2h != null && h2h.length > this.h2h.length ? h2h : this.h2h,
+    table: table ?? this.table,
+    tableTitle: tableTitle ?? this.tableTitle,
+    tableGroups: tableGroups ?? this.tableGroups,
+    state: state,
+    clock: clock,
+    homeScore: homeScore,
+    awayScore: awayScore,
+    shots: shots,
+    statValues: statValues,
+    statNames: statNames,
+    attendance: attendance,
+  );
 }
 
 /// Each team's latest results and the latest meetings between them, newest
@@ -374,6 +407,169 @@ class TableRow {
 
   /// Leagues without draws or points (basketball, baseball) rank by these.
   final String winPct, gamesBehind;
+}
+
+/// ESPN's standings feed (`apis/v2/sports/<sport>/<league>/standings`): each
+/// group's rows, and the season's stages as (year, id, name), so a stage
+/// without rows yet (Ecuador's final stage) can fall back to the one before.
+(List<TableGroup>, List<(int, String, String)>) parseStandings(String body) {
+  final Object? json;
+  try {
+    json = jsonDecode(body);
+  } catch (_) {
+    return (const [], const []);
+  }
+  if (json is! Map<String, dynamic>) return (const [], const []);
+  final groups = <TableGroup>[];
+  for (final c in (json['children'] as List? ?? const [])) {
+    final rows = <TableRow>[];
+    for (final (i, e) in ((_try(() => c['standings']['entries'] as List)) ?? const []).indexed) {
+      try {
+        String st(String n) {
+          for (final s in (e['stats'] as List)) {
+            if (s['name'] == n) return '${s['displayValue'] ?? s['value'] ?? ''}';
+          }
+          return '';
+        }
+
+        final t = e['team'] as Map;
+        rows.add(
+          TableRow(
+            rank: int.tryParse(st('rank')) ?? i + 1,
+            team: '${t['displayName'] ?? t['name'] ?? ''}',
+            teamId: '${t['id'] ?? ''}',
+            played: st('gamesPlayed'),
+            won: st('wins'),
+            drawn: st('ties'),
+            lost: st('losses'),
+            goalDiff: st('pointDifferential'),
+            points: st('points'),
+            logo: _try<String?>(() => (t['logos'] as List).first['href'] as String?),
+            winPct: st('winPercent'),
+            gamesBehind: st('gamesBehind'),
+          ),
+        );
+      } catch (_) {
+        // Skip a row we can't read.
+      }
+    }
+    rows.sort((a, b) => a.rank.compareTo(b.rank));
+    if (rows.isNotEmpty) groups.add(TableGroup(title: '${c['name'] ?? ''}', rows: rows));
+  }
+  final stages = <(int, String, String)>[];
+  for (final season in (json['seasons'] as List? ?? const [])) {
+    final year = _try(() => season['year'] as int);
+    if (year == null) continue;
+    for (final t in (season['types'] as List? ?? const [])) {
+      if (t is Map && t['hasStandings'] != false) stages.add((year, '${t['id']}', '${t['name'] ?? ''}'));
+    }
+  }
+  return (groups, stages);
+}
+
+/// A league table worked out from [results] (finished matches with scores):
+/// three points a win, ranked on points, goal difference, then goals.
+/// Teams are named, not numbered: [TableRow.teamId] is the team's name.
+List<TableRow> tableFromResults(List<Match> results) {
+  final rows = <String, List<int>>{}; // played, won, drawn, lost, for, against
+  final logos = <String, String?>{};
+  for (final m in results) {
+    final hs = int.tryParse(m.home.score ?? ''), as = int.tryParse(m.away.score ?? '');
+    if (m.state != MatchState.finished || hs == null || as == null) continue;
+    for (final (t, gf, ga) in [(m.home, hs, as), (m.away, as, hs)]) {
+      final r = rows.putIfAbsent(t.name, () => List.filled(6, 0));
+      logos[t.name] ??= t.logo;
+      r[0]++;
+      r[gf > ga
+          ? 1
+          : gf == ga
+          ? 2
+          : 3]++;
+      r[4] += gf;
+      r[5] += ga;
+    }
+  }
+  int pts(List<int> r) => r[1] * 3 + r[2];
+  final order = rows.keys.toList()
+    ..sort((a, b) {
+      final x = rows[a]!, y = rows[b]!;
+      for (final c in [pts(y) - pts(x), (y[4] - y[5]) - (x[4] - x[5]), y[4] - x[4]]) {
+        if (c != 0) return c;
+      }
+      return a.compareTo(b);
+    });
+  return [
+    for (final (i, team) in order.indexed)
+      () {
+        final r = rows[team]!, gd = r[4] - r[5];
+        return TableRow(
+          rank: i + 1,
+          team: team,
+          teamId: team,
+          played: '${r[0]}',
+          won: '${r[1]}',
+          drawn: '${r[2]}',
+          lost: '${r[3]}',
+          goalDiff: gd > 0 ? '+$gd' : '$gd',
+          points: '${pts(r)}',
+          logo: logos[team],
+        );
+      }(),
+  ];
+}
+
+/// [team]'s side of [results]: its form (latest first, "WDLWW"), its
+/// record and points, and its last [count] games, oldest first as ESPN's
+/// summary lists them.
+TeamInfo teamFromResults(String team, List<Match> results, {String? logo, int count = 10}) {
+  final games = [
+    for (final m in results)
+      if (m.state == MatchState.finished &&
+          m.home.score != null &&
+          m.away.score != null &&
+          (m.home.name == team || m.away.name == team))
+        m,
+  ]..sort((a, b) => b.kickoff.compareTo(a.kickoff));
+  var w = 0, d = 0, l = 0;
+  final played = <PastGame>[];
+  for (final m in games) {
+    final home = m.home.name == team;
+    final gf = int.tryParse((home ? m.home.score : m.away.score)!) ?? 0;
+    final ga = int.tryParse((home ? m.away.score : m.home.score)!) ?? 0;
+    final result = gf > ga
+        ? 'W'
+        : gf < ga
+        ? 'L'
+        : 'D';
+    switch (result) {
+      case 'W':
+        w++;
+      case 'D':
+        d++;
+      default:
+        l++;
+    }
+    played.add(
+      PastGame(
+        date: m.kickoff,
+        home: m.home.name,
+        away: m.away.name,
+        score: '${m.home.score}-${m.away.score}',
+        result: result,
+        competition: m.league.name,
+      ),
+    );
+  }
+  if (played.isEmpty) return TeamInfo(name: team, logo: logo);
+  return TeamInfo(
+    id: team,
+    name: team,
+    logo: logo,
+    record: '$w-$d-$l',
+    points: '${w * 3 + d}',
+    form: played.take(5).map((g) => g.result).join(),
+    lastGames: played.take(count).toList().reversed.toList(),
+  );
 }
 
 /// Parses the summary feed. Sections that are missing or malformed come back
