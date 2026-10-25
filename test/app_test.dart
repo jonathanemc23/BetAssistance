@@ -623,9 +623,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
-    expect(find.text('Community'), findsOneWidget);
-    expect(find.text('Become a pro bettor'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('drawer-stake')));
+    // The menu: Bet Tools, then Community as one entry; the stake builder lives in Bet Tools.
+    expect(find.byKey(const Key('drawer-community')), findsOneWidget);
+    expect(find.byKey(const Key('drawer-stake')), findsNothing);
+    expect(find.text('Become a pro bettor'), findsNothing);
+    await tester.tap(find.byKey(const Key('drawer-tools')));
+    await tester.pumpAndSettle();
+    expect(find.text('Community'), findsNothing);
+    await tester.tap(find.text('Stake builder'));
     await tester.pumpAndSettle();
     expect(find.text('Build a stake from match stats'), findsOneWidget);
 
@@ -723,8 +728,8 @@ void main() {
     await tester.tap(find.byKey(const Key('drawer-community')));
     await tester.pumpAndSettle();
 
-    // A social profile first.
-    expect(find.text('Create your social profile'), findsOneWidget);
+    // A community profile first.
+    expect(find.text('Create your community profile'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('community-name')), 'Laura');
     await tester.enterText(find.byKey(const Key('community-handle')), 'a');
     await tester.tap(find.byKey(const Key('community-create')));
@@ -740,10 +745,12 @@ void main() {
     await settle(tester);
     expect(store.socialProfile!.handle, 'laura_bets');
 
-    // Bets for sale: the pick shows once bought with tokens.
-    expect(find.text('Bets for sale'), findsWidgets);
+    // The community: the pro bettor button, the hottest bets, then free bets.
+    expect(find.byKey(const Key('community-pro-bettor')), findsOneWidget);
+    expect(find.text('Hottest bets to buy'), findsOneWidget);
     expect(find.textContaining('pick hidden'), findsWidgets);
-    await shot('community_market');
+    expect(find.textContaining('bought'), findsWidgets);
+    await shot('community_home');
     final tokens = store.tokens;
     final buy = find.byWidgetPredicate((w) => '${w.key}'.contains("'buy-"));
     await tester.tap(buy.first);
@@ -756,13 +763,51 @@ void main() {
     expect(store.boughtListings, hasLength(1));
     expect(store.tokens, lessThan(tokens));
     expect(find.text('Log bet'), findsOneWidget);
-    await shot('community_bought');
 
-    // The pro bettor page: the description and the conditions.
-    await openTab(tester, 'Pro bettor');
+    // Free bets: open picks, a follow button, and the user's own.
+    await tester.scrollUntilVisible(find.byKey(const Key('community-post-free')), 300, scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Free bets'), findsOneWidget);
+    final follow = find.byWidgetPredicate((w) => '${w.key}'.contains("'follow-"), skipOffstage: false);
+    expect(follow, findsWidgets);
+    await tester.ensureVisible(follow.first);
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(follow.first);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(store.following, hasLength(1));
+    expect(find.text('Following'), findsOneWidget);
+    await shot('community_free_bets');
+    await tester.ensureVisible(find.byKey(const Key('community-post-free')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('community-post-free')));
+    await settle(tester);
+    await tester.tap(find.text('Everton vs Chelsea').last);
+    await settle(tester);
+    expect(find.text('Pick your bet'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('market-awayWin'), skipOffstage: false));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('market-awayWin')));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(store.myFreeBets, hasLength(1));
+    expect(find.text('@laura_bets · your free bet'), findsOneWidget);
+
+    // The pro bettor page: how it works and the requirements, odds over 1.60.
+    await tester.scrollUntilVisible(find.byKey(const Key('community-pro-bettor'), skipOffstage: false), -400,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('community-pro-bettor')));
+    await tester.pumpAndSettle();
     expect(find.text('Become a pro bettor'), findsOneWidget);
+    expect(find.text('How it works'), findsOneWidget);
     expect(find.textContaining('place at least 30 bets with a win rate over 60%'), findsOneWidget);
     expect(find.textContaining("Bets can't be removed or changed"), findsOneWidget);
+    expect(find.textContaining('odds over 1.60'), findsWidgets);
     await shot('community_pro_bettor');
     await tester.scrollUntilVisible(find.byKey(const Key('challenge-accept')), 300, scrollable: find.byType(Scrollable).last);
     await tester.pumpAndSettle();
@@ -778,9 +823,9 @@ void main() {
     // A challenge bet: a match, a market, and a bet that can't be undone.
     await tester.tap(find.byKey(const Key('challenge-place')));
     await settle(tester);
-    await tester.tap(find.text('Everton vs Chelsea'));
+    await tester.tap(find.text('Everton vs Chelsea').last);
     await settle(tester);
-    expect(find.text('Pick your bet'), findsOneWidget);
+    expect(find.text('Pick your bet: odds over 1.60'), findsOneWidget);
     await tester.ensureVisible(find.byKey(const Key('market-awayWin'), skipOffstage: false));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('market-awayWin')));
@@ -841,9 +886,13 @@ void main() {
     expect(store.challenge.status(communityClock()), ChallengeStatus.waiting);
     expect(find.textContaining('You can start again on'), findsOneWidget);
 
-    // The profile.
-    await openTab(tester, 'Profile');
+    // The profile, from the community's top bar.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('community-profile')));
+    await tester.pumpAndSettle();
     expect(find.text('@laura_bets'), findsOneWidget);
+    expect(find.text('Your free bets'), findsOneWidget);
     await shot('community_profile');
   });
 
@@ -888,7 +937,6 @@ void main() {
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
     expect(find.text('Comunidad'), findsOneWidget);
-    expect(find.text('Hazte apostador pro'), findsOneWidget);
     await shot('es_drawer');
 
     // The pro bettor page.
@@ -896,18 +944,25 @@ void main() {
     addTearDown(() => communityClock = DateTime.now);
     await tester.runAsync(() => store.saveSocialProfile(
         const SocialProfile(name: 'Laura', handle: 'laura_bets', avatar: 'person:3', joined: '2026-10-18T10:00:00')));
-    await tester.tap(find.byKey(const Key('drawer-pro-bettor')));
+    await tester.tap(find.byKey(const Key('drawer-community')));
     await settle(tester);
-    expect(find.text('Condiciones'), findsOneWidget);
+    expect(find.text('Las apuestas más compradas'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('community-pro-bettor')));
+    await settle(tester);
+    expect(find.text('Requisitos'), findsOneWidget);
     expect(find.textContaining('haz al menos 30 apuestas'), findsOneWidget);
     await shot('es_pro_bettor');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
     // The stake builder with a match's stats.
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('drawer-stake')));
+    await tester.tap(find.byKey(const Key('drawer-tools')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Constructor de apuestas'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('stake-pick-match')));
     await settle(tester);

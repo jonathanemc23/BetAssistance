@@ -241,6 +241,12 @@ class BankStore extends ChangeNotifier {
   /// The user's own bets for sale, once they passed the challenge.
   List<Listing> myListings = [];
 
+  /// The free bets the user posted for their followers, newest last.
+  List<Listing> myFreeBets = [];
+
+  /// The handles of the bettors the user follows.
+  Set<String> following = {};
+
   Future<void> _loadCommunity() async {
     Object? read(String? raw) {
       try {
@@ -259,6 +265,10 @@ class BankStore extends ChangeNotifier {
     };
     final mine = read(await _db.pref('community.selling'));
     myListings = [if (mine is List) for (final j in mine) ?Listing.fromJson(j)];
+    final free = read(await _db.pref('community.free'));
+    myFreeBets = [if (free is List) for (final j in free) ?Listing.fromJson(j)];
+    final follows = read(await _db.pref('community.following'));
+    following = {if (follows is List) for (final h in follows) '$h'};
   }
 
   Future<void> saveSocialProfile(SocialProfile p) async {
@@ -305,6 +315,31 @@ class BankStore extends ChangeNotifier {
     myListings = [...myListings, l];
     notifyListeners();
     await _db.setPref('community.selling', jsonEncode([for (final x in myListings) x.toJson()]));
+  }
+
+  Future<void> _saveFreeBets(List<Listing> bets) async {
+    myFreeBets = bets;
+    notifyListeners();
+    await _db.setPref('community.free', jsonEncode([for (final x in bets) x.toJson()]));
+  }
+
+  /// Posts [bet] as a free bet. The reason it can't be, or null once posted.
+  Future<String?> postFreeBet(Listing bet) async {
+    final why = refuseFreeBet(myFreeBets, bet.bet, communityClock());
+    if (why != null) return why;
+    await _saveFreeBets([...myFreeBets, bet]);
+    return null;
+  }
+
+  /// Settles the user's free bets on [matchId] with its final score.
+  Future<void> settleFreeBets(String matchId, int home, int away) => _saveFreeBets([
+        for (final l in myFreeBets) l.bet.matchId == matchId && !l.bet.settled ? l.settle(home, away) : l,
+      ]);
+
+  Future<void> toggleFollow(String handle) async {
+    following = following.contains(handle) ? ({...following}..remove(handle)) : {...following, handle};
+    notifyListeners();
+    await _db.setPref('community.following', jsonEncode(following.toList()));
   }
 
   // Matchboard

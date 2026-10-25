@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:banktrack;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password: ""
+banktrack:
+  auth:
+    dev-header: true
+  settle-every: PT1000H

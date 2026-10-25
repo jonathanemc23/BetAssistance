@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/store.dart';
-import 'community.dart';
 import 'parlay_screens.dart';
 import 'pro_tips_page.dart';
 import 'stake_builder.dart';
@@ -51,13 +50,6 @@ class BetToolsScreen extends StatelessWidget {
             text: tr('Goals, corners, cards and shots for any match. Pick the stats you like from one or more matches and validate the stake.'),
             badge: store.stake.isEmpty ? null : trn(store.stake.length, '{n} pick', '{n} picks'),
             onTap: () => openStakeBuilder(context, store: store, api: api, today: today),
-          ),
-          const SizedBox(height: 12),
-          _ToolCard(
-            icon: Icons.groups_2_outlined,
-            title: tr('Community'),
-            text: tr('Buy bets from pro bettors, or take the pro bettor challenge to sell your own.'),
-            onTap: () => openCommunity(context, store: store, api: api, today: today),
           ),
         ]);
       },

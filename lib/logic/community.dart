@@ -188,9 +188,9 @@ class ProChallenge {
   static const passRate = 0.6;
   static const wait = Duration(days: 7);
 
-  /// The lowest odds a challenge bet can have, so the 30 bets can't be
+  /// Challenge bets need odds over this, so the 30 bets can't be
   /// near-certain favourites.
-  static const minOdds = 1.4;
+  static const minOdds = 1.6;
 
   final DateTime? started;
   final List<CommunityBet> bets;
@@ -231,7 +231,7 @@ class ProChallenge {
   String? refuse(CommunityBet bet, DateTime now) {
     if (status(now) != ChallengeStatus.active) return tr("The challenge isn't open for bets right now.");
     if (!bet.kickoff.isAfter(now)) return tr("This match has started: pick one that hasn't.");
-    if (bet.leg.odds < minOdds) return tr('Challenge bets need odds of 1.40 or more.');
+    if (bet.leg.odds <= minOdds) return tr('Challenge bets need odds over 1.60.');
     if (bets.any((b) => b.matchId == bet.matchId && b.leg.market == bet.leg.market)) {
       return tr('You already have this bet in the challenge.');
     }
@@ -287,11 +287,16 @@ class ProChallenge {
   }
 }
 
-/// A pro bettor who sells bets in the community.
+/// A bettor in the community: a pro who sells bets, or anyone who posts
+/// free bets to gain followers.
 class ProSeller {
-  const ProSeller(this.handle, this.name, this.avatar, this.wins, this.losses);
+  const ProSeller(this.handle, this.name, this.avatar, this.wins, this.losses, {this.followers = 0, this.pro = true});
   final String handle, name, avatar;
   final int wins, losses;
+  final int followers;
+
+  /// Passed the pro bettor challenge, so can sell bets.
+  final bool pro;
 
   int get bets => wins + losses;
   int get winPercent => bets == 0 ? 0 : (wins * 100 / bets).round();
@@ -307,13 +312,28 @@ const demoSellers = [
   ProSeller('stats_nerd', 'Hannah K.', 'person:9', 39, 24),
 ];
 
+/// The bettors who post free bets: some pros, some still building a following.
+const demoTipsters = [
+  ProSeller('cornerqueen', 'Sofia M.', 'person:1', 37, 19, followers: 1840),
+  ProSeller('btts_daily', 'Lucas F.', 'person:5', 21, 15, followers: 312, pro: false),
+  ProSeller('la_pizarra', 'Camila V.', 'person:7', 33, 18, followers: 960),
+  ProSeller('over_kings', 'Valentina G.', 'person:10', 14, 9, followers: 145, pro: false),
+  ProSeller('goalmachine', 'Diego R.', 'person:0', 41, 22, followers: 2210),
+  ProSeller('tikitaka_tips', 'Mateo L.', 'person:3', 9, 7, followers: 58, pro: false),
+];
+
 /// A bet for sale: who sells it, its price in tokens, and the bet itself,
-/// hidden until bought.
+/// hidden until bought. A price of 0 is a free bet, open to everyone.
 class Listing {
-  const Listing({required this.seller, required this.bet, required this.price, this.mine = false});
+  const Listing({required this.seller, required this.bet, required this.price, this.mine = false, this.buyers = 0});
   final ProSeller seller;
   final CommunityBet bet;
   final int price;
+
+  /// How many bettors bought it: the hottest bets sell the most.
+  final int buyers;
+
+  bool get free => price == 0;
 
   /// One of the user's own bets for sale.
   final bool mine;
@@ -326,10 +346,16 @@ class Listing {
         'sellerAvatar': seller.avatar,
         'wins': seller.wins,
         'losses': seller.losses,
+        'followers': seller.followers,
+        'pro': seller.pro,
         'bet': bet.toJson(),
         'price': price,
         'mine': mine,
+        'buyers': buyers,
       };
+
+  Listing settle(int h, int a) =>
+      Listing(seller: seller, bet: bet.settle(h, a), price: price, mine: mine, buyers: buyers);
 
   static Listing? fromJson(Object? j) {
     if (j is! Map) return null;
@@ -337,10 +363,12 @@ class Listing {
     if (bet == null) return null;
     return Listing(
       seller: ProSeller('${j['seller'] ?? ''}', '${j['sellerName'] ?? ''}', '${j['sellerAvatar'] ?? ''}',
-          (j['wins'] as num?)?.toInt() ?? 0, (j['losses'] as num?)?.toInt() ?? 0),
+          (j['wins'] as num?)?.toInt() ?? 0, (j['losses'] as num?)?.toInt() ?? 0,
+          followers: (j['followers'] as num?)?.toInt() ?? 0, pro: j['pro'] != false),
       bet: bet,
       price: (j['price'] as num?)?.toInt() ?? 1,
       mine: j['mine'] == true,
+      buyers: (j['buyers'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -366,7 +394,47 @@ List<Listing> demoListings(List<Match> matches, {required String day}) {
       seller: seller,
       bet: CommunityBet.on(m, leg, placed: '${seller.handle}:$day'),
       price: listingPrice(leg.odds),
+      buyers: 8 + (seed ~/ 7) % 40 + seller.winPercent ~/ 4,
     ));
   }
   return out;
 }
+
+/// The [n] bets for sale that sold the most.
+List<Listing> hottest(Iterable<Listing> listings, {int n = 3}) =>
+    ([...listings.where((l) => !l.mine)]..sort((a, b) => b.buyers.compareTo(a.buyers))).take(n).toList();
+
+/// The day's simulated free bets: one per match still to start, from a
+/// tipster other than its seller, so they don't repeat the bets for sale.
+List<Listing> demoFreeBets(List<Match> matches, {required String day}) {
+  final out = <Listing>[];
+  for (final (i, m) in matches.indexed) {
+    if (m.state != MatchState.scheduled) continue;
+    final markets = [
+      for (final c in pricedMarkets(m, const MatchDetails()))
+        if (c.leg.odds >= 1.4 && c.leg.odds <= 2.4) c.leg,
+    ];
+    if (markets.isEmpty) continue;
+    final seed = '${m.id}:free'.codeUnits.fold<int>(11, (h, c) => (h * 37 + c) & 0x3fffffff);
+    final leg = markets[seed % markets.length];
+    final tipster = demoTipsters[(seed + i) % demoTipsters.length];
+    out.add(Listing(seller: tipster, bet: CommunityBet.on(m, leg, placed: 'free:${tipster.handle}:$day'), price: 0));
+  }
+  return out;
+}
+
+/// Why the user can't post [bet] as a free bet, or null when they can.
+String? refuseFreeBet(List<Listing> mine, CommunityBet bet, DateTime now) {
+  if (!bet.kickoff.isAfter(now)) return tr("This match has started: pick one that hasn't.");
+  if (mine.any((l) => l.bet.matchId == bet.matchId && l.bet.leg.market == bet.leg.market)) {
+    return tr('You already posted this bet.');
+  }
+  final local = now.toLocal();
+  final dayStart = DateTime(local.year, local.month, local.day);
+  final today = mine.where((l) => DateTime.tryParse(l.bet.placed)?.toLocal().isBefore(dayStart) == false);
+  if (today.length >= maxFreeBetsPerDay) return tr('You can post up to 3 free bets a day.');
+  return null;
+}
+
+/// Free bets a bettor can post in a day, so followers see their best picks.
+const maxFreeBetsPerDay = 3;

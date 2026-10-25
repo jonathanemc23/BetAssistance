@@ -15,49 +15,73 @@ import 'pro_tips_page.dart' show TokenCoin, showTokensSheet;
 import 'profile.dart';
 import 'stake_builder.dart' show StakeMatchPicker;
 
-Future<void> openCommunity(BuildContext context, {required BankStore store, required FixturesApi api, DateTime? today, int tab = 0}) =>
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => CommunityPage(store: store, api: api, today: today, initialTab: tab),
-    ));
+Future<void> openCommunity(BuildContext context, {required BankStore store, required FixturesApi api, DateTime? today}) =>
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CommunityPage(store: store, api: api, today: today),
+      ),
+    );
 
-/// The community: bets for sale from pro bettors, the pro bettor challenge
-/// and the user's social profile, which they make before they can enter.
+/// The pro bettor challenge on its own page: what it asks and where the user stands.
+Future<void> openProBettor(BuildContext context, {required BankStore store, required FixturesApi api, DateTime? today}) =>
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: Text(tr('Pro bettor challenge'))),
+          body: ListenableBuilder(
+            listenable: store,
+            builder: (_, _) => _ProBettor(store: store, api: api, today: today),
+          ),
+        ),
+      ),
+    );
+
+/// The community: the hottest bets for sale and free bets from other bettors,
+/// behind the social profile the user makes before they can enter.
 class CommunityPage extends StatelessWidget {
-  const CommunityPage({super.key, required this.store, required this.api, this.today, this.initialTab = 0});
+  const CommunityPage({super.key, required this.store, required this.api, this.today});
   final BankStore store;
   final FixturesApi api;
   final DateTime? today;
-  final int initialTab;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: store,
-        builder: (context, _) {
-          final profile = store.socialProfile;
-          if (profile == null) {
-            return Scaffold(appBar: AppBar(title: Text(tr('Community'))), body: _CreateProfile(store: store));
-          }
-          return DefaultTabController(
-            length: 3,
-            initialIndex: initialTab,
-            child: Scaffold(
-              appBar: AppBar(
-                title: Text(tr('Community')),
-                bottom: TabBar(tabs: [
-                  Tab(text: trc('tab', 'Bets for sale')),
-                  Tab(text: tr('Pro bettor')),
-                  Tab(text: tr('Profile')),
-                ]),
+    listenable: store,
+    builder: (context, _) {
+      final profile = store.socialProfile;
+      if (profile == null) {
+        return Scaffold(
+          appBar: AppBar(title: Text(tr('Join the community'))),
+          body: _CreateProfile(store: store),
+        );
+      }
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(tr('Community')),
+          actions: [
+            IconButton(
+              key: const Key('community-profile'),
+              tooltip: tr('Your profile'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => Scaffold(
+                    appBar: AppBar(title: Text(tr('Your profile'))),
+                    body: ListenableBuilder(
+                      listenable: store,
+                      builder: (_, _) => _Profile(store: store),
+                    ),
+                  ),
+                ),
               ),
-              body: TabBarView(children: [
-                _Market(store: store, api: api, today: today),
-                _ProBettor(store: store, api: api, today: today),
-                _Profile(store: store),
-              ]),
+              icon: AvatarImage(avatar: profile.avatar, name: profile.name, size: 32, border: false),
             ),
-          );
-        },
+            const SizedBox(width: 4),
+          ],
+        ),
+        body: _CommunityHome(store: store, api: api, today: today),
       );
+    },
+  );
 }
 
 /// A line that says the community is a preview on this phone.
@@ -132,11 +156,11 @@ class _CreateProfileState extends State<_CreateProfile> {
     return ListView(padding: const EdgeInsets.fromLTRB(20, 16, 20, 32), children: [
       Icon(Icons.groups_2, size: 48, color: cs.primary),
       const SizedBox(height: 10),
-      Text(tr('Create your social profile'),
+      Text(tr('Create your community profile'),
           textAlign: TextAlign.center, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 6),
       Text(
-        tr('Everyone in the community has a social profile. It shows on the bets you place in the pro bettor challenge and, once you pass it, on the bets you sell.'),
+        tr('You need a community profile to join. It shows on the free bets you post, on your pro bettor challenge and, once you pass it, on the bets you sell.'),
         textAlign: TextAlign.center,
         style: TextStyle(color: cs.onSurfaceVariant),
       ),
@@ -198,7 +222,7 @@ class _CreateProfileState extends State<_CreateProfile> {
         key: const Key('community-create'),
         onPressed: _create,
         icon: const Icon(Icons.how_to_reg),
-        label: Text(tr('Create profile and enter')),
+        label: Text(tr('Create profile and join')),
       ),
       const _PreviewNote(),
     ]);
@@ -239,6 +263,8 @@ class _Profile extends StatelessWidget {
     final c = store.challenge;
     final status = c.status(communityClock());
     final joined = DateTime.tryParse(p.joined);
+    final freeSettled = [for (final l in store.myFreeBets) if (l.bet.settled) l];
+    final freeWon = freeSettled.where((l) => l.bet.won).length;
     return ListView(padding: const EdgeInsets.fromLTRB(16, 20, 16, 32), children: [
       Center(
         child: InkWell(
@@ -268,12 +294,36 @@ class _Profile extends StatelessWidget {
       const SizedBox(height: 16),
       Row(children: [
         _Stat(value: status == ChallengeStatus.passed ? tr('Pro') : tr('Member'), label: tr('Level')),
+        _Stat(value: '0', label: tr('Followers')),
+        _Stat(value: '${store.following.length}', label: tr('Following')),
+        _Stat(value: '${store.boughtListings.length}', label: tr('Bets bought')),
+      ]),
+      const SizedBox(height: 12),
+      Row(children: [
+        _Stat(value: '${store.myFreeBets.length}', label: tr('Free bets')),
+        _Stat(value: freeSettled.isEmpty ? '-' : '${freeWon * 100 ~/ freeSettled.length}%', label: tr('Free bets won')),
         _Stat(value: '${c.placed}', label: tr('Challenge bets')),
         _Stat(value: c.winRate == null ? '-' : '${(c.winRate! * 100).round()}%', label: tr('Win rate')),
-        _Stat(value: '${store.boughtListings.length}', label: tr('Bets bought')),
       ]),
       const SizedBox(height: 16),
       OutlinedButton.icon(onPressed: () => _edit(context, p), icon: const Icon(Icons.edit_outlined), label: Text(tr('Edit profile'))),
+      if (store.myFreeBets.isNotEmpty) ...[
+        const SizedBox(height: 18),
+        Text(tr('Your free bets'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        for (final l in store.myFreeBets.reversed)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text('${trPick(l.bet.leg.pick)} @ ${l.bet.leg.odds.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: Text(l.bet.matchTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+            trailing: Text(
+              l.bet.settled ? (l.bet.won ? tr('Won') : tr('Lost')) : tr('Pending'),
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: !l.bet.settled ? cs.onSurfaceVariant : (l.bet.won ? BankColors.win(context) : BankColors.loss(context)),
+              ),
+            ),
+          ),
+      ],
       const _PreviewNote(),
     ]);
   }
@@ -299,126 +349,507 @@ class _Stat extends StatelessWidget {
 
 // ----------------------------------------------------------------- Market
 
-class _Market extends StatefulWidget {
-  const _Market({required this.store, required this.api, this.today});
+/// Spends tokens on [l] after asking, or offers tokens when there aren't enough.
+Future<void> _buy(BuildContext context, BankStore store, Listing l) async {
+  if (store.tokens < l.price) {
+    await showTokensSheet(context, store, need: l.price);
+    return;
+  }
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(tr('Buy this bet?')),
+      content: Text(
+        trn(
+          l.price,
+          '{n} token goes to @{seller} and the bet is yours to see.',
+          '{n} tokens go to @{seller} and the bet is yours to see.',
+          {'seller': l.seller.handle},
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('Cancel'))),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('Buy'))),
+      ],
+    ),
+  );
+  if (ok == true) await store.buyListing(l);
+}
+
+void _log(BuildContext context, BankStore store, FixturesApi api, Listing l) => openBetForm(
+  context,
+  store,
+  template: l.bet.toMatch().toBetTemplate(selection: l.bet.leg.pick, odds: l.bet.leg.odds),
+  api: api,
+);
+
+/// A bet for sale as [ListingCard] shows it, bought or not.
+Widget _listingCard(BuildContext context, BankStore store, FixturesApi api, Listing l, {bool hot = false}) {
+  final bought = store.boughtListings;
+  return ListingCard(
+    listing: bought[l.id] ?? l,
+    bought: l.mine || bought.containsKey(l.id),
+    hot: hot,
+    onBuy: () => _buy(context, store, l),
+    onLog: () => _log(context, store, api, l),
+  );
+}
+
+/// The user's own bets for sale that are still worth showing.
+Iterable<Listing> _myOpenListings(BankStore store) =>
+    store.myListings.where((l) => l.bet.kickoff.isAfter(communityClock().subtract(const Duration(hours: 3))));
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.icon, required this.title, required this.text, this.color});
+  final IconData icon;
+  final String title, text;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 20, bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color ?? cs.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(text, style: TextStyle(color: cs.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+}
+
+/// The button at the top of the community that opens the pro bettor challenge.
+class _ProBanner extends StatelessWidget {
+  const _ProBanner({required this.store, required this.onOpen});
+  final BankStore store;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final c = store.challenge;
+    final status = c.status(communityClock());
+    final line = switch (status) {
+      ChallengeStatus.passed => tr('You passed the challenge: sell your bets for tokens.'),
+      ChallengeStatus.active || ChallengeStatus.awaitingResults => tr('Challenge on: {n} of 30 bets placed.', {'n': c.placed}),
+      _ => tr('30 bets, 60% won, odds over 1.60. Pass it and sell your bets for tokens.'),
+    };
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [cs.primary, cs.tertiary], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        ),
+        child: InkWell(
+          onTap: onOpen,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.workspace_premium, color: cs.onPrimary, size: 30),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        line,
+                        style: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  key: const Key('community-pro-bettor'),
+                  style: FilledButton.styleFrom(backgroundColor: cs.onPrimary, foregroundColor: cs.primary),
+                  onPressed: onOpen,
+                  icon: const Icon(Icons.workspace_premium),
+                  label: Text(status == ChallengeStatus.passed ? tr("You're a pro bettor") : tr('Become a pro bettor')),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The community's front page: the pro bettor button, the hottest bets to
+/// buy and the free bets bettors post to gain followers.
+class _CommunityHome extends StatefulWidget {
+  const _CommunityHome({required this.store, required this.api, this.today});
   final BankStore store;
   final FixturesApi api;
   final DateTime? today;
 
   @override
-  State<_Market> createState() => _MarketState();
+  State<_CommunityHome> createState() => _CommunityHomeState();
 }
 
-class _MarketState extends State<_Market> with AutomaticKeepAliveClientMixin {
+class _CommunityHomeState extends State<_CommunityHome> {
   List<Listing>? _listings;
+  List<Listing>? _free;
   String? _error;
 
-  @override
-  bool get wantKeepAlive => true;
+  BankStore get store => widget.store;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _settleFreeBets();
   }
 
   Future<void> _load() async {
     setState(() {
       _listings = null;
+      _free = null;
       _error = null;
     });
     final day = widget.today ?? communityClock();
     try {
       final matches = await widget.api.featuredMatches(day, max: 8);
-      if (mounted) setState(() => _listings = demoListings(matches, day: isoDate(day)));
+      if (mounted) {
+        setState(() {
+          _listings = demoListings(matches, day: isoDate(day));
+          _free = demoFreeBets(matches, day: isoDate(day));
+        });
+      }
     } on FixturesException catch (e) {
       if (mounted) setState(() => _error = e.message);
     }
   }
 
-  Future<void> _buy(Listing l) async {
-    final store = widget.store;
-    if (store.tokens < l.price) {
-      await showTokensSheet(context, store, need: l.price);
-      return;
+  /// Settles the user's free bets whose matches have finished.
+  Future<void> _settleFreeBets() async {
+    final now = communityClock();
+    final open = <String, CommunityBet>{
+      for (final l in store.myFreeBets)
+        if (!l.bet.settled && l.bet.kickoff.isBefore(now.subtract(const Duration(minutes: 100)))) l.bet.matchId: l.bet,
+    };
+    for (final b in open.values) {
+      try {
+        final d = await widget.api.details(b.toMatch());
+        if (d.state == MatchState.finished && d.homeScore != null && d.awayScore != null) {
+          await store.settleFreeBets(b.matchId, d.homeScore!, d.awayScore!);
+        }
+      } catch (_) {
+        // Tried again next time the page opens.
+      }
     }
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(tr('Buy this bet?')),
-        content: Text(trn(l.price, '{n} token goes to @{seller} and the bet is yours to see.', '{n} tokens go to @{seller} and the bet is yours to see.',
-            {'seller': l.seller.handle})),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('Cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('Buy'))),
-        ],
+  }
+
+  Future<void> _postFree() async {
+    final picked = await pickCommunityBet(context, widget.api, today: widget.today);
+    if (picked == null || !mounted) return;
+    final (m, leg) = picked;
+    final p = store.socialProfile!;
+    final record = store.myFreeBets.where((l) => l.bet.settled);
+    final err = await store.postFreeBet(
+      Listing(
+        seller: ProSeller(
+          p.handle,
+          p.name,
+          p.avatar,
+          record.where((l) => l.bet.won).length,
+          record.where((l) => !l.bet.won).length,
+          pro: store.challenge.status(communityClock()) == ChallengeStatus.passed,
+        ),
+        bet: CommunityBet.on(m, leg, placed: communityClock().toIso8601String()),
+        price: 0,
+        mine: true,
       ),
     );
-    if (ok == true) await store.buyListing(l);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err ?? tr('Your free bet is posted for your followers.'))));
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-    final store = widget.store;
     final cs = Theme.of(context).colorScheme;
-    final mine = store.myListings.where((l) => l.bet.kickoff.isAfter(communityClock().subtract(const Duration(hours: 3))));
-    final bought = store.boughtListings;
-    return ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 32), children: [
-      Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(18)),
-        child: Row(children: [
-          const TokenCoin(size: 30),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(trn(store.tokens, '{n} token', '{n} tokens'),
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+    final listings = [..._myOpenListings(store), ...?_listings];
+    final hot = hottest(listings);
+    final now = communityClock();
+    final myFree = store.myFreeBets.reversed.where((l) => l.bet.kickoff.isAfter(now.subtract(const Duration(days: 2))));
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          _ProBanner(
+            store: store,
+            onOpen: () => openProBettor(context, store: store, api: widget.api, today: widget.today),
           ),
-          FilledButton.tonal(onPressed: () => showTokensSheet(context, store), child: Text(tr('Get tokens'))),
-        ]),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(18)),
+            child: Row(
+              children: [
+                const TokenCoin(size: 26),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    trn(store.tokens, '{n} token', '{n} tokens'),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                  ),
+                ),
+                TextButton(onPressed: () => showTokensSheet(context, store), child: Text(tr('Get tokens'))),
+              ],
+            ),
+          ),
+          _SectionTitle(
+            icon: Icons.local_fire_department,
+            color: Colors.deepOrange,
+            title: tr('Hottest bets to buy'),
+            text: tr('The bets from pro bettors that sell the most today. The pick shows once you buy it.'),
+          ),
+          if (_listings == null && _error == null)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Text(_error!, textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  FilledButton.tonal(onPressed: _load, child: Text(tr('Try again'))),
+                ],
+              ),
+            ),
+          if (_listings != null && hot.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                tr('No bets for sale right now. Come back closer to the next big matches.'),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: cs.onSurfaceVariant),
+              ),
+            ),
+          for (final l in hot) ...[_listingCard(context, store, widget.api, l, hot: true), const SizedBox(height: 10)],
+          if (_listings != null && listings.length > hot.length)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                key: const Key('community-all-bets'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => _AllBetsPage(store: store, api: widget.api, listings: listings),
+                  ),
+                ),
+                icon: const Icon(Icons.storefront_outlined),
+                label: Text(tr('See all {n} bets for sale', {'n': listings.length})),
+              ),
+            ),
+          _SectionTitle(
+            icon: Icons.card_giftcard,
+            title: tr('Free bets'),
+            text: tr('Bettors post free bets to gain followers. Follow the ones you like, or post your own.'),
+          ),
+          OutlinedButton.icon(
+            key: const Key('community-post-free'),
+            onPressed: _postFree,
+            icon: const Icon(Icons.add),
+            label: Text(tr('Post a free bet')),
+          ),
+          const SizedBox(height: 10),
+          for (final l in [...myFree, ...?_free]) ...[
+            FreeBetCard(
+              listing: l,
+              following: store.following.contains(l.seller.handle),
+              onFollow: () => store.toggleFollow(l.seller.handle),
+              onLog: () => _log(context, store, widget.api, l),
+            ),
+            const SizedBox(height: 10),
+          ],
+          const _PreviewNote(),
+        ],
       ),
-      const SizedBox(height: 12),
-      Text(tr('Bets from pro bettors who passed the challenge. The pick shows once you buy it.'),
-          style: TextStyle(color: cs.onSurfaceVariant)),
-      const SizedBox(height: 12),
-      if (_listings == null && _error == null) const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator())),
-      if (_error != null)
-        Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(children: [
-            Text(_error!, textAlign: TextAlign.center),
+    );
+  }
+}
+
+/// Every bet for sale today, hottest first.
+class _AllBetsPage extends StatelessWidget {
+  const _AllBetsPage({required this.store, required this.api, required this.listings});
+  final BankStore store;
+  final FixturesApi api;
+  final List<Listing> listings;
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...listings]..sort((a, b) => b.buyers.compareTo(a.buyers));
+    return Scaffold(
+      appBar: AppBar(title: Text(tr('Bets for sale'))),
+      body: ListenableBuilder(
+        listenable: store,
+        builder: (context, _) => ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
+            Text(
+              tr('Bets from pro bettors who passed the challenge. The pick shows once you buy it.'),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
             const SizedBox(height: 12),
-            FilledButton.tonal(onPressed: _load, child: Text(tr('Try again'))),
-          ]),
+            for (final l in sorted) ...[_listingCard(context, store, api, l), const SizedBox(height: 10)],
+            const _PreviewNote(),
+          ],
         ),
-      if (_listings != null && _listings!.isEmpty && mine.isEmpty)
-        Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(tr('No bets for sale right now. Come back closer to the next big matches.'),
-              textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
+      ),
+    );
+  }
+}
+
+/// A free bet: the bettor, their followers and a follow button, the match
+/// and the pick, open to everyone.
+class FreeBetCard extends StatelessWidget {
+  const FreeBetCard({super.key, required this.listing, required this.following, required this.onFollow, required this.onLog});
+  final Listing listing;
+  final bool following;
+  final VoidCallback onFollow;
+  final VoidCallback onLog;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final l = listing;
+    final s = l.seller;
+    final b = l.bet;
+    final followers = s.followers + (following ? 1 : 0);
+    return Card(
+      key: Key('free-${l.id}'),
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                AvatarImage(avatar: s.avatar, name: s.name, size: 40, border: false),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              s.name,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          if (s.pro) ...[const SizedBox(width: 4), Icon(Icons.verified, size: 16, color: cs.primary)],
+                        ],
+                      ),
+                      Text(
+                        l.mine
+                            ? tr('@{handle} · your free bet', {'handle': s.handle})
+                            : trn(followers, '@{handle} · {n} follower', '@{handle} · {n} followers', {'handle': s.handle}),
+                        style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!l.mine)
+                  following
+                      ? OutlinedButton(key: Key('follow-${s.handle}'), onPressed: onFollow, child: Text(tr('Following')))
+                      : FilledButton.tonal(key: Key('follow-${s.handle}'), onPressed: onFollow, child: Text(tr('Follow'))),
+              ],
+            ),
+            const Divider(height: 20),
+            Row(
+              children: [
+                TeamLogo(url: b.homeLogo, name: b.home, size: 20),
+                const SizedBox(width: 2),
+                TeamLogo(url: b.awayLogo, name: b.away, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        b.matchTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        '${DateFormat.MMMd().add_Hm().format(b.kickoff.toLocal())} · ${b.leagueName}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(b.leg.market.group, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                      Text(
+                        '${trPick(b.leg.pick)} @ ${b.leg.odds.toStringAsFixed(2)}',
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: cs.primary),
+                      ),
+                    ],
+                  ),
+                ),
+                if (b.settled)
+                  Text(
+                    b.won ? tr('Won') : tr('Lost'),
+                    style: TextStyle(fontWeight: FontWeight.w800, color: b.won ? BankColors.win(context) : BankColors.loss(context)),
+                  )
+                else if (!l.mine)
+                  TextButton.icon(onPressed: onLog, icon: const Icon(Icons.add, size: 18), label: Text(tr('Log bet'))),
+              ],
+            ),
+          ],
         ),
-      for (final l in [...mine, ...?_listings]) ...[
-        ListingCard(
-          listing: bought[l.id] ?? l,
-          bought: l.mine || bought.containsKey(l.id),
-          onBuy: () => _buy(l),
-          onLog: () => openBetForm(context, store,
-              template: l.bet.toMatch().toBetTemplate(selection: l.bet.leg.pick, odds: l.bet.leg.odds), api: widget.api),
-        ),
-        const SizedBox(height: 10),
-      ],
-      const _PreviewNote(),
-    ]);
+      ),
+    );
   }
 }
 
 /// One bet for sale: the seller and their record, the match, and the pick
 /// once bought.
 class ListingCard extends StatelessWidget {
-  const ListingCard({super.key, required this.listing, required this.bought, required this.onBuy, required this.onLog});
+  const ListingCard(
+      {super.key, required this.listing, required this.bought, required this.onBuy, required this.onLog, this.hot = false});
   final Listing listing;
   final bool bought;
+
+  /// Shows how many bettors bought it, as the hottest bets do.
+  final bool hot;
   final VoidCallback onBuy;
   final VoidCallback onLog;
 
@@ -476,6 +907,12 @@ class ListingCard extends StatelessWidget {
                     maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
               ]),
             ),
+            if (hot && l.buyers > 0) ...[
+              const SizedBox(width: 8),
+              const Icon(Icons.local_fire_department, size: 18, color: Colors.deepOrange),
+              Text(tr('{n} bought', {'n': l.buyers}),
+                  style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w800, color: Colors.deepOrange)),
+            ],
           ]),
           const SizedBox(height: 10),
           if (bought)
@@ -517,11 +954,20 @@ List<String> get challengeConditions => [
       tr('If your win rate after 30 bets is under 60%, you wait a week and start again.'),
       tr('After 10 bets a restart button appears: you can start again any time, but after a restart you wait one week before the new challenge.'),
       tr('Only those who pass the challenge can sell bets in the community for tokens.'),
-      tr("Challenge bets need odds of 1.40 or more, on matches that haven't started."),
+      tr("Every challenge bet needs odds over 1.60, on a match that hasn't started."),
     ];
 
-/// Asks for a market of [m] at its price; null when the sheet is closed.
-Future<TipLeg?> pickMarket(BuildContext context, FixturesApi api, Match m, {double minOdds = 1.01}) async {
+/// How the challenge goes, step by step, as the page explains it.
+List<String> get challengeSteps => [
+      tr('Accept the challenge from this page.'),
+      tr('Place 30 bets on any matches, one at a time, each with odds over 1.60.'),
+      tr('Each bet is settled from the final score of its match.'),
+      tr('Win 60% or more of the 30 (18 bets) and you are a pro bettor: a verified badge and your own bets for sale.'),
+    ];
+
+/// Asks for a market of [m] at its price, only those priced over [above]
+/// when set; null when the sheet is closed.
+Future<TipLeg?> pickMarket(BuildContext context, FixturesApi api, Match m, {double? above}) async {
   MatchDetails details;
   try {
     details = await api.details(m);
@@ -542,23 +988,36 @@ Future<TipLeg?> pickMarket(BuildContext context, FixturesApi api, Match m, {doub
         initialChildSize: 0.7,
         builder: (context, scroll) => ListView(controller: scroll, padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
           Text(m.title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-          Text(tr('Pick your bet'), style: TextStyle(color: cs.onSurfaceVariant)),
+          Text(above == null ? tr('Pick your bet') : tr('Pick your bet: odds over {odds}', {'odds': above.toStringAsFixed(2)}),
+              style: TextStyle(color: cs.onSurfaceVariant)),
           const SizedBox(height: 8),
           for (final leg in legs)
-            ListTile(
+            if (above == null || leg.odds > above)
+              ListTile(
               key: Key('market-${leg.market.name}'),
               contentPadding: EdgeInsets.zero,
-              enabled: leg.odds >= minOdds,
               title: Text(trPick(leg.pick), style: const TextStyle(fontWeight: FontWeight.w700)),
               subtitle: Text(leg.market.group),
               trailing: Text(leg.odds.toStringAsFixed(2),
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: leg.odds >= minOdds ? cs.primary : null)),
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: cs.primary)),
               onTap: () => Navigator.pop(context, leg),
             ),
         ]),
       );
     },
   );
+}
+
+/// Asks for a match of the day, then one of its markets.
+Future<(Match, TipLeg)?> pickCommunityBet(BuildContext context, FixturesApi api, {DateTime? today, double? above}) async {
+  final m = await Navigator.of(context).push<Match>(
+    MaterialPageRoute(
+      builder: (_) => StakeMatchPicker(api: api, today: today),
+    ),
+  );
+  if (m == null || !context.mounted) return null;
+  final leg = await pickMarket(context, api, m, above: above);
+  return leg == null ? null : (m, leg);
 }
 
 class _ProBettor extends StatefulWidget {
@@ -627,17 +1086,8 @@ class _ProBettorState extends State<_ProBettor> {
     if (ok) await store.restartChallenge();
   }
 
-  Future<(Match, TipLeg)?> _pickBet({double minOdds = 1.01}) async {
-    final m = await Navigator.of(context).push<Match>(MaterialPageRoute(
-      builder: (_) => StakeMatchPicker(api: widget.api, today: widget.today),
-    ));
-    if (m == null || !mounted) return null;
-    final leg = await pickMarket(context, widget.api, m, minOdds: minOdds);
-    return leg == null ? null : (m, leg);
-  }
-
   Future<void> _place() async {
-    final picked = await _pickBet(minOdds: ProChallenge.minOdds);
+    final picked = await pickCommunityBet(context, widget.api, today: widget.today, above: ProChallenge.minOdds);
     if (picked == null || !mounted) return;
     final (m, leg) = picked;
     final bet = CommunityBet.on(m, leg, placed: communityClock().toIso8601String());
@@ -658,7 +1108,7 @@ class _ProBettorState extends State<_ProBettor> {
   }
 
   Future<void> _sell() async {
-    final picked = await _pickBet();
+    final picked = await pickCommunityBet(context, widget.api, today: widget.today);
     if (picked == null || !mounted) return;
     final (m, leg) = picked;
     final p = store.socialProfile!;
@@ -670,7 +1120,7 @@ class _ProBettorState extends State<_ProBettor> {
       mine: true,
     ));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Your bet is for sale in Bets for sale.'))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Your bet is for sale in the community.'))));
     }
   }
 
@@ -711,7 +1161,32 @@ class _ProBettorState extends State<_ProBettor> {
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(tr('Conditions'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            Text(tr('How it works'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 6),
+            for (final (i, line) in challengeSteps.indexed)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  CircleAvatar(
+                    radius: 11,
+                    backgroundColor: cs.primaryContainer,
+                    child: Text('${i + 1}',
+                        style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w900, color: cs.onPrimaryContainer)),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(line)),
+                ]),
+              ),
+          ]),
+        ),
+      ),
+      const SizedBox(height: 14),
+      Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(tr('Requirements'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
             for (final line in challengeConditions)
               Padding(

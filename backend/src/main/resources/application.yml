@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: banktrack-community
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/banktrack}
+    username: ${DATABASE_USER:banktrack}
+    password: ${DATABASE_PASSWORD:banktrack}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Firebase Authentication: https://securetoken.google.com/<firebase-project-id>
+          issuer-uri: ${AUTH_ISSUER_URI:https://securetoken.google.com/banktrack}
+
+server:
+  port: ${PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+banktrack:
+  auth:
+    dev-header: ${DEV_AUTH:false}
