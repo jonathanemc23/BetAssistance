@@ -589,6 +589,11 @@ class _CommunityHomeState extends State<_CommunityHome> {
     final hot = hottest(listings);
     final now = communityClock();
     final myFree = store.myFreeBets.reversed.where((l) => l.bet.kickoff.isAfter(now.subtract(const Duration(days: 2))));
+    // Bought bets whose match has started: they're off the list for sale.
+    final played = [
+      for (final l in store.boughtListings.values)
+        if (l.bet.kickoff.isBefore(now) && l.bet.kickoff.isAfter(now.subtract(const Duration(days: 3)))) l,
+    ]..sort((a, b) => b.bet.kickoff.compareTo(a.bet.kickoff));
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
@@ -616,6 +621,14 @@ class _CommunityHomeState extends State<_CommunityHome> {
               ],
             ),
           ),
+          if (played.isNotEmpty) ...[
+            _SectionTitle(
+              icon: Icons.receipt_long,
+              title: tr('Bets you bought'),
+              text: tr('Their result comes in on its own once the match is over.'),
+            ),
+            for (final l in played) ...[_listingCard(context, store, widget.api, l), const SizedBox(height: 10)],
+          ],
           _SectionTitle(
             icon: Icons.local_fire_department,
             color: Colors.deepOrange,
@@ -924,7 +937,13 @@ class ListingCard extends StatelessWidget {
                       style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: cs.primary)),
                 ]),
               ),
-              if (!l.mine) TextButton.icon(onPressed: onLog, icon: const Icon(Icons.add, size: 18), label: Text(tr('Log bet'))),
+              if (b.settled)
+                Text(
+                  b.won ? tr('Won') : tr('Lost'),
+                  style: TextStyle(fontWeight: FontWeight.w800, color: b.won ? BankColors.win(context) : BankColors.loss(context)),
+                )
+              else if (!l.mine)
+                TextButton.icon(onPressed: onLog, icon: const Icon(Icons.add, size: 18), label: Text(tr('Log bet'))),
             ])
           else
             Row(children: [

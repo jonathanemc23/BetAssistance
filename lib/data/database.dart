@@ -167,6 +167,14 @@ final List<Future<void> Function(DatabaseExecutor db)> migrations = [
       )''');
     await db.execute('CREATE INDEX odds_history_match ON odds_history(match_id, at)');
   },
+  // 7 -> 8: parlay legs keep the match they were picked from, so they can
+  // be settled from the final score.
+  (db) async {
+    await db.execute('ALTER TABLE bet_legs ADD COLUMN match_id TEXT');
+    await db.execute('ALTER TABLE bet_legs ADD COLUMN league_slug TEXT');
+    await db.execute('ALTER TABLE bet_legs ADD COLUMN league_name TEXT');
+    await db.execute('ALTER TABLE bet_legs ADD COLUMN kickoff TEXT');
+  },
 ];
 
 int get schemaVersion => migrations.length;

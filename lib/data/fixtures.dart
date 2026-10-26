@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../l10n/l10n.dart';
 import '../logic/markets.dart';
+import '../logic/nba_stake.dart';
 import '../logic/stake_stats.dart';
 import 'espn_leagues.dart';
 import 'match_details.dart';
@@ -1536,6 +1537,46 @@ class FixturesApi {
       }
     }
     return null;
+  }
+
+  final _nbaDays = <String, (DateTime, List<NbaGame>)>{};
+
+  /// The NBA games on the phone's [day], with each team's leaders. Cached
+  /// for ten minutes. Throws [FixturesException] when the feed can't be read.
+  Future<List<NbaGame>> nbaGames(DateTime day) async {
+    final key = _ymd(day);
+    final hit = _nbaDays[key];
+    if (hit != null && DateTime.now().difference(hit.$1) < const Duration(minutes: 10)) return hit.$2;
+    final start = DateTime(day.year, day.month, day.day), end = DateTime(day.year, day.month, day.day + 1);
+    final games = <String, NbaGame>{};
+    var read = false;
+    for (final d in espnDatesFor(day)) {
+      final body = await _get('$_espn/basketball/nba/scoreboard?dates=${_ymd(d)}', urgent: true);
+      if (body == null) continue;
+      read = true;
+      for (final g in parseNbaScoreboard(body)) {
+        final local = g.tipoff.toLocal();
+        if (!local.isBefore(start) && local.isBefore(end)) games[g.id] = g;
+      }
+    }
+    if (!read) throw const FixturesException("Couldn't load the NBA games. Check your connection and try again.");
+    final list = games.values.toList()..sort((a, b) => a.tipoff.compareTo(b.tipoff));
+    _nbaDays[key] = (DateTime.now(), list);
+    return list;
+  }
+
+  final _boxScores = <String, NbaBoxScore>{};
+
+  /// An NBA game's box score. Finished games are kept for good. Null when
+  /// it couldn't be read.
+  Future<NbaBoxScore?> nbaBoxScore(String gameId, {bool urgent = false}) async {
+    final hit = _boxScores[gameId];
+    if (hit != null) return hit;
+    final body = await _get('$_espn/basketball/nba/summary?event=$gameId', urgent: urgent);
+    if (body == null) return null;
+    final box = parseNbaBoxScore(body);
+    if (box.finished) _boxScores[gameId] = box;
+    return box;
   }
 
   final _details = <String, (DateTime, MatchDetails)>{};

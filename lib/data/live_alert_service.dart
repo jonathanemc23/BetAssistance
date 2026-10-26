@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../logic/live_alerts.dart';
+import 'bet_settler.dart';
 import 'fixtures.dart';
 import 'store.dart';
 
@@ -22,13 +23,17 @@ abstract class AlertSink {
 /// Polls the live feed for the matches behind open bets once a minute while
 /// the app runs (open or in the background until Android stops it) and
 /// raises a notification on kick-off, each score change and full time. Each
-/// match has one notification that updates as the game goes on.
+/// match has one notification that updates as the game goes on. With a
+/// [settler], results go into the bets on their own: when the app starts,
+/// after each full time and every [settleEvery] in between.
 class LiveAlertService {
   LiveAlertService({
     required this.store,
     required FixturesApi api,
     required this.sink,
+    this.settler,
     this.every = const Duration(minutes: 1),
+    this.settleEvery = const Duration(minutes: 10),
     Future<Map<String, Match>> Function(List<Match>)? read,
     DateTime Function()? clock,
   })  : // A background read: what's on screen goes first.
@@ -37,7 +42,10 @@ class LiveAlertService {
 
   final BankStore store;
   final AlertSink sink;
+  final BetSettler? settler;
   final Duration every;
+  final Duration settleEvery;
+  DateTime? _settled;
   final Future<Map<String, Match>> Function(List<Match>) _read;
   final DateTime Function() _clock;
   Timer? _timer;
@@ -66,19 +74,39 @@ class LiveAlertService {
     _timer = null;
   }
 
-  /// One round: reads the watched matches and shows what changed. Returns
-  /// the alerts it showed.
+  /// One round: reads the watched matches and shows what changed, then
+  /// puts in the results of bets whose matches are over when it's time.
+  /// Returns the alerts it showed.
   Future<List<LiveAlert>> poll() async {
     if (_busy) return const [];
     _busy = true;
+    final out = <LiveAlert>[];
     try {
-      return await _poll();
+      out.addAll(await _poll());
     } catch (e) {
       debugPrint('Live alerts: $e');
-      return const [];
-    } finally {
-      _busy = false;
     }
+    try {
+      out.addAll(await _settle(fullTime: out.any((a) => a.kind == AlertKind.finalResult)));
+    } catch (e) {
+      debugPrint('Auto-settle: $e');
+    }
+    _busy = false;
+    return out;
+  }
+
+  Future<List<LiveAlert>> _settle({required bool fullTime}) async {
+    final s = settler;
+    if (s == null) return const [];
+    final now = _clock();
+    if (!fullTime && _settled != null && now.difference(_settled!) < settleEvery) return const [];
+    _settled = now;
+    final done = await s.run();
+    if (done.isEmpty || await store.pref(alertsEnabledPref) == '0') return const [];
+    for (final a in done) {
+      await sink.show(a);
+    }
+    return done;
   }
 
   Future<List<LiveAlert>> _poll() async {

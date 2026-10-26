@@ -68,13 +68,17 @@ extension BetTypeX on BetType {
       BetType.values.firstWhere((t) => t.name == v, orElse: () => BetType.single);
 }
 
-/// One selection inside a parlay.
+/// One selection inside a parlay. A leg picked from the Matches list (or
+/// carried over from the Parlay builder or a pro stake) keeps its match, so
+/// it can be settled from the final score.
 class BetLeg {
   final String selection;
   final String event;
   final String sport;
   final double odds;
   final BetStatus status;
+  final String? matchId, leagueSlug, leagueName;
+  final DateTime? kickoff; // UTC
 
   const BetLeg({
     required this.selection,
@@ -82,7 +86,13 @@ class BetLeg {
     this.sport = 'Other',
     required this.odds,
     this.status = BetStatus.pending,
+    this.matchId,
+    this.leagueSlug,
+    this.leagueName,
+    this.kickoff,
   });
+
+  bool get isLinked => matchId != null && leagueSlug != null && kickoff != null;
 
   BetLeg copyWith({String? selection, String? event, String? sport, double? odds, BetStatus? status}) => BetLeg(
         selection: selection ?? this.selection,
@@ -90,6 +100,10 @@ class BetLeg {
         sport: sport ?? this.sport,
         odds: odds ?? this.odds,
         status: status ?? this.status,
+        matchId: matchId,
+        leagueSlug: leagueSlug,
+        leagueName: leagueName,
+        kickoff: kickoff,
       );
 
   Map<String, Object?> toRow(int betId, int position) => {
@@ -100,6 +114,10 @@ class BetLeg {
         'sport': sport,
         'odds': odds,
         'status': status.dbValue,
+        'match_id': matchId,
+        'league_slug': leagueSlug,
+        'league_name': leagueName,
+        'kickoff': kickoff?.toUtc().toIso8601String(),
       };
 
   factory BetLeg.fromRow(Map<String, Object?> r) => BetLeg(
@@ -108,6 +126,10 @@ class BetLeg {
         sport: (r['sport'] as String?) ?? 'Other',
         odds: (r['odds'] as num).toDouble(),
         status: BetStatusX.parse((r['status'] as String?) ?? 'pending'),
+        matchId: r['match_id'] as String?,
+        leagueSlug: r['league_slug'] as String?,
+        leagueName: r['league_name'] as String?,
+        kickoff: DateTime.tryParse((r['kickoff'] as String?) ?? '')?.toUtc(),
       );
 }
 
@@ -197,10 +219,12 @@ class Bet {
         _ => null,
       };
 
-  Bet copyWith({int? id, BetStatus? status, double? cashout, String? date, String? created, double? stake}) => Bet(
+  Bet copyWith(
+          {int? id, BetStatus? status, double? cashout, String? date, String? created, double? stake, List<BetLeg>? legs}) =>
+      Bet(
         id: id ?? this.id, type: type, selection: selection, event: event, sport: sport, date: date ?? this.date,
         stake: stake ?? this.stake, odds: odds, book: book, status: status ?? this.status,
-        cashout: cashout ?? this.cashout, notes: notes, created: created ?? this.created, legs: legs,
+        cashout: cashout ?? this.cashout, notes: notes, created: created ?? this.created, legs: legs ?? this.legs,
         market: market, matchId: matchId, leagueSlug: leagueSlug, leagueName: leagueName, kickoff: kickoff,
       );
 

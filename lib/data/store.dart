@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../l10n/l10n.dart';
 import '../logic/community.dart';
+import '../logic/nba_stake.dart';
 import '../logic/pro_tips.dart';
 import '../logic/stake_stats.dart';
 import '../logic/stats.dart';
@@ -63,6 +64,7 @@ class BankStore extends ChangeNotifier {
     await _loadTips();
     await _loadStake();
     await _loadCommunity();
+    await _loadProStakes();
     loaded = true;
     notifyListeners();
   }
@@ -78,6 +80,15 @@ class BankStore extends ChangeNotifier {
   }
 
   Future<void> settle(Bet b, BetStatus status) => saveBet(b.copyWith(status: status));
+
+  /// Saves results worked out from final scores: one write each, one reload.
+  Future<void> saveSettled(List<Bet> settled) async {
+    if (settled.isEmpty) return;
+    for (final b in settled) {
+      await _db.saveBet(b);
+    }
+    await load();
+  }
 
   Future<void> saveTx(BankTx t) async {
     await _db.saveTx(t);
@@ -331,6 +342,32 @@ class BankStore extends ChangeNotifier {
     return null;
   }
 
+  /// Settles every community bet on [matchId] with its final score: the
+  /// challenge, the bets bought, the user's bets for sale and free bets.
+  Future<void> settleCommunity(String matchId, int home, int away) async {
+    if (challenge.bets.any((b) => b.matchId == matchId && !b.settled)) await settleChallenge(matchId, home, away);
+    if (myFreeBets.any((l) => l.bet.matchId == matchId && !l.bet.settled)) await settleFreeBets(matchId, home, away);
+    Listing settle(Listing l) => l.bet.matchId == matchId && !l.bet.settled ? l.settle(home, away) : l;
+    if (boughtListings.values.any((l) => l.bet.matchId == matchId && !l.bet.settled)) {
+      boughtListings = {for (final e in boughtListings.entries) e.key: settle(e.value)};
+      notifyListeners();
+      await _db.setPref('community.bought', jsonEncode({for (final e in boughtListings.entries) e.key: e.value.toJson()}));
+    }
+    if (myListings.any((l) => l.bet.matchId == matchId && !l.bet.settled)) {
+      myListings = [for (final l in myListings) settle(l)];
+      notifyListeners();
+      await _db.setPref('community.selling', jsonEncode([for (final x in myListings) x.toJson()]));
+    }
+  }
+
+  /// Every community bet still waiting for its result.
+  Iterable<CommunityBet> get openCommunityBets => [
+        for (final b in challenge.bets) b,
+        for (final l in myFreeBets) l.bet,
+        for (final l in boughtListings.values) l.bet,
+        for (final l in myListings) l.bet,
+      ].where((b) => !b.settled);
+
   /// Settles the user's free bets on [matchId] with its final score.
   Future<void> settleFreeBets(String matchId, int home, int away) => _saveFreeBets([
         for (final l in myFreeBets) l.bet.matchId == matchId && !l.bet.settled ? l.settle(home, away) : l,
@@ -340,6 +377,43 @@ class BankStore extends ChangeNotifier {
     following = following.contains(handle) ? ({...following}..remove(handle)) : {...following, handle};
     notifyListeners();
     await _db.setPref('community.following', jsonEncode(following.toList()));
+  }
+
+  // Pro stakes
+  /// The NBA pro stakes bought, newest first.
+  List<ProStake> proStakes = [];
+
+  Future<void> _loadProStakes() async {
+    try {
+      final raw = await _db.pref('prostakes');
+      proStakes = [for (final j in (raw == null ? const [] : jsonDecode(raw) as List)) ?ProStake.fromJson(j)];
+    } catch (_) {
+      proStakes = [];
+    }
+  }
+
+  Future<void> _saveProStakes() async {
+    notifyListeners();
+    await _db.setPref('prostakes', jsonEncode([for (final p in proStakes) p.toJson()]));
+  }
+
+  /// Spends [proStakeCost] tokens on [stake] and keeps it. False when there
+  /// aren't enough tokens.
+  Future<bool> buyProStake(ProStake stake) async {
+    if (tokens < stake.cost) return false;
+    tokens -= stake.cost;
+    proStakes = [stake, ...proStakes];
+    await _saveTips();
+    await _saveProStakes();
+    return true;
+  }
+
+  /// Replaces pro stakes with newer versions of themselves (results in).
+  Future<void> updateProStakes(List<ProStake> changed) async {
+    if (changed.isEmpty) return;
+    final byId = {for (final p in changed) p.id: p};
+    proStakes = [for (final p in proStakes) byId[p.id] ?? p];
+    await _saveProStakes();
   }
 
   // Matchboard

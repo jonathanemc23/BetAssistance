@@ -30,10 +30,14 @@ class _Leg {
         event = TextEditingController(text: l?.event ?? ''),
         odds = TextEditingController(),
         sport = l?.sport ?? 'Soccer',
-        status = l?.status ?? BetStatus.pending;
+        status = l?.status ?? BetStatus.pending,
+        link = l != null && l.isLinked ? l : null;
   final TextEditingController selection, event, odds;
   String sport;
   BetStatus status;
+
+  /// The match the leg was picked from, kept while its event is unchanged.
+  BetLeg? link;
 
   void dispose() {
     selection.dispose();
@@ -128,13 +132,20 @@ class _BetFormPageState extends State<BetFormPage> {
 
   List<BetLeg> get _builtLegs => [
         for (final l in _legs)
-          BetLeg(
-            selection: l.selection.text.trim(),
-            event: l.event.text.trim(),
-            sport: l.sport,
-            odds: _parse(l.odds.text) ?? 1,
-            status: l.status,
-          ),
+          () {
+            final link = l.link != null && l.link!.event == l.event.text.trim() ? l.link : null;
+            return BetLeg(
+              selection: l.selection.text.trim(),
+              event: l.event.text.trim(),
+              sport: l.sport,
+              odds: _parse(l.odds.text) ?? 1,
+              status: l.status,
+              matchId: link?.matchId,
+              leagueSlug: link?.leagueSlug,
+              leagueName: link?.leagueName,
+              kickoff: link?.kickoff,
+            );
+          }(),
       ];
 
   /// Combined decimal odds, or null while incomplete.
@@ -256,6 +267,9 @@ class _BetFormPageState extends State<BetFormPage> {
       target.event.text = m.title;
       target.sport = m.league.knownSport.label;
       target.odds.text = formatOdds(odds, _settings.oddsFormat);
+      target.link = BetLeg(
+          selection: sel, event: m.title, odds: odds, matchId: m.id, leagueSlug: m.league.slug,
+          leagueName: m.league.name, kickoff: m.kickoff);
     });
   }
 

@@ -4,6 +4,7 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'data/bet_settler.dart';
 import 'data/database.dart';
 import 'l10n/l10n.dart';
 import 'data/fixtures.dart';
@@ -28,7 +29,12 @@ Future<void> main() async {
   final store = BankStore(db);
   await store.load();
   final fixtures = FixturesApi();
-  LiveAlertService(store: store, api: fixtures, sink: NotificationSink()).start();
+  LiveAlertService(
+    store: store,
+    api: fixtures,
+    sink: NotificationSink(),
+    settler: BetSettler(store: store, api: fixtures),
+  ).start();
   runApp(BankTrackApp(store: store, fixtures: fixtures, links: AppLinks().uriLinkStream));
 }
 

@@ -116,7 +116,7 @@ class MatchSnapshot {
       });
 }
 
-enum AlertKind { kickoff, score, finalResult }
+enum AlertKind { kickoff, score, finalResult, settled }
 
 class LiveAlert {
   const LiveAlert(this.kind, this.matchId, this.title, this.body);
