@@ -19,6 +19,20 @@ target iOS later.
   scores (`FixturesApi.stakeStats`). Pick over/under lines from one or more
   matches; Validate checks each pick by its hit rate before kick-off and by
   the match's own stats once it starts (`lib/logic/stake_stats.dart`).
+- **NBA pro tip** (top of the Stake builder, locked, 6 tokens): reads the
+  day's NBA games and builds 2 or 3 player lines ("20+ points: Kevin
+  Durant") from each team's leaders, total odds 2.40 to 3.70
+  (`lib/logic/nba_stake.dart`). Lines are random for now, each set under the
+  player's season average to match its price. With no game left to start
+  the button reads "No NBA matches today, try again tomorrow" and takes no
+  tokens. Pro tips settle from ESPN's box score and log as a parlay.
+- **Automatic results**: `lib/data/bet_settler.dart` puts in the result of
+  open bets once their match is over: singles and parlay legs picked from
+  the Matches list (legs now keep their match), Parlay builder parlays,
+  community bets (challenge, bought, for sale, free bets) and NBA pro tips.
+  Markets the score can't settle (corners, cards, scorers) stay for the
+  user. It runs when the app starts, after each full time and every 10
+  minutes, and sends a "Bet won/lost" notification when alerts are on.
 - **Community** (side menu, under Bet Tools): a community profile is needed
   to join. The community page has a Become a pro bettor button on top (how
   the challenge works and its requirements: 30 bets that can't be changed,

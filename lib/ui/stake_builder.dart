@@ -7,6 +7,7 @@ import '../l10n/l10n.dart';
 import '../logic/stake_stats.dart';
 import 'format.dart';
 import 'matches_screen.dart' show TeamLogo;
+import 'pro_stake.dart';
 import 'pro_tips_page.dart' show TipMatchLine;
 
 Future<void> openStakeBuilder(BuildContext context, {required BankStore store, required FixturesApi api, DateTime? today}) =>
@@ -119,8 +120,13 @@ class _StakeBuilderPageState extends State<StakeBuilderPage> {
               ],
             ),
             body: picks.isEmpty
-                ? _Empty(onPick: _addMatch)
+                ? ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
+                    ProStakeSection(store: store, api: widget.api, today: widget.today),
+                    _Empty(onPick: _addMatch),
+                  ])
                 : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
+                    ProStakeSection(store: store, api: widget.api, today: widget.today),
+                    const SizedBox(height: 12),
                     if (review != null) ...[_ReviewCard(review: review), const SizedBox(height: 12)],
                     for (final group in byMatch.values) ...[
                       _MatchGroup(
@@ -173,7 +179,7 @@ class _Empty extends StatelessWidget {
     final cs = theme.colorScheme;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.query_stats, size: 56, color: cs.primary),
           const SizedBox(height: 16),

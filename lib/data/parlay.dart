@@ -158,7 +158,17 @@ class ParlayLeg {
           detail: '',
         );
 
-  BetLeg asBetLeg() => BetLeg(selection: selection, event: event, sport: sport, odds: odds, status: status);
+  BetLeg asBetLeg() => BetLeg(
+        selection: selection,
+        event: event,
+        sport: sport,
+        odds: odds,
+        status: status,
+        matchId: isLinked ? matchId : null,
+        leagueSlug: isLinked ? leagueSlug : null,
+        leagueName: isLinked ? leagueName : null,
+        kickoff: isLinked ? kickoff : null,
+      );
 
   ParlayLeg copyWith({BetStatus? status}) => ParlayLeg(
         id: id, selection: selection, event: event, sport: sport, odds: odds, status: status ?? this.status,
