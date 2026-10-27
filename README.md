@@ -1,7 +1,7 @@
 # Bank Track (mobile MVP)
 
-Flutter app for tracking a betting bankroll. Android first; the same code can
-target iOS later.
+Flutter app for tracking a betting bankroll, for Android and iPhone from the
+same code (see [iPhone](#iphone) below).
 
 ## What's in it
 
@@ -72,7 +72,7 @@ target iOS later.
   `banktrack://bet?d=<code>` links and pasted links (link icon on the Bets tab).
   The page is published by `.github/workflows/pages.yml` from `web/`; GitHub
   Pages must be enabled with source "GitHub Actions".
-- **Live alerts**: Android notifications on kick-off, every goal (score
+- **Live alerts**: Notifications (Android and iPhone) on kick-off, every goal (score
   change) and full time for matches in pending bets picked from Matches and
   in open parlays' linked legs. `lib/data/live_alert_service.dart` reads
   those matches from the feed once a minute while the app runs (open or in
@@ -132,6 +132,70 @@ install that on a real phone, since later signed releases can't update it.
 To sign CI builds with the release key, add two repository secrets:
 `KEYSTORE_BASE64` (`base64 -w0 android/app/banktrack-release.jks`) and
 `KEY_PROPERTIES` (the contents of `android/key.properties`).
+
+## iPhone
+
+`ios/` is the iPhone app: bundle id `com.banktrack.app` (same as Android),
+shown as BetPilot, iOS 15.5 or newer (ML Kit's text recognition needs it),
+iPhone only. Everything in the app works the same, with these iPhone notes:
+
+- **Live alerts and automatic results** run while the app is open. iOS
+  pauses an app a few seconds after it goes to the background, so unlike
+  Android they don't keep checking with the app closed; they catch up when it
+  is opened again. Alerts are asked for when switched on in Settings.
+- **Share links**: `banktrack://bet?d=...` opens the app. The web link
+  (`https://jonathanemc23.github.io/BetAssistance/b/...`) opens the web page,
+  whose "Open in app" button uses the `banktrack://` link. Opening the web link
+  straight in the app would need an `apple-app-site-association` file at the
+  root of `jonathanemc23.github.io` and the Associated Domains capability.
+- **Photos**: picking an avatar or a bet slip asks for photo access
+  (`NSPhotoLibraryUsageDescription` in `ios/Runner/Info.plist`).
+
+Building needs a Mac with Xcode and CocoaPods:
+
+```sh
+flutter run                          # on a connected iPhone or the simulator
+flutter build ios --release --no-codesign
+```
+
+The iPhone keeps the database in the app's private storage too; it survives
+updates as long as the bundle id stays `com.banktrack.app`.
+
+### iOS CI and TestFlight
+
+`.github/workflows/ios.yml` builds the iPhone app on a macOS runner. Without
+secrets it builds unsigned, as a check. With the secrets below it builds a
+signed IPA (kept as a workflow artifact), and on `main` uploads it to
+TestFlight. Apple takes each build number once, so bump `version:` in
+`pubspec.yaml` (the number after `+`) for each upload.
+
+What's needed from the Apple side, all under one Apple Developer Program
+membership (paid, yearly):
+
+1. **App ID** `com.banktrack.app` (Certificates, Identifiers & Profiles), with
+   Push Notifications left off (alerts are local).
+2. **App record** in App Store Connect with that bundle id.
+3. **Apple Distribution certificate**, exported from Keychain as a `.p12`
+   with a password.
+4. **App Store provisioning profile** for `com.banktrack.app` using that
+   certificate.
+5. **App Store Connect API key** (Users and Access, Integrations, role App
+   Manager): its Key ID, Issuer ID and the `.p8` file.
+
+Repository secrets (Settings, Secrets and variables, Actions):
+
+| Secret | Value |
+| --- | --- |
+| `APPLE_TEAM_ID` | 10-character team id (Membership details) |
+| `IOS_DIST_CERT_P12_BASE64` | `base64 -i dist.p12` |
+| `IOS_DIST_CERT_PASSWORD` | the `.p12` password |
+| `IOS_PROVISION_PROFILE_BASE64` | `base64 -i BankTrack_AppStore.mobileprovision` |
+| `ASC_KEY_ID` | API key id |
+| `ASC_ISSUER_ID` | API issuer id |
+| `ASC_KEY_P8_BASE64` | `base64 -i AuthKey_XXXX.p8` |
+
+The workflow writes `ios/Flutter/Signing.xcconfig` from them (never
+committed). No Firebase or push setup is needed.
 
 ## Community server (`backend/`)
 
