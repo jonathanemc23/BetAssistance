@@ -164,7 +164,10 @@ updates as long as the bundle id stays `com.banktrack.app`.
 ### iOS CI and TestFlight
 
 `.github/workflows/ios.yml` builds the iPhone app on a macOS runner. Without
-secrets it builds unsigned, as a check. With the secrets below it builds a
+secrets it builds an unsigned IPA (workflow artifact, and on `main` attached
+to the version's GitHub release). iPhones only install it through a
+sideloading tool such as Sideloadly or AltStore, which signs it with your own
+Apple ID; with a free Apple ID it has to be reinstalled every 7 days. With the secrets below it builds a
 signed IPA (kept as a workflow artifact), and on `main` uploads it to
 TestFlight. Apple takes each build number once, so bump `version:` in
 `pubspec.yaml` (the number after `+`) for each upload.
