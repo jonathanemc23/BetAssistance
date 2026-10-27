@@ -131,7 +131,7 @@ class LiveAlertService {
   }
 }
 
-/// Android notifications through flutter_local_notifications.
+/// Android and iPhone notifications through flutter_local_notifications.
 class NotificationSink implements AlertSink {
   final _plugin = FlutterLocalNotificationsPlugin();
   Future<bool>? _ready;
@@ -148,7 +148,15 @@ class NotificationSink implements AlertSink {
   Future<bool> _init() => _ready ??= () async {
         try {
           return await _plugin.initialize(
-                settings: const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
+                settings: const InitializationSettings(
+                  android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+                  // Asked for in requestPermission, when alerts are switched on.
+                  iOS: DarwinInitializationSettings(
+                    requestAlertPermission: false,
+                    requestBadgePermission: false,
+                    requestSoundPermission: false,
+                  ),
+                ),
               ) ??
               false;
         } catch (e) {
@@ -162,7 +170,9 @@ class NotificationSink implements AlertSink {
     if (!await _init()) return false;
     try {
       final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-      return await android?.requestNotificationsPermission() ?? true;
+      if (android != null) return await android.requestNotificationsPermission() ?? true;
+      final ios = _plugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+      return await ios?.requestPermissions(alert: true, sound: true) ?? true;
     } catch (_) {
       return false;
     }
@@ -185,6 +195,7 @@ class NotificationSink implements AlertSink {
           category: _channel.category,
           styleInformation: BigTextStyleInformation(alert.body),
         ),
+        iOS: const DarwinNotificationDetails(threadIdentifier: 'live_bets'),
       ),
     );
   }

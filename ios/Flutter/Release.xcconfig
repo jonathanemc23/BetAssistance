@@ -1,0 +1,5 @@
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
+#include "Generated.xcconfig"
+// Distribution signing, written by .github/workflows/ios.yml from the
+// repository secrets. Never committed; without it Xcode signs automatically.
+#include? "Signing.xcconfig"
