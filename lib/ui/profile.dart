@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -174,7 +173,7 @@ Future<void> pickAvatar(
                   onPressed: () async {
                     final path = await pickAvatarPhoto();
                     if (path == null) return;
-                    final bytes = await File(path).readAsBytes();
+                    final bytes = await XFile(path).readAsBytes();
                     await onPick('photo:${base64Encode(bytes)}');
                   },
                   icon: const Icon(Icons.photo_library_outlined),

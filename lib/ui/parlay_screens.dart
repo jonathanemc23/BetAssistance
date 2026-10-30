@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
@@ -31,15 +32,18 @@ class ParlaysPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(tr('Parlay builder'))),
       floatingActionButton: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
-        FloatingActionButton.extended(
-          heroTag: 'slip',
-          onPressed: () => importSlip(context, store: store, api: api),
-          backgroundColor: cs.secondaryContainer,
-          foregroundColor: cs.onSecondaryContainer,
-          icon: const Icon(Icons.document_scanner_outlined),
-          label: Text(tr('From screenshot')),
-        ),
-        const SizedBox(height: 12),
+        // Reading slips uses ML Kit on the phone, which has no web version.
+        if (!kIsWeb) ...[
+          FloatingActionButton.extended(
+            heroTag: 'slip',
+            onPressed: () => importSlip(context, store: store, api: api),
+            backgroundColor: cs.secondaryContainer,
+            foregroundColor: cs.onSecondaryContainer,
+            icon: const Icon(Icons.document_scanner_outlined),
+            label: Text(tr('From screenshot')),
+          ),
+          const SizedBox(height: 12),
+        ],
         FloatingActionButton.extended(
           heroTag: 'new',
           onPressed: () async {

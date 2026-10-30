@@ -1,12 +1,15 @@
-name: Share-link page
+name: Web app
 
-# Publishes web/ to GitHub Pages, so shared bet links
-# (https://jonathanemc23.github.io/BetAssistance/b/#...) open a page that
-# shows the bet and hands it to the app.
+# Builds the web version of the app and publishes it with the share-link page
+# to GitHub Pages:
+#   https://jonathanemc23.github.io/BetAssistance/     the app (add it to the
+#                                                      iPhone home screen from Safari)
+#   https://jonathanemc23.github.io/BetAssistance/b/   shared bet links
+# Pages must be switched on once: Settings > Pages > Source: GitHub Actions.
 on:
   push:
     branches: [main]
-    paths: ['web/**', '.github/workflows/pages.yml']
+    paths: ['lib/**', 'web/**', 'assets/**', 'pubspec.*', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -26,9 +29,16 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # CanvasKit is served from the site itself instead of Google's CDN.
+      - run: flutter build web --release --base-href /BetAssistance/ --no-web-resources-cdn
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: web
+          path: build/web
       - id: deploy
         uses: actions/deploy-pages@v4
