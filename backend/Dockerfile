@@ -9,7 +9,6 @@ RUN mvn -B -q package -DskipTests
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /src/target/community-*.jar app.jar
-COPY docker-entrypoint.sh /app/
 ENV PORT=8080
 EXPOSE 8080
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

@@ -77,10 +77,9 @@ here, by Web Push, the way Safari delivers notifications to a closed web app.
 - `WebPush` encrypts each message for the browser (RFC 8291) and signs it with
   the server's VAPID key (RFC 8292), plain JDK crypto. The key pair is made on
   first start and kept in `push_keys`; `GET /push/key` hands out the public half.
-- A free cron-job.org job calls `POST /push/tick` every minute (header
-  `X-Tick-Key`, the `PUSH_TICK_KEY` setting). That runs a round and keeps
-  Render's free server from going to sleep; the job also runs on its own
-  timer while the server is up.
+- Cloud Run sleeps between requests, so a Cloud Scheduler job calls
+  `POST /push/tick` every minute (header `X-Tick-Key`, the `PUSH_TICK_KEY`
+  setting). Elsewhere the job also runs on its own timer.
 - Subscriptions Apple or Google say are gone, and phones silent for 30 days,
   are dropped.
 
@@ -89,27 +88,25 @@ here, by Web Push, the way Safari delivers notifications to a closed web app.
 | `GET /push/key` | The public key to subscribe with |
 | `PUT /push/devices` | `{subscription, lang, matches}`: save the phone and the matches it follows |
 | `DELETE /push/devices` | `{endpoint}`: alerts switched off |
-| `POST /push/tick` | Run a round now (cron-job.org) |
+| `POST /push/tick` | Run a round now (Cloud Scheduler) |
 
-## Deploy (Render + Neon + cron-job.org, all free, no card)
+## Deploy (Google Cloud Run + Neon)
 
-1. **Database:** at neon.tech, create a project and copy the connection
-   string from Connect (`postgresql://...?sslmode=require`). The server takes
-   it as it is.
-2. **Server:** at render.com, sign in with GitHub, then New > Blueprint and
-   pick this repository. `render.yaml` sets up the `banktrack` service on the
-   free plan; paste the Neon string when it asks for `DATABASE_URL`. Render
-   deploys again on every change to main. Note the address it shows
-   (`https://banktrack-....onrender.com`) and, under Environment, the
-   generated `PUSH_TICK_KEY`.
-3. **Every minute:** at cron-job.org, create a job for
-   `https://<render address>/push/tick`, every minute, method POST, with
-   the header `X-Tick-Key: <PUSH_TICK_KEY>` (Advanced tab).
-4. **Web app:** in GitHub, Settings > Secrets and variables > Actions >
-   Variables, add `PUSH_SERVER_URL` = the Render address, then Actions > Web
-   app > Run workflow.
+`.github/workflows/backend-deploy.yml` deploys on every change to `backend/`
+on main, or by hand from Actions > Deploy server > Run workflow. After it, the
+web app is rebuilt and finds the server by itself. It needs two repository
+secrets (Settings > Secrets and variables > Actions):
 
-The Dockerfile runs on any container host if the app outgrows the free plan.
+1. **`DATABASE_URL`**: at neon.tech, create a project (free), then copy the
+   connection string from Connect (`postgresql://...?sslmode=require`).
+2. **`GCP_SA_KEY`**: in a Google Cloud project with billing on
+   (console.cloud.google.com; light use stays in the free tier, a budget
+   alert at $10 is a good idea):
+   - IAM & Admin > Service Accounts > Create, name `github-deploy`, with the
+     roles Cloud Run Admin, Cloud Build Editor, Artifact Registry Administrator,
+     Storage Admin, Service Account User, Cloud Scheduler Admin and Service
+     Usage Admin.
+   - Open it > Keys > Add key > JSON, and paste the whole file as the secret.
 
 ## Sign-in
 
