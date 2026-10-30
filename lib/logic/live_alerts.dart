@@ -31,12 +31,12 @@ const watchLiveAfter = Duration(hours: 8);
 /// open parlays' linked legs, that are about to start or being played at
 /// [now]. [seen] is what the last poll read, by match id.
 List<WatchedMatch> watchedMatches(List<Bet> bets, List<Parlay> parlays, DateTime now,
-    {Map<String, MatchSnapshot> seen = const {}}) {
+    {Map<String, MatchSnapshot> seen = const {}, Duration before = watchBefore}) {
   final byId = <String, (Match, String, List<String>)>{};
   void add(Match m, String sport, String pick) {
     final last = seen[m.id];
     if (last != null && last.state == MatchState.finished) return;
-    final from = m.kickoff.subtract(watchBefore);
+    final from = m.kickoff.subtract(before);
     final to = m.kickoff.add(last?.state == MatchState.live ? watchLiveAfter : watchAfter);
     if (now.isBefore(from) || now.isAfter(to)) return;
     final w = byId.putIfAbsent(m.id, () => (m, sport, []));
@@ -78,6 +78,27 @@ List<WatchedMatch> watchedMatches(List<Bet> bets, List<Parlay> parlays, DateTime
   }
   return [for (final (m, sport, picks) in byId.values) WatchedMatch(m, sport, picks)];
 }
+
+/// How far ahead the alert server is told about matches with open bets.
+const pushAhead = Duration(days: 7);
+
+/// The matches the alert server follows for this phone (see
+/// data/push_alerts.dart): those in open bets that start within
+/// [pushAhead] or are being played, as it takes them. Only ESPN leagues:
+/// the server reads ESPN's feed.
+List<Map<String, Object>> pushMatches(List<Bet> bets, List<Parlay> parlays, DateTime now) => [
+      for (final w in watchedMatches(bets, parlays, now, before: pushAhead))
+        if (w.match.league.onEspn)
+          {
+            'id': w.match.id,
+            'feed': '${w.match.league.knownSport.espn}/${w.match.league.slug}',
+            'sport': w.sport,
+            'kickoff': w.match.kickoff.toUtc().toIso8601String(),
+            'home': w.match.home.name,
+            'away': w.match.away.name,
+            'picks': [for (final p in w.picks) trPick(p)],
+          },
+    ];
 
 /// What a poll last read for a match, kept so the next poll (even after the
 /// app restarts) only alerts on what changed.
