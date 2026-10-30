@@ -65,9 +65,10 @@
     (bet.b ? `<div class="muted" style="margin-top:6px">Bookmaker: ${esc(bet.b)}</div>` : "");
   const fallback = encodeURIComponent("https://github.com/jonathanemc23/BetAssistance/releases/latest");
   const android = /Android/i.test(navigator.userAgent);
+  // Android opens the installed app; iPhone and computers open the web app.
   document.getElementById("open").href = android
     ? `intent://bet?d=${code}#Intent;scheme=banktrack;package=com.banktrack.app;S.browser_fallback_url=${fallback};end`
-    : `banktrack://bet?d=${code}`;
+    : `https://jonathanemc23.github.io/BetAssistance/?d=${code}`;
   document.getElementById("copy").onclick = async () => {
     try { await navigator.clipboard.writeText(location.href); document.getElementById("copy").textContent = "Link copied"; }
     catch { prompt("Copy this link", location.href); }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 import '../data/fixtures.dart';
@@ -58,6 +59,8 @@ class ClaudeAssistant implements MatchAssistant {
                 'anthropic-version': '2023-06-01',
                 'anthropic-beta': 'server-side-fallback-2026-07-01',
                 'content-type': 'application/json',
+                // The web version calls the API from the browser with the user's own key.
+                if (kIsWeb) 'anthropic-dangerous-direct-browser-access': 'true',
               },
               body: jsonEncode({
                 'model': model,

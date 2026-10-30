@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:sqflite/sqflite.dart' show databaseFactory;
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 import 'data/bet_settler.dart';
 import 'data/database.dart';
@@ -25,6 +28,8 @@ import 'ui/tools_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // In the browser the database is SQLite in WebAssembly, kept in IndexedDB.
+  if (kIsWeb) databaseFactory = databaseFactoryFfiWeb;
   final db = await AppDatabase.open();
   final store = BankStore(db);
   await store.load();
@@ -35,8 +40,12 @@ Future<void> main() async {
     sink: NotificationSink(),
     settler: BetSettler(store: store, api: fixtures),
   ).start();
-  runApp(BankTrackApp(store: store, fixtures: fixtures, links: AppLinks().uriLinkStream));
+  runApp(BankTrackApp(store: store, fixtures: fixtures, links: AppLinks().uriLinkStream.where(_isBetLink)));
 }
+
+/// On the web every launch reports the page address as a link; only
+/// `?d=<code>` (from the share page) is a bet.
+bool _isBetLink(Uri uri) => !kIsWeb || uri.queryParameters.containsKey('d');
 
 class BankTrackApp extends StatelessWidget {
   const BankTrackApp({super.key, required this.store, this.links, this.fixtures, this.today});

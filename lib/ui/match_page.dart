@@ -695,6 +695,7 @@ class _NewsTab extends StatelessWidget {
                   aspectRatio: 16 / 9,
                   child: Image.network(n.image!,
                       fit: BoxFit.cover,
+                      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
                       errorBuilder: (_, _, _) => Container(color: cs.surfaceContainerHighest)),
                 ),
               Padding(

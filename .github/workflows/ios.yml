@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -27,6 +27,38 @@ jobs:
       - name: Build unsigned
         if: env.HAS_SIGNING != 'true'
         run: flutter build ios --release --no-codesign
+
+      # An unsigned IPA can't be installed as is. Sideloading tools (Sideloadly,
+      # AltStore) sign it with the user's own Apple ID; with a free Apple ID the
+      # app stops opening after 7 days until it is installed again.
+      - name: Package unsigned IPA
+        if: env.HAS_SIGNING != 'true'
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//')
+          TAG="v${VERSION/+/-build}"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          mkdir -p build/unsigned/Payload
+          cp -R build/ios/iphoneos/Runner.app build/unsigned/Payload/
+          (cd build/unsigned && zip -qry "bank-track-${TAG}-unsigned.ipa" Payload)
+
+      - uses: actions/upload-artifact@v5
+        if: env.HAS_SIGNING != 'true'
+        with:
+          name: bank-track-ipa-unsigned
+          path: build/unsigned/*.ipa
+
+      # Attach it to the version's GitHub release, next to the Android APK.
+      - name: Publish unsigned IPA
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.HAS_SIGNING != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILE="build/unsigned/bank-track-${TAG}-unsigned.ipa"
+          NOTES="iPhone: bank-track-${TAG}-unsigned.ipa is not signed by Apple. Install it with Sideloadly or AltStore and your Apple ID; with a free Apple ID it has to be reinstalled every 7 days."
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Bank Track ${TAG}" --notes "$NOTES" || true
+          fi
+          gh release upload "$TAG" "$FILE" --clobber
 
       # With them, sign for the App Store with the distribution certificate and
       # provisioning profile for com.banktrack.app.

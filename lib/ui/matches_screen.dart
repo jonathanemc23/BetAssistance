@@ -1030,6 +1030,8 @@ class TeamLogo extends StatelessWidget {
       width: size,
       height: size,
       errorBuilder: (_, _, _) => fallback,
+      // Web: crests from hosts without CORS still show, as plain <img> tags.
+      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
       loadingBuilder: (_, child, p) => p == null ? child : SizedBox(width: size, height: size),
     );
   }

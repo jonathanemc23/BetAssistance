@@ -61,6 +61,9 @@ class LiveAlertService {
   /// so it is allowed before the first match to follow comes up.
   Future<void> _askOnce() async {
     try {
+      // Browsers only show the prompt after a tap (switching alerts on in
+      // Settings) and may block a site that asks on its own.
+      if (kIsWeb) return;
       if (await store.pref(alertsEnabledPref) == '0' || await store.pref(_askedPref) != null) return;
       await store.setPref(_askedPref, '1');
       await sink.requestPermission();
@@ -156,6 +159,7 @@ class NotificationSink implements AlertSink {
                     requestBadgePermission: false,
                     requestSoundPermission: false,
                   ),
+                  web: WebInitializationSettings(),
                 ),
               ) ??
               false;
@@ -172,7 +176,9 @@ class NotificationSink implements AlertSink {
       final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
       if (android != null) return await android.requestNotificationsPermission() ?? true;
       final ios = _plugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
-      return await ios?.requestPermissions(alert: true, sound: true) ?? true;
+      if (ios != null) return await ios.requestPermissions(alert: true, sound: true) ?? true;
+      final web = _plugin.resolvePlatformSpecificImplementation<WebFlutterLocalNotificationsPlugin>();
+      return await web?.requestNotificationsPermission() ?? true;
     } catch (_) {
       return false;
     }

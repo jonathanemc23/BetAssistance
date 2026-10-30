@@ -1,7 +1,7 @@
 # Bank Track (mobile MVP)
 
-Flutter app for tracking a betting bankroll, for Android and iPhone from the
-same code (see [iPhone](#iphone) below).
+Flutter app for tracking a betting bankroll, for Android, iPhone and the web
+from the same code (see [iPhone](#iphone) and [Web app](#web-app) below).
 
 ## What's in it
 
@@ -164,7 +164,10 @@ updates as long as the bundle id stays `com.banktrack.app`.
 ### iOS CI and TestFlight
 
 `.github/workflows/ios.yml` builds the iPhone app on a macOS runner. Without
-secrets it builds unsigned, as a check. With the secrets below it builds a
+secrets it builds an unsigned IPA (workflow artifact, and on `main` attached
+to the version's GitHub release). iPhones only install it through a
+sideloading tool such as Sideloadly or AltStore, which signs it with your own
+Apple ID; with a free Apple ID it has to be reinstalled every 7 days. With the secrets below it builds a
 signed IPA (kept as a workflow artifact), and on `main` uploads it to
 TestFlight. Apple takes each build number once, so bump `version:` in
 `pubspec.yaml` (the number after `+`) for each upload.
@@ -196,6 +199,35 @@ Repository secrets (Settings, Secrets and variables, Actions):
 
 The workflow writes `ios/Flutter/Signing.xcconfig` from them (never
 committed). No Firebase or push setup is needed.
+
+## Web app
+
+The same app runs in the browser at
+**https://jonathanemc23.github.io/BetAssistance/**, published by
+`.github/workflows/pages.yml` on every push to `main` that changes the app.
+GitHub Pages has to be switched on once: Settings, Pages, Source: GitHub
+Actions.
+
+On iPhone, open it in Safari, tap Share, then **Add to Home Screen**: it gets
+the BetPilot icon and opens full screen like an app. Data is kept in the
+browser (SQLite in WebAssembly, stored in IndexedDB), separate from any
+installed app. Removing the home screen icon or clearing Safari's website data
+deletes it. Differences from the phone apps:
+
+- **Bet slip from screenshot** is hidden: ML Kit has no web version.
+- **Live alerts** need the home screen version on iPhone (iOS 16.4 or newer)
+  and come only while it's open. Switch alerts on in Settings to be asked.
+- **Shared bet links** on iPhone and computers open the web app
+  (`?d=<code>`); on Android they still open the installed app.
+
+```sh
+flutter run -d chrome
+flutter build web --release --base-href /BetAssistance/ --no-web-resources-cdn
+```
+
+`web/sqflite_sw.js` and `web/sqlite3.wasm` come from
+`dart run sqflite_common_ffi_web:setup`; run it again after upgrading
+`sqflite_common_ffi_web`.
 
 ## Community server (`backend/`)
 
