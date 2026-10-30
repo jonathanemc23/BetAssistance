@@ -1,0 +1,22 @@
+# The Bank Track server (backend/) on Render's free plan. In Render:
+# New > Blueprint, pick this repository; it asks for DATABASE_URL (Neon's
+# connection string). See backend/README.md.
+services:
+  - type: web
+    name: banktrack
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    # Only server changes start a new deploy.
+    buildFilter:
+      paths: ['backend/**']
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      # cron-job.org sends it as the X-Tick-Key header to POST /push/tick.
+      - key: PUSH_TICK_KEY
+        generateValue: true

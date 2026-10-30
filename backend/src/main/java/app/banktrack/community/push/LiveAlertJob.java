@@ -19,7 +19,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Once a minute, reads the matches phones follow that are about to start or being played and sends each phone
  * kick-off, every score change and full time, so alerts arrive with the app closed. Runs on its own where the
- * server stays up; where it sleeps between requests (Cloud Run), POST /push/tick runs it instead.
+ * server stays up; where it may sleep (Render's free plan), POST /push/tick from cron-job.org runs it and keeps it awake.
  */
 @Component
 public class LiveAlertJob {

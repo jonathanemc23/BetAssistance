@@ -6,19 +6,13 @@ name: Web app
 #                                                      iPhone home screen from Safari)
 #   https://jonathanemc23.github.io/BetAssistance/b/   shared bet links
 # Pages must be switched on once: Settings > Pages > Source: GitHub Actions.
-# Live alerts with the app closed need the alert server (backend/): its
-# address is the PUSH_SERVER_URL repository variable, or else the Cloud Run
-# service the "Deploy server" workflow made. Without one the app only alerts
-# while it's open.
+# Live alerts with the app closed need the alert server (backend/, on
+# Render): its address is the PUSH_SERVER_URL repository variable. Without
+# one the app only alerts while it's open.
 on:
   push:
     branches: [main]
     paths: ['lib/**', 'web/**', 'assets/**', 'pubspec.*', '.github/workflows/pages.yml']
-  # Rebuilt after the server is deployed, so the app picks up its address.
-  workflow_run:
-    workflows: ['Deploy server']
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -32,38 +26,19 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
-    env:
-      HAS_GCP: ${{ secrets.GCP_SA_KEY != '' }}
     steps:
       - uses: actions/checkout@v5
-      - uses: google-github-actions/auth@v2
-        if: env.HAS_GCP == 'true' && vars.PUSH_SERVER_URL == ''
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      - uses: google-github-actions/setup-gcloud@v2
-        if: env.HAS_GCP == 'true' && vars.PUSH_SERVER_URL == ''
-      - name: Find the alert server
-        id: server
-        env:
-          URL: ${{ vars.PUSH_SERVER_URL }}
-        run: |
-          if [ -z "$URL" ] && [ "$HAS_GCP" = true ]; then
-            URL=$(gcloud run services describe banktrack --region us-central1 --format 'value(status.url)' 2>/dev/null || true)
-          fi
-          echo "Alert server: ${URL:-none}"
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
       - run: flutter pub get
       # CanvasKit is served from the site itself instead of Google's CDN.
-      - run: flutter build web --release --base-href /BetAssistance/ --no-web-resources-cdn --dart-define=PUSH_SERVER=${{ steps.server.outputs.url }}
+      - run: flutter build web --release --base-href /BetAssistance/ --no-web-resources-cdn --dart-define=PUSH_SERVER=${{ vars.PUSH_SERVER_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
