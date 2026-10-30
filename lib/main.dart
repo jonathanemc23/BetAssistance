@@ -13,6 +13,7 @@ import 'l10n/l10n.dart';
 import 'data/fixtures.dart';
 import 'data/live_alert_service.dart';
 import 'data/models.dart';
+import 'data/push_alerts.dart';
 import 'data/store.dart';
 import 'logic/share.dart';
 import 'ui/bank_screens.dart';
@@ -39,6 +40,7 @@ Future<void> main() async {
     api: fixtures,
     sink: NotificationSink(),
     settler: BetSettler(store: store, api: fixtures),
+    push: kIsWeb ? PushAlerts.instance : null,
   ).start();
   runApp(BankTrackApp(store: store, fixtures: fixtures, links: AppLinks().uriLinkStream.where(_isBetLink)));
 }

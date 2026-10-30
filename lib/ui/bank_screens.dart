@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../data/live_alert_service.dart';
 import '../data/models.dart';
+import '../data/push_alerts.dart';
 import '../data/store.dart';
 import '../logic/claude_assistant.dart';
 import 'format.dart';
@@ -205,8 +206,16 @@ class _SettingsPageState extends State<SettingsPage> {
   /// Applies straight away, like the theme.
   Future<void> _setAlerts(bool on) async {
     setState(() => _alerts = on);
+    final push = PushAlerts.instance;
+    // Asked for before anything else: Safari only shows the prompt for a tap.
+    final asked = !on
+        ? null
+        : push.available
+            ? push.enable(widget.store)
+            : NotificationSink().requestPermission();
     await widget.store.setPref(alertsEnabledPref, on ? '1' : '0');
-    if (on) await NotificationSink().requestPermission();
+    if (asked != null) await asked;
+    if (!on && push.available) await push.disable(widget.store);
   }
 
   @override
@@ -348,8 +357,28 @@ class _SettingsPageState extends State<SettingsPage> {
           value: _alerts,
           onChanged: _setAlerts,
           title: Text(tr('Alerts for matches in open bets')),
-          subtitle: Text(tr('Kick-off, every goal and the final score for matches in your pending bets and open parlays. Checked every minute while BetPilot is open or running in the background.')),
+          subtitle: Text(PushAlerts.instance.available
+              ? tr('Kick-off, every goal and the final score for matches in your pending bets and open parlays, also with BetPilot closed. On iPhone, open BetPilot from its Home Screen icon to turn them on.')
+              : tr('Kick-off, every goal and the final score for matches in your pending bets and open parlays. Checked every minute while BetPilot is open or running in the background.')),
         ),
+        // Alerts are on from the start, but the browser only asks for a tap.
+        if (_alerts && PushAlerts.instance.available && !PushAlerts.instance.channel.permitted)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: FilledButton.tonalIcon(
+              key: const Key('alerts-allow'),
+              icon: const Icon(Icons.notifications_active_outlined),
+              label: Text(tr('Allow notifications')),
+              onPressed: () async {
+                final ok = await PushAlerts.instance.enable(widget.store);
+                if (mounted) setState(() {});
+                if (!ok && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(tr('Notifications are blocked. Allow them for BetPilot in the iPhone Settings app, under Notifications.'))));
+                }
+              },
+            ),
+          ),
         const SizedBox(height: 24),
         Text(tr('AI chat'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
