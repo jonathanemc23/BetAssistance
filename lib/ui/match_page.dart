@@ -18,6 +18,28 @@ import 'money_movement.dart';
 import 'parlay_screens.dart';
 import 'pro_tips_page.dart';
 
+/// Picking for a parlay: tapping a match goes straight to choosing a pick on
+/// it in any market, priced or not, never to logging a single bet. The pick
+/// keeps the match, so it settles from the final score.
+Future<void> pickOnMatch(BuildContext context,
+    {required Match match,
+    required BankStore store,
+    required FixturesApi api,
+    required void Function(Match match, String selection, double odds) onPick}) async {
+  final pick = await showMarketSheet(
+    context,
+    event: match.title,
+    format: store.settings.oddsFormat,
+    askOdds: true,
+    match: match,
+    action: tr('Add to parlay'),
+    onDetails: () => Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => MatchPage(match: match, store: store, api: api, onPick: onPick, initialTab: 1),
+    )),
+  );
+  if (pick != null) onPick(match, pick.selection, pick.odds!);
+}
+
 /// One match: score header, then tabs for an overview, odds, money movement, stats with a
 /// shot map, key events, line-ups, the league table, head-to-head, teams and news (ESPN
 /// summary feed).
@@ -110,6 +132,24 @@ class _MatchPageState extends State<MatchPage> {
     pickSelection(context, store: widget.store, api: widget.api, match: m, selection: selection, odds: odds);
   }
 
+  /// Every bookmaker price for the match that has loaded.
+  List<MatchOdds> get _books {
+    final d = _details?.odds ?? const <MatchOdds>[];
+    return d.isNotEmpty ? d : [?widget.match.odds];
+  }
+
+  Future<void> _addToParlay() async {
+    final m = widget.match;
+    final pick = await showMarketSheet(context,
+        event: m.title,
+        format: widget.store.settings.oddsFormat,
+        askOdds: true,
+        match: m,
+        books: _books,
+        action: tr('Add to parlay'));
+    if (pick != null && mounted) _pick(pick.selection, pick.odds!);
+  }
+
   @override
   Widget build(BuildContext context) {
     final m = widget.match;
@@ -132,11 +172,18 @@ class _MatchPageState extends State<MatchPage> {
             ),
           ],
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => openBetForm(context, widget.store, template: m.toBetTemplate(), api: widget.api),
-          icon: const Icon(Icons.add),
-          label: Text(tr('Log a bet')),
-        ),
+        // Picking for a parlay, the button adds a pick instead of logging a bet.
+        floatingActionButton: widget.onPick != null
+            ? FloatingActionButton.extended(
+                onPressed: _addToParlay,
+                icon: const Icon(Icons.playlist_add),
+                label: Text(tr('Add to parlay')),
+              )
+            : FloatingActionButton.extended(
+                onPressed: () => openBetForm(context, widget.store, template: m.toBetTemplate(), api: widget.api),
+                icon: const Icon(Icons.add),
+                label: Text(tr('Log a bet')),
+              ),
         body: Column(children: [
           _Header(match: m, details: _details),
           TabBar(
@@ -164,7 +211,7 @@ class _MatchPageState extends State<MatchPage> {
     final m = widget.match;
     return TabBarView(children: [
       _OverviewTab(match: m, details: d, format: fmt),
-      _OddsTab(match: m, details: d, format: fmt, onPick: _pick),
+      _OddsTab(match: m, details: d, format: fmt, onPick: _pick, forParlay: widget.onPick != null),
       MoneyMovementView(match: m, details: d, store: widget.store),
       _StatsTab(match: m, details: d),
       _EventsTab(match: m, details: d),
@@ -524,7 +571,9 @@ class _WinChances extends StatelessWidget {
 // ---------------------------------------------------------------- Odds
 
 class _OddsTab extends StatelessWidget {
-  const _OddsTab({required this.match, required this.details, required this.format, required this.onPick});
+  const _OddsTab(
+      {required this.match, required this.details, required this.format, required this.onPick, this.forParlay = false});
+  final bool forParlay;
   final Match match;
   final MatchDetails details;
   final OddsFormat format;
@@ -537,11 +586,20 @@ class _OddsTab extends StatelessWidget {
     final m = match;
     final more = OutlinedButton.icon(
       onPressed: () async {
-        final pick = await showMarketSheet(context, event: m.title, format: format, askOdds: true);
+        final pick = await showMarketSheet(context,
+            event: m.title,
+            format: format,
+            askOdds: true,
+            initialMarket: 'handicap',
+            match: m,
+            books: books,
+            action: forParlay ? tr('Add to parlay') : null);
         if (pick != null) onPick(pick.selection, pick.odds!);
       },
       icon: const Icon(Icons.list_alt),
-      label: Text(tr('More markets: handicap, corners, cards…')),
+      label: Text(m.league.knownSport == Sport.soccer
+          ? tr('More markets: handicap, corners, cards…')
+          : tr('More markets: handicap, totals…')),
     );
     return _list([
       if (books.isEmpty) ...[
@@ -552,7 +610,8 @@ class _OddsTab extends StatelessWidget {
             textAlign: TextAlign.center, style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
         const SizedBox(height: 16),
       ] else ...[
-        Text(tr('Tap a price to log it as a bet or add it to a parlay.'), style: theme.textTheme.bodySmall),
+        Text(forParlay ? tr('Tap a price to add it to the parlay.') : tr('Tap a price to log it as a bet or add it to a parlay.'),
+            style: theme.textTheme.bodySmall),
         const SizedBox(height: 8),
       ],
       more,

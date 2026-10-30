@@ -9,6 +9,7 @@ import '../data/models.dart';
 import '../data/parlay.dart';
 import '../data/store.dart';
 import '../logic/leg_linker.dart';
+import '../logic/markets.dart';
 import '../logic/parlay_check.dart';
 import '../logic/stats.dart';
 import 'bet_form.dart';
@@ -629,6 +630,18 @@ class _LegCard extends StatelessWidget {
               ],
             ),
           ]),
+          if (l.status == BetStatus.pending)
+            Padding(
+              padding: const EdgeInsets.only(left: 36, top: 4, right: 10),
+              child: Text(
+                !l.isLinked
+                    ? tr('Not tied to a listed match: mark its result yourself.')
+                    : scoreSettled.contains(marketOf(l.selection))
+                        ? tr('Settles by itself from the final score.')
+                        : tr('The final score does not settle this market: you mark the result.'),
+                style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ),
           if (l.status != BetStatus.pending || check != null)
             Padding(
               padding: const EdgeInsets.only(left: 36, top: 6, right: 10),

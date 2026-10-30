@@ -45,6 +45,10 @@ String trPick(String s) {
     return '${x[1]!.toLowerCase() == 'over' ? 'Más de' : 'Menos de'} ${x[2]} $unit';
   }
   if (m(r'(over|under) ([\d.,]+)') case final x?) return '${x[1]!.toLowerCase() == 'over' ? 'Más de' : 'Menos de'} ${x[2]}';
+  if (m(r'(.+) to win to nil') case final x?) return 'Gana ${x[1]} sin encajar';
+  if (m(r'(.+) (over|under) ([\d.,]+) (goals?|points?|runs?)') case final x?) {
+    return '${x[1]}: ${trPick('${x[2]} ${x[3]} ${x[4]}')}';
+  }
   if (m(r'(.+) to win') case final x?) return 'Gana ${x[1]}';
   if (m(r'(.+) or draw') case final x?) return '${x[1]} o empate';
   if (m(r'(.+) draw no bet') case final x?) return '${x[1]} (empate no válido)';
