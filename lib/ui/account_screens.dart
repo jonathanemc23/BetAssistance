@@ -1,9 +1,14 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../data/account.dart';
+import '../data/store.dart';
 import '../data/sync.dart';
 import '../l10n/l10n.dart';
+import 'profile.dart';
+import 'themes.dart';
 
 /// Sign in or create an account with an email and password, or with Google
 /// in the web app. Pops true once signed in. At launch ([atLaunch]) it also
@@ -18,6 +23,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _create = false;
@@ -30,10 +36,17 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
+    _name.dispose();
     _email.dispose();
     _password.dispose();
     super.dispose();
   }
+
+  void _mode(bool create) => setState(() {
+        _create = create;
+        _error = null;
+        _info = null;
+      });
 
   Future<void> _run(Future<String?> Function() call) async {
     setState(() {
@@ -50,8 +63,17 @@ class _LoginPageState extends State<LoginPage> {
     if (error == null && account.signedIn) Navigator.pop(context, true);
   }
 
-  Future<void> _submit() => _run(
-      () => _create ? account.signUp(_email.text, _password.text) : account.signIn(_email.text, _password.text));
+  Future<void> _submit() => _run(() async {
+        if (!_create) return account.signIn(_email.text, _password.text);
+        final error = await account.signUp(_email.text, _password.text);
+        // The name on the new account becomes the profile name, unless one
+        // is already set on this device.
+        final name = _name.text.trim();
+        if (error == null && name.isNotEmpty && account.store.profileName.isEmpty) {
+          await account.store.setProfileName(name);
+        }
+        return error;
+      });
 
   Future<void> _reset() async {
     setState(() {
@@ -73,107 +95,522 @@ class _LoginPageState extends State<LoginPage> {
     if (mounted) Navigator.pop(context, false);
   }
 
+  InputDecoration _field(String label, IconData icon, {String? helper, Widget? suffix}) {
+    final cs = Theme.of(context).colorScheme;
+    return InputDecoration(
+      labelText: label,
+      helperText: helper,
+      prefixIcon: Icon(icon, size: 20),
+      suffixIcon: suffix,
+      filled: true,
+      fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5))),
+      focusedBorder:
+          OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: cs.primary, width: 1.6)),
+    );
+  }
+
+  Widget _notice(String text, {required bool error, Key? key}) {
+    final cs = Theme.of(context).colorScheme;
+    final color = error ? cs.error : cs.primary;
+    return Container(
+      key: key,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(error ? Icons.error_outline : Icons.mark_email_read_outlined, size: 18, color: color),
+        const SizedBox(width: 10),
+        Expanded(child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600))),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(tr('Account')),
-        automaticallyImplyLeading: !widget.atLaunch,
-        actions: [
-          if (widget.atLaunch)
-            TextButton(key: const Key('login-not-now'), onPressed: _busy ? null : _notNow, child: Text(tr('Not now'))),
-        ],
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
-          child: ListView(padding: const EdgeInsets.all(20), shrinkWrap: true, children: [
-            Text(_create ? tr('Create your account') : tr('Sign in'),
-                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
+    final cs = theme.colorScheme;
+    final hero = HeroColors.of(context);
+
+    final form = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _ModeSwitch(create: _create, onChanged: _busy ? null : _mode),
+      const SizedBox(height: 20),
+      AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        child: Column(
+          key: ValueKey(_create),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_create ? tr('Create your account') : tr('Welcome back'),
+                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
             Text(
-              tr('Your bets, bankroll and parlays are saved on your account, so they are safe if you lose your phone and you see them on any device you sign in on.'),
-              style: theme.textTheme.bodyMedium,
+              _create
+                  ? tr('Free. Your bets are backed up and on every device you sign in on.')
+                  : tr('Sign in to pick up your bets and bankroll on this device.'),
+              style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
             ),
-            const SizedBox(height: 20),
-            if (account.googleAvailable) ...[
-              OutlinedButton.icon(
-                key: const Key('login-google'),
-                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                icon: const Text('G', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                label: Text(tr('Continue with Google')),
-                onPressed: _busy ? null : () => _run(account.signInWithGoogle),
-              ),
-              const SizedBox(height: 16),
-              Row(children: [
-                const Expanded(child: Divider()),
-                Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text(tr('or with your email'))),
-                const Expanded(child: Divider()),
-              ]),
-              const SizedBox(height: 16),
-            ],
+          ],
+        ),
+      ),
+      const SizedBox(height: 20),
+      if (account.googleAvailable) ...[
+        _GoogleButton(key: const Key('login-google'), onPressed: _busy ? null : () => _run(account.signInWithGoogle)),
+        const SizedBox(height: 18),
+        Row(children: [
+          Expanded(child: Divider(color: cs.outlineVariant)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(tr('or with your email'), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          ),
+          Expanded(child: Divider(color: cs.outlineVariant)),
+        ]),
+        const SizedBox(height: 18),
+      ],
+      AutofillGroup(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (_create) ...[
             TextField(
-              key: const Key('login-email'),
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              autocorrect: false,
-              autofillHints: const [AutofillHints.email],
-              decoration: InputDecoration(labelText: tr('Email')),
+              key: const Key('login-name'),
+              controller: _name,
+              textCapitalization: TextCapitalization.words,
+              autofillHints: const [AutofillHints.name],
+              decoration: _field(tr('Your name'), Icons.person_outline),
             ),
             const SizedBox(height: 12),
-            TextField(
-              key: const Key('login-password'),
-              controller: _password,
-              obscureText: !_showPassword,
-              autocorrect: false,
-              enableSuggestions: false,
-              autofillHints: [_create ? AutofillHints.newPassword : AutofillHints.password],
-              onSubmitted: (_) => _busy ? null : _submit(),
-              decoration: InputDecoration(
-                labelText: tr('Password'),
-                helperText: _create ? tr('At least 6 characters') : null,
-                suffixIcon: IconButton(
-                  tooltip: _showPassword ? tr('Hide') : tr('Show'),
-                  icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),
-                  onPressed: () => setState(() => _showPassword = !_showPassword),
+          ],
+          TextField(
+            key: const Key('login-email'),
+            controller: _email,
+            keyboardType: TextInputType.emailAddress,
+            autocorrect: false,
+            autofillHints: const [AutofillHints.email],
+            decoration: _field(tr('Email'), Icons.mail_outline),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('login-password'),
+            controller: _password,
+            obscureText: !_showPassword,
+            autocorrect: false,
+            enableSuggestions: false,
+            autofillHints: [_create ? AutofillHints.newPassword : AutofillHints.password],
+            onSubmitted: (_) => _busy ? null : _submit(),
+            decoration: _field(
+              tr('Password'),
+              Icons.lock_outline,
+              helper: _create ? tr('At least 6 characters') : null,
+              suffix: IconButton(
+                tooltip: _showPassword ? tr('Hide') : tr('Show'),
+                icon: Icon(_showPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
+                onPressed: () => setState(() => _showPassword = !_showPassword),
+              ),
+            ),
+          ),
+        ]),
+      ),
+      if (!_create)
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: TextButton(onPressed: _busy ? null : _reset, child: Text(tr('Forgot password?'))),
+        )
+      else
+        const SizedBox(height: 14),
+      if (_error != null) ...[
+        _notice(_error!, error: true, key: const Key('login-error')),
+        const SizedBox(height: 12),
+      ],
+      if (_info != null) ...[
+        _notice(_info!, error: false),
+        const SizedBox(height: 12),
+      ],
+      _PrimaryButton(
+        key: const Key('login-submit'),
+        busy: _busy,
+        label: _create ? tr('Create account') : tr('Sign in'),
+        onPressed: _busy ? null : _submit,
+      ),
+      const SizedBox(height: 8),
+      Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        Text(_create ? tr('Already have an account?') : tr("Don't have an account?"),
+            style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+        TextButton(
+          key: const Key('login-switch'),
+          onPressed: _busy ? null : () => _mode(!_create),
+          child: Text(_create ? tr('Sign in') : tr('Create one'), style: const TextStyle(fontWeight: FontWeight.w700)),
+        ),
+      ]),
+    ]);
+
+    return Scaffold(
+      body: Stack(children: [
+        // Backdrop: the theme's header colours fading into the page, with a
+        // soft glow and a rising line like the app's charts.
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0, 0.42, 0.75],
+                colors: [hero.gradient.first, hero.gradient.last, theme.scaffoldBackgroundColor],
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          height: 340,
+          child: CustomPaint(painter: _BackdropPainter(glow: cs.primary, line: hero.onGradient)),
+        ),
+        SafeArea(
+          child: Column(children: [
+            SizedBox(
+              height: 48,
+              child: Row(children: [
+                if (!widget.atLaunch)
+                  IconButton(
+                    tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                    color: hero.onGradient,
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => Navigator.maybePop(context),
+                  ),
+                const Spacer(),
+                if (widget.atLaunch)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: TextButton(
+                      key: const Key('login-not-now'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: hero.onGradient,
+                        backgroundColor: hero.onGradient.withValues(alpha: 0.12),
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                      onPressed: _busy ? null : _notNow,
+                      child: Text(tr('Not now')),
+                    ),
+                  ),
+              ]),
+            ),
+            Expanded(
+              child: Center(
+                child: SingleChildScrollView(
+                  // Room above the logo so its glow is not cut off.
+                  padding: const EdgeInsets.fromLTRB(20, 36, 20, 24),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      _Brand(color: hero.onGradient, glow: cs.primary),
+                      const SizedBox(height: 26),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainer,
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.45)),
+                          boxShadow: const [BoxShadow(color: Color(0x40000000), blurRadius: 30, offset: Offset(0, 14))],
+                        ),
+                        child: form,
+                      ),
+                      const SizedBox(height: 22),
+                      _Perks(),
+                    ]),
+                  ),
                 ),
               ),
             ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!, key: const Key('login-error'), style: TextStyle(color: theme.colorScheme.error)),
-            ],
-            if (_info != null) ...[
-              const SizedBox(height: 12),
-              Text(_info!, style: TextStyle(color: theme.colorScheme.primary)),
-            ],
-            const SizedBox(height: 18),
-            FilledButton(
-              key: const Key('login-submit'),
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              onPressed: _busy ? null : _submit,
-              child: _busy
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(_create ? tr('Create account') : tr('Sign in')),
-            ),
-            const SizedBox(height: 8),
-            Wrap(alignment: WrapAlignment.spaceBetween, children: [
-              TextButton(
-                key: const Key('login-switch'),
-                onPressed: _busy ? null : () => setState(() {
-                  _create = !_create;
-                  _error = null;
-                  _info = null;
-                }),
-                child: Text(_create ? tr('I already have an account') : tr('Create an account')),
-              ),
-              if (!_create) TextButton(onPressed: _busy ? null : _reset, child: Text(tr('Forgot password?'))),
-            ]),
           ]),
+        ),
+      ]),
+    );
+  }
+}
+
+/// The app icon with a glow, the name and the tagline.
+class _Brand extends StatelessWidget {
+  const _Brand({required this.color, required this.glow});
+  final Color color;
+  final Color glow;
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(26),
+            boxShadow: [
+              BoxShadow(color: glow.withValues(alpha: 0.45), blurRadius: 36, spreadRadius: 2),
+              const BoxShadow(color: Color(0x55000000), blurRadius: 12, offset: Offset(0, 6)),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(26),
+            child: Image.asset('assets/brand/icon.png', width: 92, height: 92),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text('BetPilot',
+            style: TextStyle(color: color, fontSize: 34, fontWeight: FontWeight.w900, letterSpacing: 0.3, height: 1.1)),
+        const SizedBox(height: 6),
+        Text(tr('Track every bet. Grow your bank.'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: color.withValues(alpha: 0.78), fontSize: 15, fontWeight: FontWeight.w500)),
+      ]);
+}
+
+/// Sign in | Create account, as a pill with a sliding thumb.
+class _ModeSwitch extends StatelessWidget {
+  const _ModeSwitch({required this.create, required this.onChanged});
+  final bool create;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    Widget tab(String label, bool value) => Expanded(
+          child: InkWell(
+            key: Key(value ? 'login-tab-create' : 'login-tab-signin'),
+            borderRadius: BorderRadius.circular(14),
+            onTap: onChanged == null ? null : () => onChanged!(value),
+            child: Center(
+              child: AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 180),
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: create == value ? cs.onPrimary : cs.onSurfaceVariant,
+                ),
+                child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ),
+        );
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Stack(children: [
+        AnimatedAlign(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: create ? Alignment.centerRight : Alignment.centerLeft,
+          child: FractionallySizedBox(
+            widthFactor: 0.5,
+            heightFactor: 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [cs.primary, Color.lerp(cs.primary, Colors.white, 0.18)!]),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [BoxShadow(color: cs.primary.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 3))],
+              ),
+            ),
+          ),
+        ),
+        Row(children: [tab(tr('Sign in'), false), tab(tr('Create account'), true)]),
+      ]),
+    );
+  }
+}
+
+/// The main action: a tall gradient button that shows progress.
+class _PrimaryButton extends StatelessWidget {
+  const _PrimaryButton({super.key, required this.label, required this.busy, this.onPressed});
+  final String label;
+  final bool busy;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final enabled = onPressed != null;
+    return Opacity(
+      opacity: enabled || busy ? 1 : 0.6,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [cs.primary, Color.lerp(cs.primary, Colors.white, 0.2)!]),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: cs.primary.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 6))],
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onPressed,
+            child: SizedBox(
+              height: 54,
+              child: Center(
+                child: busy
+                    ? SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: cs.onPrimary))
+                    : Text(label, style: TextStyle(color: cs.onPrimary, fontSize: 16, fontWeight: FontWeight.w800)),
+              ),
+            ),
+          ),
         ),
       ),
     );
+  }
+}
+
+/// "Continue with Google" in Google's own style: white, with the coloured G.
+class _GoogleButton extends StatelessWidget {
+  const _GoogleButton({super.key, this.onPressed});
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: 52,
+        child: OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFF1F1F1F),
+            side: const BorderSide(color: Color(0xFFDADCE0)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+          onPressed: onPressed,
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const SizedBox(width: 20, height: 20, child: CustomPaint(painter: _GoogleLogoPainter())),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(tr('Continue with Google'),
+                  overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+            ),
+          ]),
+        ),
+      );
+}
+
+/// Google's G: four coloured arcs and the bar.
+class _GoogleLogoPainter extends CustomPainter {
+  const _GoogleLogoPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width;
+    final stroke = s * 0.2;
+    final rect = Rect.fromCircle(center: Offset(s / 2, s / 2), radius: (s - stroke) / 2);
+    final p = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..isAntiAlias = true;
+    double deg(double d) => d * math.pi / 180;
+    p.color = const Color(0xFF4285F4);
+    canvas.drawArc(rect, deg(-8), deg(53), false, p);
+    p.color = const Color(0xFF34A853);
+    canvas.drawArc(rect, deg(45), deg(90), false, p);
+    p.color = const Color(0xFFFBBC05);
+    canvas.drawArc(rect, deg(135), deg(80), false, p);
+    p.color = const Color(0xFFEA4335);
+    canvas.drawArc(rect, deg(215), deg(100), false, p);
+    canvas.drawRect(
+      Rect.fromLTWH(s / 2, s / 2 - stroke / 2, s / 2, stroke),
+      Paint()..color = const Color(0xFF4285F4),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// A soft glow and a faint rising chart line behind the logo.
+class _BackdropPainter extends CustomPainter {
+  _BackdropPainter({required this.glow, required this.line});
+  final Color glow;
+  final Color line;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    canvas.drawCircle(
+      Offset(w * 0.85, h * 0.12),
+      w * 0.45,
+      Paint()
+        ..shader = RadialGradient(colors: [glow.withValues(alpha: 0.28), glow.withValues(alpha: 0)])
+            .createShader(Rect.fromCircle(center: Offset(w * 0.85, h * 0.12), radius: w * 0.45)),
+    );
+    canvas.drawCircle(
+      Offset(w * 0.08, h * 0.55),
+      w * 0.35,
+      Paint()
+        ..shader = RadialGradient(colors: [glow.withValues(alpha: 0.16), glow.withValues(alpha: 0)])
+            .createShader(Rect.fromCircle(center: Offset(w * 0.08, h * 0.55), radius: w * 0.35)),
+    );
+    final pts = [
+      Offset(0, h * 0.86),
+      Offset(w * 0.16, h * 0.78),
+      Offset(w * 0.3, h * 0.82),
+      Offset(w * 0.46, h * 0.64),
+      Offset(w * 0.6, h * 0.69),
+      Offset(w * 0.76, h * 0.46),
+      Offset(w * 0.88, h * 0.5),
+      Offset(w, h * 0.3),
+    ];
+    final path = Path()..moveTo(pts.first.dx, pts.first.dy);
+    for (final pt in pts.skip(1)) {
+      path.lineTo(pt.dx, pt.dy);
+    }
+    final area = Path.from(path)
+      ..lineTo(w, h)
+      ..lineTo(0, h)
+      ..close();
+    canvas.drawPath(
+      area,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [glow.withValues(alpha: 0.14), glow.withValues(alpha: 0)],
+        ).createShader(Rect.fromLTWH(0, h * 0.3, w, h * 0.7)),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true
+        ..color = line.withValues(alpha: 0.12),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BackdropPainter old) => old.glow != glow || old.line != line;
+}
+
+/// What an account gives, under the form.
+class _Perks extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    Widget perk(IconData icon, String text) => Expanded(
+          child: Column(children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.14), shape: BoxShape.circle),
+              child: Icon(icon, size: 20, color: cs.primary),
+            ),
+            const SizedBox(height: 6),
+            Text(text,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
+          ]),
+        );
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      perk(Icons.cloud_done_outlined, tr('Backed up')),
+      perk(Icons.devices_outlined, tr('On every device')),
+      perk(Icons.lock_outline, tr('Only you see it')),
+    ]);
   }
 }
 
@@ -211,45 +648,67 @@ class AccountPage extends StatelessWidget {
                     ),
                   )
                 : ListView(padding: const EdgeInsets.all(16), children: [
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(child: Icon(a.provider == 'google.com' ? Icons.g_mobiledata : Icons.mail_outline)),
-                      title: Text(a.email.isEmpty ? tr('Signed in') : a.email, key: const Key('account-email')),
-                      subtitle: Text(a.provider == 'google.com' ? tr('Google account') : tr('Email and password')),
-                    ),
-                    const SizedBox(height: 8),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(switch (sync.state) {
-                        SyncState.synced => Icons.cloud_done_outlined,
-                        SyncState.syncing => Icons.cloud_sync_outlined,
-                        SyncState.needsChoice => Icons.help_outline,
-                        _ => Icons.cloud_off_outlined,
-                      }),
-                      title: Text(_status(), key: const Key('sync-status')),
-                    ),
-                    if (sync.state == SyncState.needsChoice) ...[
-                      const SizedBox(height: 8),
-                      SyncChoice(sync: sync),
-                    ] else
-                      Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: OutlinedButton.icon(
-                          icon: const Icon(Icons.sync),
-                          label: Text(tr('Sync now')),
-                          onPressed: sync.state == SyncState.syncing ? null : sync.sync,
-                        ),
+                    _AccountCard(account: a, store: account.store),
+                    const SizedBox(height: 16),
+                    Card(
+                      margin: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          Row(children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: _statusColor(theme.colorScheme).withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                switch (sync.state) {
+                                  SyncState.synced => Icons.cloud_done_outlined,
+                                  SyncState.syncing => Icons.cloud_sync_outlined,
+                                  SyncState.needsChoice => Icons.help_outline,
+                                  _ => Icons.cloud_off_outlined,
+                                },
+                                size: 20,
+                                color: _statusColor(theme.colorScheme),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(_status(),
+                                  key: const Key('sync-status'),
+                                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                            ),
+                          ]),
+                          const SizedBox(height: 12),
+                          if (sync.state == SyncState.needsChoice)
+                            SyncChoice(sync: sync)
+                          else
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(46),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                              icon: const Icon(Icons.sync),
+                              label: Text(tr('Sync now')),
+                              onPressed: sync.state == SyncState.syncing ? null : sync.sync,
+                            ),
+                        ]),
                       ),
+                    ),
                     const SizedBox(height: 24),
                     Text(
                       tr('Signing out keeps your data on this device and on your account.'),
-                      style: theme.textTheme.bodySmall,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 8),
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
+                    Center(
                       child: TextButton.icon(
                         key: const Key('sign-out'),
+                        style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
                         icon: const Icon(Icons.logout),
                         label: Text(tr('Sign out')),
                         onPressed: () async {
@@ -262,6 +721,66 @@ class AccountPage extends StatelessWidget {
           );
         },
       );
+
+  Color _statusColor(ColorScheme cs) => switch (sync.state) {
+        SyncState.synced => const Color(0xFF2E9461),
+        SyncState.offline || SyncState.error => cs.error,
+        _ => cs.primary,
+      };
+}
+
+/// The account at the top of the Account page: avatar, name, email and how
+/// the user signs in, on the theme's header colours.
+class _AccountCard extends StatelessWidget {
+  const _AccountCard({required this.account, required this.store});
+  final Account account;
+  final BankStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    final hero = HeroColors.of(context);
+    final fg = hero.onGradient;
+    final google = account.provider == 'google.com';
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: hero.gradient),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(children: [
+        ListenableBuilder(listenable: store, builder: (context, _) => ProfileAvatar(store: store, size: 64)),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (store.profileName.isNotEmpty)
+              Text(store.profileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: fg, fontSize: 20, fontWeight: FontWeight.w800)),
+            Text(account.email.isEmpty ? tr('Signed in') : account.email,
+                key: const Key('account-email'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: fg.withValues(alpha: store.profileName.isEmpty ? 1 : 0.8), fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(color: fg.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(20)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (google)
+                  const SizedBox(width: 14, height: 14, child: CustomPaint(painter: _GoogleLogoPainter()))
+                else
+                  Icon(Icons.mail_outline, size: 14, color: fg),
+                const SizedBox(width: 6),
+                Text(google ? tr('Google account') : tr('Email and password'),
+                    style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w700)),
+              ]),
+            ),
+          ]),
+        ),
+      ]),
+    );
+  }
 }
 
 /// The two ways out when this device and the account both have data.

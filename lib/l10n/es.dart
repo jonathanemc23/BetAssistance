@@ -1037,4 +1037,13 @@ const esStrings = <String, String>{
   'Sign-in failed ({code}). Try again.': 'No se pudo iniciar sesión ({code}). Inténtalo de nuevo.',
   'Too much data to save on the account.': 'Hay demasiados datos para guardar en la cuenta.',
   'Your account has data from a newer version of BetPilot. Update the app to load it.': 'Tu cuenta tiene datos de una versión más nueva de BetPilot. Actualiza la app para cargarlos.',
+  'Free. Your bets are backed up and on every device you sign in on.': 'Gratis. Tus apuestas quedan respaldadas y en cada dispositivo donde inicies sesión.',
+  'Sign in to pick up your bets and bankroll on this device.': 'Inicia sesión para ver tus apuestas y tu banca en este dispositivo.',
+  'Already have an account?': '¿Ya tienes una cuenta?',
+  "Don't have an account?": '¿No tienes cuenta?',
+  'Create one': 'Crea una',
+  'Track every bet. Grow your bank.': 'Registra cada apuesta. Haz crecer tu banca.',
+  'Backed up': 'Respaldado',
+  'On every device': 'En todos tus dispositivos',
+  'Only you see it': 'Solo tú lo ves',
 };
