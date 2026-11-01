@@ -9,10 +9,12 @@ import 'google_sign_in.dart';
 import 'push_alerts.dart' show pushServer;
 import 'store.dart';
 
-/// Firebase Authentication, set at build time with
-/// `--dart-define=FIREBASE_API_KEY=...` (the Web API key of the Firebase
-/// project). Empty: no accounts, the app works on the device only.
-const firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY');
+/// The Web API key of the Firebase project (Project settings > Your apps >
+/// BetPilot web). It only identifies the project and is public by design:
+/// Firebase web keys ship in every web app. Override at build time with
+/// `--dart-define=FIREBASE_API_KEY=...`; empty switches accounts off.
+const firebaseApiKey =
+    String.fromEnvironment('FIREBASE_API_KEY', defaultValue: 'AIzaSyCF3AE4JSdkmrEntd-i7_MRtxBeWo87jBQ');
 
 /// The Firebase project: the same Google Cloud project as the server.
 const firebaseProject = String.fromEnvironment('FIREBASE_PROJECT', defaultValue: 'betpilot-513404');

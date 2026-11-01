@@ -146,12 +146,9 @@ asks which data to keep (`lib/data/sync.dart`).
 3. Authentication > **Settings > Authorized domains** > Add domain:
    `jonathanemc23.github.io` (for the Google window in the web app).
 4. Project settings (gear) > General > **Your apps** > the web icon `</>`:
-   register an app named BetPilot (no Hosting). Copy `apiKey` from the
-   config it shows.
-5. GitHub: Settings > Secrets and variables > Actions > **Variables** > New
-   repository variable `FIREBASE_API_KEY` with that key (it's meant to be
-   public; Firebase web keys ship in every web app). Then Actions > Web app >
-   Run workflow.
+   register an app named BetPilot (no Hosting). Its `apiKey` is
+   `firebaseApiKey` in `lib/data/account.dart` (public by design; Firebase
+   web keys ship in every web app).
 
 ## Run it
 
