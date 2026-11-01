@@ -214,7 +214,10 @@ browser (SQLite in WebAssembly, stored in IndexedDB), separate from any
 installed app. Removing the home screen icon or clearing Safari's website data
 deletes it. Differences from the phone apps:
 
-- **Bet slip from screenshot** is hidden: ML Kit has no web version.
+- **Bet slip from screenshot** (Parlay builder and Bet register) reads the
+  picture with Tesseract.js in the browser instead of ML Kit. It downloads
+  about 10 MB the first time it's used, then works from the browser cache;
+  the picture never leaves the device.
 - **Live alerts** need the home screen version on iPhone (iOS 16.4 or newer)
   and come only while it's open. Switch alerts on in Settings to be asked.
 - **Shared bet links** on iPhone and computers open the web app

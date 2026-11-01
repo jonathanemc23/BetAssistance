@@ -25,6 +25,7 @@ import 'ui/home_screen.dart';
 import 'ui/matches_screen.dart';
 import 'ui/themes.dart';
 import 'ui/share_ui.dart';
+import 'ui/slip_import.dart';
 import 'ui/tools_screen.dart';
 
 Future<void> main() async {
@@ -213,11 +214,23 @@ class _HomeShellState extends State<HomeShell> {
           ChartsScreen(store: store),
         ]),
         floatingActionButton: _tab == 1
-            ? FloatingActionButton.extended(
-                onPressed: () => openBetForm(context, store, api: widget.fixtures),
-                icon: const Icon(Icons.add),
-                label: Text(tr('Log bet')),
-              )
+            ? Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                FloatingActionButton.extended(
+                  heroTag: 'bet-slip',
+                  onPressed: () => importBetFromSlip(context, store: store, api: widget.fixtures),
+                  backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+                  foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
+                  icon: const Icon(Icons.document_scanner_outlined),
+                  label: Text(tr('From screenshot')),
+                ),
+                const SizedBox(height: 12),
+                FloatingActionButton.extended(
+                  heroTag: 'log-bet',
+                  onPressed: () => openBetForm(context, store, api: widget.fixtures),
+                  icon: const Icon(Icons.add),
+                  label: Text(tr('Log bet')),
+                ),
+              ])
             : null,
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,

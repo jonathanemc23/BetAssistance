@@ -859,6 +859,8 @@ const esStrings = <String, String>{
   'Combined odds {odds}': 'Cuota combinada {odds}',
   'The slip says {odds} in total. Check the prices above.': 'El boleto dice {odds} en total. Revisa las cuotas de arriba.',
   'Save as a parlay': 'Guardar como combinada',
+  'Fill in the bet': 'Rellenar la apuesta',
+  'The text reader didn\'t work in this browser ({error}). Add the selections by hand for now.': 'El lector de texto no funcionó en este navegador ({error}). Por ahora añade las selecciones a mano.',
   'Parlay saved with {n} selection': 'Combinada guardada con {n} selección',
   'Parlay saved with {n} selections': 'Combinada guardada con {n} selecciones',
   'Read {n} selection from the screenshot. Check each one and fix anything that was misread.': 'Se leyó {n} selección de la captura. Revisa cada una y corrige lo que se haya leído mal.',
