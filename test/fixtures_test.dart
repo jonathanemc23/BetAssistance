@@ -422,6 +422,10 @@ void main() {
     final urls = <Uri>[];
     final api = FixturesApi(
       retryDelay: Duration.zero,
+      // Before 08:00 UTC TheSportsDB is read for two days, which can use up
+      // the background share of its minute; a league skipped that way is read
+      // again on the refresh. Room for all of them keeps this about ESPN.
+      tsdbPerMinute: 1000,
       client: MockClient((req) async {
         final slug = req.url.pathSegments[req.url.pathSegments.length - 2];
         // Without the all-leagues board, leagues are read one by one.
