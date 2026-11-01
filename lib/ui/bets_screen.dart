@@ -147,7 +147,7 @@ class BetsScreenState extends State<BetsScreen> {
         ]),
       ),
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 168),
         sliver: SliverList.separated(
           itemCount: list.length,
           separatorBuilder: (_, _) => const SizedBox(height: 8),

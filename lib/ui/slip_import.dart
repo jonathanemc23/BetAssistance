@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +11,8 @@ import '../data/store.dart';
 import '../logic/leg_linker.dart';
 import '../logic/slip_reader.dart';
 import '../logic/stats.dart';
+import '../logic/web_slip_scanner.dart';
+import 'bet_form.dart';
 import 'parlay_screens.dart';
 
 /// ML Kit's on-device text recognition. Free, no account, and the picture
@@ -39,7 +42,8 @@ class MlKitSlipScanner implements SlipScanner {
 
 /// Where the screenshot and its text come from. Tests swap these.
 class SlipImport {
-  static SlipScanner scanner = MlKitSlipScanner();
+  /// ML Kit on phones; in the web app (iPhone) Tesseract.js in the browser.
+  static SlipScanner scanner = kIsWeb ? webSlipScanner() : MlKitSlipScanner();
   static Future<String?> Function() pickImage = () async {
     final file = await ImagePicker().pickImage(source: ImageSource.gallery);
     return file?.path;
@@ -49,9 +53,58 @@ class SlipImport {
 /// Pick a bet slip screenshot from any bookmaker, read its selections, let
 /// the user check them, then save them as a new parlay and open it.
 Future<void> importSlip(BuildContext context, {required BankStore store, required FixturesApi api}) async {
-  final path = await SlipImport.pickImage();
-  if (path == null || !context.mounted) return;
+  final read = await _readSlip(context, store: store, api: api, saveLabel: tr('Save as a parlay'));
+  if (read == null || !context.mounted) return;
+  final (legs, stake) = read;
   final messenger = ScaffoldMessenger.of(context);
+  var parlay = await store.newParlay(legs: legs);
+  if (stake > 0) parlay = await store.saveParlay(parlay.copyWith(stake: stake));
+  messenger.showSnackBar(SnackBar(content: Text(trn(legs.length, 'Parlay saved with {n} selection', 'Parlay saved with {n} selections')), persist: false));
+  if (context.mounted) await openParlay(context, store: store, api: api, parlay: parlay);
+}
+
+/// Pick a bet slip screenshot, read it and let the user check it, then open
+/// the bet form filled in with it: a single bet for one selection, a parlay
+/// for more. Nothing is saved until the form is.
+Future<void> importBetFromSlip(BuildContext context, {required BankStore store, required FixturesApi api}) async {
+  final read = await _readSlip(context, store: store, api: api, saveLabel: tr('Fill in the bet'));
+  if (read == null || !context.mounted) return;
+  await openBetForm(context, store, template: slipBet(read.$1, read.$2, DateTime.now()), api: api);
+}
+
+/// The bet a checked slip becomes: one selection is a single bet, more are a
+/// parlay with the combined odds.
+Bet slipBet(List<ParlayLeg> legs, double stake, DateTime now) {
+  final date = isoDate(now), created = now.toIso8601String();
+  if (legs.length > 1) {
+    return Parlay(name: '', legs: legs, stake: stake, created: created, updated: created).toBet(date: date, created: created);
+  }
+  final l = legs.single;
+  return Bet(
+    selection: l.selection,
+    event: l.event,
+    sport: l.sport,
+    date: date,
+    stake: stake,
+    odds: l.odds,
+    created: created,
+    matchId: l.matchId,
+    leagueSlug: l.leagueSlug,
+    leagueName: l.leagueName,
+    kickoff: l.kickoff,
+  );
+}
+
+/// Picks the screenshot, reads it, shows it to be checked and finds the real
+/// matches. Null when the user backs out.
+Future<(List<ParlayLeg>, double)?> _readSlip(
+  BuildContext context, {
+  required BankStore store,
+  required FixturesApi api,
+  required String saveLabel,
+}) async {
+  final path = await SlipImport.pickImage();
+  if (path == null || !context.mounted) return null;
   showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -71,14 +124,14 @@ Future<void> importSlip(BuildContext context, {required BankStore store, require
   } catch (e) {
     read = SlipRead(error: '$e');
   }
-  if (!context.mounted) return;
+  if (!context.mounted) return null;
   Navigator.of(context, rootNavigator: true).pop();
   final result = await Navigator.of(context).push<(List<ParlayLeg>, double)>(
     MaterialPageRoute(
-      builder: (_) => SlipReviewPage(read: read, format: store.settings.oddsFormat),
+      builder: (_) => SlipReviewPage(read: read, format: store.settings.oddsFormat, saveLabel: saveLabel),
     ),
   );
-  if (result == null || !context.mounted) return;
+  if (result == null || !context.mounted) return null;
   showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -87,19 +140,19 @@ Future<void> importSlip(BuildContext context, {required BankStore store, require
     ),
   );
   final legs = await linkLegs(api, result.$1);
-  if (!context.mounted) return;
+  if (!context.mounted) return null;
   Navigator.of(context, rootNavigator: true).pop();
-  var parlay = await store.newParlay(legs: legs);
-  if (result.$2 > 0) parlay = await store.saveParlay(parlay.copyWith(stake: result.$2));
-  messenger.showSnackBar(SnackBar(content: Text(trn(result.$1.length, 'Parlay saved with {n} selection', 'Parlay saved with {n} selections')), persist: false));
-  if (context.mounted) await openParlay(context, store: store, api: api, parlay: parlay);
+  return (legs, result.$2);
 }
 
 /// The selections read from the slip, editable, before they are saved.
 class SlipReviewPage extends StatefulWidget {
-  const SlipReviewPage({super.key, required this.read, required this.format});
+  const SlipReviewPage({super.key, required this.read, required this.format, this.saveLabel});
   final SlipRead read;
   final OddsFormat format;
+
+  /// The save button's text; "Save as a parlay" by default.
+  final String? saveLabel;
 
   @override
   State<SlipReviewPage> createState() => _SlipReviewPageState();
@@ -188,7 +241,9 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
                     read > 0
                         ? trn(read, 'Read {n} selection from the screenshot. Check each one and fix anything that was misread.', 'Read {n} selections from the screenshot. Check each one and fix anything that was misread.')
                         : widget.read.error != null
-                        ? tr("The text reader didn't work on this phone ({error}). Add the selections by hand for now.", {'error': widget.read.error})
+                        ? kIsWeb
+                        ? tr("The text reader didn't work in this browser ({error}). Add the selections by hand for now.", {'error': widget.read.error})
+                        : tr("The text reader didn't work on this phone ({error}). Add the selections by hand for now.", {'error': widget.read.error})
                         : tr("Couldn't read any selections from this picture. Add them by hand, or try a sharper screenshot of the slip."),
                     style: TextStyle(color: cs.onSecondaryContainer),
                   ),
@@ -296,7 +351,7 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
           FilledButton.icon(
             onPressed: _valid ? _save : null,
             icon: const Icon(Icons.check),
-            label: Text(tr('Save as a parlay')),
+            label: Text(widget.saveLabel ?? tr('Save as a parlay')),
           ),
         ],
       ),
