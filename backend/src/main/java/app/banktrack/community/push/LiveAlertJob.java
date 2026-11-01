@@ -33,14 +33,17 @@ public class LiveAlertJob {
     private final LiveFeed feed;
     private final PushSender sender;
     private final Clock clock;
+    private final PushStats stats;
     private final ObjectMapper json = new ObjectMapper();
 
-    public LiveAlertJob(PushWatchRepository watches, PushDeviceRepository devices, LiveFeed feed, PushSender sender, Clock clock) {
+    public LiveAlertJob(PushWatchRepository watches, PushDeviceRepository devices, LiveFeed feed, PushSender sender, Clock clock,
+            PushStats stats) {
         this.watches = watches;
         this.devices = devices;
         this.feed = feed;
         this.sender = sender;
         this.clock = clock;
+        this.stats = stats;
     }
 
     /** One round. Returns the number of alerts sent. */
@@ -58,11 +61,12 @@ public class LiveAlertJob {
             if (now.isAfter(w.getKickoff().plus(after))) continue;
             byMatch.computeIfAbsent(w.getFeed() + "|" + w.getMatchId(), k -> new ArrayList<>()).add(w);
         }
-        int sent = 0;
+        int sent = 0, read = 0;
         Set<Long> gone = new HashSet<>();
         for (List<PushWatch> group : byMatch.values()) {
             Optional<LiveAlerts.Game> game = feed.read(group.getFirst().getFeed(), group.getFirst().getMatchId());
             if (game.isEmpty()) continue;
+            read++;
             for (PushWatch w : group) {
                 PushDevice d = w.getDevice();
                 if (gone.contains(d.getId())) continue;
@@ -75,6 +79,7 @@ public class LiveAlertJob {
             }
         }
         watches.flush();
+        stats.tick(now, byMatch.size(), read, sent);
         for (Long id : gone) {
             devices.findById(id).ifPresent(d -> {
                 watches.deleteAll(watches.findByDevice(d));

@@ -39,11 +39,13 @@ public class WebPush implements PushSender {
 
     private final VapidKeys vapid;
     private final Clock clock;
+    private final PushStats stats;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
-    public WebPush(VapidKeys vapid, Clock clock) {
+    public WebPush(VapidKeys vapid, Clock clock, PushStats stats) {
         this.vapid = vapid;
         this.clock = clock;
+        this.stats = stats;
     }
 
     @Override
@@ -61,16 +63,20 @@ public class WebPush implements PushSender {
                     .header("Urgency", "high")
                     .POST(HttpRequest.BodyPublishers.ofByteArray(body))
                     .build();
-            int status = http.send(req, HttpResponse.BodyHandlers.discarding()).statusCode();
+            HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
+            int status = res.statusCode();
+            String reason = status >= 300 && res.body() != null ? " " + res.body().strip().replaceAll("\\s+", " ") : "";
+            stats.push(clock.instant(), endpoint.getHost(), status + (reason.length() > 160 ? reason.substring(0, 160) : reason));
             if (status == 404 || status == 410) return Result.GONE;
             if (status >= 200 && status < 300) return Result.SENT;
-            log.warn("Push to {} refused: {}", endpoint.getHost(), status);
+            log.warn("Push to {} refused: {}{}", endpoint.getHost(), status, reason);
             return Result.FAILED;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return Result.FAILED;
         } catch (Exception e) {
             log.warn("Push failed: {}", e.getMessage());
+            stats.push(clock.instant(), "?", e.getClass().getSimpleName() + ": " + e.getMessage());
             return Result.FAILED;
         }
     }

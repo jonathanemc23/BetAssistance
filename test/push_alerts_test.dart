@@ -50,7 +50,8 @@ void main() {
   late FakeChannel channel;
   var now = kickoff.subtract(const Duration(days: 1));
 
-  PushAlerts push() => PushAlerts(
+  PushAlerts push({Duration delay = const Duration(seconds: 2)}) => PushAlerts(
+        syncDelay: delay,
         server: 'https://alerts.example.com/',
         channel: channel,
         clock: () => now,
@@ -107,6 +108,23 @@ void main() {
     expect(requests.last.method, 'DELETE');
     expect(jsonDecode(requests.last.body), {'endpoint': 'https://web.push.apple.com/abc'});
     expect(p.active, isFalse);
+  });
+
+  test('a new bet goes to the server right away, before the app is closed', () async {
+    final p = push(delay: const Duration(milliseconds: 50));
+    await p.prepare(store);
+    expect(await p.enable(store), isTrue);
+    expect(requests.where((r) => r.method == 'PUT'), hasLength(1));
+
+    await store.saveBet(bet(id: '702'));
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final puts = requests.where((r) => r.method == 'PUT').toList();
+    expect(puts, hasLength(2));
+    expect([for (final m in jsonDecode(puts.last.body)['matches'] as List) m['id']], containsAll(['701', '702']));
+
+    await store.setPref('app.something', 'x');
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(requests.where((r) => r.method == 'PUT'), hasLength(2));
   });
 
   test('refused notifications: nothing is sent', () async {
