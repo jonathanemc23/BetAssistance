@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:sqflite/sqflite.dart' show databaseFactory;
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
+import 'data/account.dart';
 import 'data/bet_settler.dart';
 import 'data/database.dart';
 import 'l10n/l10n.dart';
@@ -15,7 +16,9 @@ import 'data/live_alert_service.dart';
 import 'data/models.dart';
 import 'data/push_alerts.dart';
 import 'data/store.dart';
+import 'data/sync.dart';
 import 'logic/share.dart';
+import 'ui/account_screens.dart';
 import 'ui/bank_screens.dart';
 import 'ui/bet_form.dart';
 import 'ui/bets_screen.dart';
@@ -35,6 +38,13 @@ Future<void> main() async {
   final store = BankStore(db);
   await store.load();
   final fixtures = FixturesApi();
+  // Accounts: the data is saved on the user's account when signed in.
+  final account = AccountService(store: store);
+  SyncService? sync;
+  if (account.configured) {
+    await account.restore();
+    sync = SyncService(store: store, account: account)..start();
+  }
   LiveAlertService(
     store: store,
     api: fixtures,
@@ -42,7 +52,13 @@ Future<void> main() async {
     settler: BetSettler(store: store, api: fixtures),
     push: kIsWeb ? PushAlerts.instance : null,
   ).start();
-  runApp(BankTrackApp(store: store, fixtures: fixtures, links: AppLinks().uriLinkStream.where(_isBetLink)));
+  runApp(BankTrackApp(
+    store: store,
+    fixtures: fixtures,
+    links: AppLinks().uriLinkStream.where(_isBetLink),
+    account: sync == null ? null : account,
+    sync: sync,
+  ));
 }
 
 /// On the web every launch reports the page address as a link; only
@@ -50,8 +66,12 @@ Future<void> main() async {
 bool _isBetLink(Uri uri) => !kIsWeb || uri.queryParameters.containsKey('d');
 
 class BankTrackApp extends StatelessWidget {
-  const BankTrackApp({super.key, required this.store, this.links, this.fixtures, this.today});
+  const BankTrackApp({super.key, required this.store, this.links, this.fixtures, this.today, this.account, this.sync});
   final BankStore store;
+
+  /// Accounts, when set up for this build (see [AccountService.configured]).
+  final AccountService? account;
+  final SyncService? sync;
   final FixturesApi? fixtures;
   final DateTime? today;
 
@@ -75,13 +95,17 @@ class BankTrackApp extends StatelessWidget {
           localizationsDelegates: GlobalMaterialLocalizations.delegates,
           home: child,
         ),
-        child: HomeShell(store: store, links: links, fixtures: fixtures ?? FixturesApi(), today: today),
+        child: HomeShell(
+            store: store, links: links, fixtures: fixtures ?? FixturesApi(), today: today, account: account, sync: sync),
       );
 }
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key, required this.store, required this.fixtures, this.links, this.today});
+  const HomeShell(
+      {super.key, required this.store, required this.fixtures, this.links, this.today, this.account, this.sync});
   final BankStore store;
+  final AccountService? account;
+  final SyncService? sync;
   final Stream<Uri>? links;
   final FixturesApi fixtures;
   final DateTime? today;
@@ -95,6 +119,8 @@ class _HomeShellState extends State<HomeShell> {
   /// Matches loads the first time its tab is opened, then stays loaded.
   bool _matchesShown = false;
   StreamSubscription<Uri>? _linkSub;
+  AppLifecycleListener? _lifecycle;
+  bool _choiceShown = false;
 
   BankStore get store => widget.store;
 
@@ -102,12 +128,46 @@ class _HomeShellState extends State<HomeShell> {
   void initState() {
     super.initState();
     _linkSub = widget.links?.listen(_openLink);
+    final sync = widget.sync;
+    if (sync != null) {
+      sync.addListener(_syncChanged);
+      _lifecycle = AppLifecycleListener(onResume: sync.sync);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _offerSignIn());
+    }
   }
 
   @override
   void dispose() {
     _linkSub?.cancel();
+    widget.sync?.removeListener(_syncChanged);
+    _lifecycle?.dispose();
     super.dispose();
+  }
+
+  /// The sign-in page at launch, until the user signs in or says not now.
+  Future<void> _offerSignIn() async {
+    final account = widget.account;
+    if (account == null || account.signedIn || !mounted) return;
+    if (await store.pref(accountSkippedPref) == '1' || !mounted) return;
+    await Navigator.push<bool>(
+        context, MaterialPageRoute(fullscreenDialog: true, builder: (_) => LoginPage(account: account, atLaunch: true)));
+  }
+
+  /// Asks which data to keep when this device and the account disagree.
+  void _syncChanged() {
+    final sync = widget.sync!;
+    if (sync.state != SyncState.needsChoice) {
+      _choiceShown = false;
+      return;
+    }
+    if (_choiceShown || !mounted) return;
+    _choiceShown = true;
+    showSyncChoice(context, sync);
+  }
+
+  void _openAccount() {
+    final account = widget.account!;
+    _push((_) => account.signedIn ? AccountPage(account: account, sync: widget.sync!) : LoginPage(account: account));
   }
 
   void _openLink(Uri uri) {
@@ -146,9 +206,11 @@ class _HomeShellState extends State<HomeShell> {
       f();
     }
 
+    final account = widget.account;
     final actions = <VoidCallback>[
       _openTools,
       () => openCommunity(context, store: store, api: widget.fixtures, today: widget.today),
+      if (account != null) _openAccount,
       _openSettings,
     ];
     // Long names (and long translations) end in an ellipsis, not an overflow.
@@ -169,6 +231,12 @@ class _HomeShellState extends State<HomeShell> {
         NavigationDrawerDestination(
             icon: Icon(Icons.groups_2_outlined), label: label(tr('Community'), key: const Key('drawer-community'))),
         const Padding(padding: EdgeInsets.symmetric(horizontal: 28, vertical: 8), child: Divider()),
+        if (account != null)
+          NavigationDrawerDestination(
+            icon: Icon(account.signedIn ? Icons.cloud_done_outlined : Icons.account_circle_outlined),
+            label: label(account.signedIn ? (account.account!.email.isEmpty ? tr('Account') : account.account!.email) : tr('Sign in'),
+                key: const Key('drawer-account')),
+          ),
         NavigationDrawerDestination(icon: Icon(Icons.tune), label: label(tr('Settings'))),
       ],
     );

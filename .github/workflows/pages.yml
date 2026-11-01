@@ -10,6 +10,9 @@ name: Web app
 # address is the PUSH_SERVER_URL repository variable, or else the Cloud Run
 # service the "Deploy server" workflow made. Without one the app only alerts
 # while it's open.
+# Accounts (sign in and data saved on the account) need the same server and
+# the FIREBASE_API_KEY repository variable: the Web API key of the Firebase
+# project (see backend/README.md, Sign-in). Without it there is no sign-in.
 on:
   push:
     branches: [main]
@@ -64,7 +67,7 @@ jobs:
           cache: true
       - run: flutter pub get
       # CanvasKit is served from the site itself instead of Google's CDN.
-      - run: flutter build web --release --base-href /BetAssistance/ --no-web-resources-cdn --dart-define=PUSH_SERVER=${{ steps.server.outputs.url }}
+      - run: flutter build web --release --base-href /BetAssistance/ --no-web-resources-cdn --dart-define=PUSH_SERVER=${{ steps.server.outputs.url }} --dart-define=FIREBASE_API_KEY=${{ vars.FIREBASE_API_KEY }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

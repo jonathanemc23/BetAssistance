@@ -27,6 +27,8 @@ env:
   REGION: us-central1
   GCP_PROVIDER: projects/776908553634/locations/global/workloadIdentityPools/github/providers/github
   GCP_ACCOUNT: github-deploy@betpilot-513404.iam.gserviceaccount.com
+  # Sign-in is Firebase Authentication on the same Google Cloud project.
+  FIREBASE_PROJECT: betpilot-513404
 
 jobs:
   deploy:
@@ -64,6 +66,7 @@ jobs:
           TICK=$(printf '%s' "$DATABASE_URL tick" | sha256sum | cut -c1-40)
           echo "::add-mask::$TICK"
           printf 'DATABASE_URL: "%s"\nDATABASE_USER: "%s"\nDATABASE_PASSWORD: "%s"\nPUSH_TICK_KEY: "%s"\n' "$JDBC" "$USER" "$PASS" "$TICK" > env.yaml
+          printf 'AUTH_ISSUER_URI: "https://securetoken.google.com/%s"\nAUTH_AUDIENCE: "%s"\n' "$FIREBASE_PROJECT" "$FIREBASE_PROJECT" >> env.yaml
           gcloud run deploy "$SERVICE" --source backend --region "$REGION" --allow-unauthenticated \
             --max-instances 1 --memory 512Mi --env-vars-file env.yaml --quiet
           rm env.yaml

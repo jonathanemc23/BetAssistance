@@ -362,6 +362,77 @@ class AppDatabase {
 
   Future<void> deleteAllFavorites() => db.delete('favorites');
 
+  // Account sync
+  /// Tables that make up the user's own data, saved on their account.
+  /// odds_history is left out: it is a cache of prices, rebuilt as matches
+  /// are opened.
+  static const syncedTables = [
+    'bets',
+    'bet_legs',
+    'transactions',
+    'settings',
+    'boards',
+    'board_messages',
+    'board_notes',
+    'parlays',
+    'parlay_legs',
+    'favorites',
+  ];
+
+  /// Preferences that belong to this device, not the account: the sign-in
+  /// itself, alerts and push, the AI key and the Matches tab's filters.
+  static const devicePrefs = ['account.', 'sync.', 'alerts.', 'push.', 'ai.', 'matches.'];
+
+  static bool isDeviceSetting(String key) =>
+      key.startsWith('pref.') && devicePrefs.any((p) => key.substring(5).startsWith(p));
+
+  /// Every row of the user's data, in a fixed order so the same data always
+  /// gives the same snapshot.
+  Future<Map<String, Object?>> exportSnapshot() async {
+    final tables = <String, Object?>{};
+    for (final t in syncedTables) {
+      final rows = await db.query(t, orderBy: t == 'settings' ? 'key' : t == 'favorites' ? 'match_id' : 'id');
+      tables[t] = [
+        for (final r in rows)
+          if (t != 'settings' || !isDeviceSetting(r['key'] as String)) r,
+      ];
+    }
+    return {'schema': schemaVersion, 'tables': tables};
+  }
+
+  /// Replaces the user's data with [snapshot] in one transaction, keeping
+  /// this device's own preferences. A snapshot from a newer app is refused.
+  Future<void> importSnapshot(Map<String, dynamic> snapshot) async {
+    final schema = snapshot['schema'] as int? ?? 0;
+    if (schema > schemaVersion) {
+      throw StateError('This data was saved by a newer version of the app. Update the app.');
+    }
+    final tables = (snapshot['tables'] as Map?) ?? const {};
+    await db.transaction((txn) async {
+      for (final t in syncedTables) {
+        final rows = tables[t];
+        if (rows is! List) continue;
+        if (t == 'settings') {
+          final keep = [
+            for (final r in await txn.query('settings'))
+              if (isDeviceSetting(r['key'] as String)) r,
+          ];
+          await txn.delete('settings');
+          for (final r in keep) {
+            await txn.insert('settings', r);
+          }
+        } else {
+          await txn.delete(t);
+        }
+        for (final r in rows) {
+          final row = Map<String, Object?>.from(r as Map);
+          if (t == 'settings' && isDeviceSetting(row['key'] as String)) continue;
+          await txn.insert(t, row, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      }
+    });
+  }
+
   // Odds history
   Future<List<OddsSnapshot>> oddsHistory(String matchId) async => [
         for (final r in await db.query('odds_history', where: 'match_id = ?', whereArgs: [matchId], orderBy: 'at'))

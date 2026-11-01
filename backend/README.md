@@ -107,13 +107,51 @@ web app is rebuilt and finds the server by itself. It needs:
    Federation; downloadable keys are blocked by default on new Google
    accounts). The provider and account it prints are in the workflows.
 
-## Sign-in
+## Sign-in and the account's data
 
-Every `/api` call needs a Firebase Authentication ID token
-(`Authorization: Bearer ...`); its subject is the user id. Set
-`AUTH_ISSUER_URI=https://securetoken.google.com/<firebase-project-id>`.
-For local runs, `DEV_AUTH=true` lets the `X-Dev-User` header name the user
-instead. Never set it in production.
+Accounts are Firebase Authentication (email and password, and Google in the
+web app), on the same Google Cloud project as the server, so the Firebase
+project id is `betpilot-513404`. The deploy sets
+`AUTH_ISSUER_URI=https://securetoken.google.com/betpilot-513404` and
+`AUTH_AUDIENCE=betpilot-513404`; every `/api` call needs a Firebase ID token
+(`Authorization: Bearer ...`) and its subject is the user id. For local runs,
+`DEV_AUTH=true` lets the `X-Dev-User` header name the user instead. Never set
+it in production.
+
+The app signs in through Firebase's REST API (`lib/data/account.dart`), with
+no Firebase SDK in the app; Google sign-in in the browser uses Firebase's
+popup (`web/google_sign_in.js`). Email and Google sign-in are free on
+Firebase (phone/SMS sign-in is not; it isn't used).
+
+`/api/sync` keeps each account's data: bets, deposits and withdrawals,
+bankroll settings, parlays, Matchboard and favourites, as the app's snapshot
+(`AppDatabase.exportSnapshot`). This device's own preferences (the sign-in,
+alerts, the AI key) stay on the device. Saves carry the version they build
+on, so two phones can't overwrite each other: the second gets 409 and the app
+asks which data to keep (`lib/data/sync.dart`).
+
+| Call | What it does |
+| --- | --- |
+| `GET /api/sync` | `{version, updatedAt, data}`; version 0 and no data for a new account |
+| `PUT /api/sync` | `{baseVersion, data}`: save; 409 with the current version if another device saved first |
+| `DELETE /api/sync` | Remove the data kept on the account |
+
+### One-time Firebase setup
+
+1. console.firebase.google.com > **Add project** > pick the existing Google
+   Cloud project **betpilot-513404**. Analytics can stay off.
+2. **Build > Authentication > Get started**. Under Sign-in method switch on
+   **Email/Password** and **Google** (pick a support email). Don't upgrade to
+   Identity Platform.
+3. Authentication > **Settings > Authorized domains** > Add domain:
+   `jonathanemc23.github.io` (for the Google window in the web app).
+4. Project settings (gear) > General > **Your apps** > the web icon `</>`:
+   register an app named BetPilot (no Hosting). Copy `apiKey` from the
+   config it shows.
+5. GitHub: Settings > Secrets and variables > Actions > **Variables** > New
+   repository variable `FIREBASE_API_KEY` with that key (it's meant to be
+   public; Firebase web keys ship in every web app). Then Actions > Web app >
+   Run workflow.
 
 ## Run it
 
@@ -131,10 +169,10 @@ Settings: `DATABASE_URL` (JDBC), `DATABASE_USER`, `DATABASE_PASSWORD`,
 
 ## Still to do before going live
 
-- Hosting and accounts: a Firebase project (sign-in), a Postgres database and
-  a container host.
-- Connect the app: sign in with Firebase, then call this API from
-  `lib/ui/community.dart` in place of the simulated data.
+- Connect the Community: call this API from `lib/ui/community.dart` with the
+  signed-in account, in place of the simulated data.
+- Google sign-in in the Android and iPhone apps (they sign in with email
+  today) and passing the server and Firebase key to those builds.
 - Google Play Billing: verify token purchases here and credit them to the
   ledger (`reason = PLAY_STORE`, the order id as the reference, so an order
   can't be credited twice).
