@@ -94,19 +94,18 @@ here, by Web Push, the way Safari delivers notifications to a closed web app.
 
 `.github/workflows/backend-deploy.yml` deploys on every change to `backend/`
 on main, or by hand from Actions > Deploy server > Run workflow. After it, the
-web app is rebuilt and finds the server by itself. It needs two repository
-secrets (Settings > Secrets and variables > Actions):
+web app is rebuilt and finds the server by itself. It needs:
 
-1. **`DATABASE_URL`**: at neon.tech, create a project (free), then copy the
+1. **`DATABASE_URL`** repository secret (Settings > Secrets and variables >
+   Actions): at neon.tech, create a project (free), then copy the direct
    connection string from Connect (`postgresql://...?sslmode=require`).
-2. **`GCP_SA_KEY`**: in a Google Cloud project with billing on
-   (console.cloud.google.com; light use stays in the free tier, a budget
-   alert at $10 is a good idea):
-   - IAM & Admin > Service Accounts > Create, name `github-deploy`, with the
-     roles Cloud Run Admin, Cloud Build Editor, Artifact Registry Administrator,
-     Storage Admin, Service Account User, Cloud Scheduler Admin and Service
-     Usage Admin.
-   - Open it > Keys > Add key > JSON, and paste the whole file as the secret.
+2. **Google Cloud** (project `betpilot-513404`, billing on, a $10 budget
+   alert): a service account `github-deploy`, then in Cloud Shell
+   `curl -sL https://raw.githubusercontent.com/jonathanemc23/BetAssistance/main/gcp.sh | bash`.
+   It turns on the services, gives the account its roles and lets this
+   repository's workflows sign in as it without a key (Workload Identity
+   Federation; downloadable keys are blocked by default on new Google
+   accounts). The provider and account it prints are in the workflows.
 
 ## Sign-in
 

@@ -3,9 +3,10 @@ name: Deploy server
 # Puts the server in backend/ on Google Cloud Run, with the database from
 # Neon, and sets up a Cloud Scheduler job that runs a round of live alerts
 # every minute (Cloud Run sleeps between requests, so the server's own
-# timer can't be relied on). Skipped until the secrets exist:
-#   GCP_SA_KEY     a Google Cloud service account key (JSON), see backend/README.md
-#   DATABASE_URL   Neon's connection string, postgresql://user:password@host/db?sslmode=require
+# timer can't be relied on). Skipped until the DATABASE_URL secret (Neon's
+# connection string, postgresql://user:password@host/db?sslmode=require)
+# exists. GitHub signs in to Google without a key (Workload Identity
+# Federation), set up once with gcp.sh in Cloud Shell.
 # The web app finds the server by itself after this (see pages.yml).
 on:
   push:
@@ -15,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: deploy-server
@@ -23,22 +25,25 @@ concurrency:
 env:
   SERVICE: banktrack
   REGION: us-central1
+  GCP_PROVIDER: projects/776908553634/locations/global/workloadIdentityPools/github/providers/github
+  GCP_ACCOUNT: github-deploy@betpilot-513404.iam.gserviceaccount.com
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      READY: ${{ secrets.GCP_SA_KEY != '' && secrets.DATABASE_URL != '' }}
+      READY: ${{ secrets.DATABASE_URL != '' }}
     steps:
-      - name: Waiting for the Google Cloud and Neon secrets
+      - name: Waiting for the Neon secret
         if: env.READY != 'true'
-        run: echo "::notice::GCP_SA_KEY or DATABASE_URL is missing, so the server isn't deployed. See backend/README.md."
+        run: echo "::notice::DATABASE_URL is missing, so the server isn't deployed. See backend/README.md."
       - uses: actions/checkout@v5
         if: env.READY == 'true'
       - uses: google-github-actions/auth@v2
         if: env.READY == 'true'
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ env.GCP_PROVIDER }}
+          service_account: ${{ env.GCP_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@v2
         if: env.READY == 'true'
       - name: Deploy to Cloud Run
