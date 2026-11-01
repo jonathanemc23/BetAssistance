@@ -168,11 +168,11 @@ class _LiveMatchesState extends State<LiveMatches> {
     }
   }
 
-  void _openMatch(Match m) => Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => MatchPage(match: m, store: widget.store, api: widget.api, onPick: widget.onPick),
-    ),
-  );
+  void _openMatch(Match m) => widget.onPick != null
+      ? pickOnMatch(context, match: m, store: widget.store, api: widget.api, onPick: widget.onPick!)
+      : Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => MatchPage(match: m, store: widget.store, api: widget.api)),
+        );
 
   void _pick(Match m, String selection, double odds) => widget.onPick != null
       ? widget.onPick!(m, selection, odds)
@@ -442,11 +442,11 @@ class _MatchesScreenState extends State<MatchesScreen> {
     if (d != null) _setDay(d);
   }
 
-  void _openMatch(Match m) => Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => MatchPage(match: m, store: widget.store, api: widget.api, onPick: widget.onPick),
-    ),
-  );
+  void _openMatch(Match m) => widget.onPick != null
+      ? pickOnMatch(context, match: m, store: widget.store, api: widget.api, onPick: widget.onPick!)
+      : Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => MatchPage(match: m, store: widget.store, api: widget.api)),
+        );
 
   /// Tapping a price logs it as a bet or adds it to a parlay.
   void _pick(Match m, String selection, double odds) => widget.onPick != null
@@ -872,11 +872,11 @@ class _FavoriteMatchesState extends State<FavoriteMatches> {
     }
   }
 
-  void _openMatch(Match m) => Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => MatchPage(match: m, store: widget.store, api: widget.api, onPick: widget.onPick),
-    ),
-  );
+  void _openMatch(Match m) => widget.onPick != null
+      ? pickOnMatch(context, match: m, store: widget.store, api: widget.api, onPick: widget.onPick!)
+      : Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => MatchPage(match: m, store: widget.store, api: widget.api)),
+        );
 
   void _pick(Match m, String selection, double odds) => widget.onPick != null
       ? widget.onPick!(m, selection, odds)

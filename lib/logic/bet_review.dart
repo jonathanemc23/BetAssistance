@@ -346,12 +346,25 @@ class DataBetReviewer implements BetReviewer {
 }
 
 /// Grades a pick from a score: won, lost or push (stake back). Null when the
-/// market can't be graded from the score alone (corners, cards, scorers...).
+/// market can't be graded from the score alone (corners, cards, scorers...),
+/// or on a quarter line (-0.75, 2.25) whose two halves end differently, as
+/// half won or half lost isn't a result the app keeps.
 BetStatus? gradePick(String market, String selection, String home, String away, int hs, int as) {
   final s = selection.toLowerCase().trim();
   final h = home.toLowerCase(), a = away.toLowerCase();
   BetStatus win(bool w) => w ? BetStatus.won : BetStatus.lost;
   String? team() => s.startsWith(h) ? 'home' : s.startsWith(a) ? 'away' : null;
+
+  BetStatus overUnder(bool over, double line, int total) =>
+      total == line ? BetStatus.push : win(over ? total > line : total < line);
+
+  /// Grades a quarter line as its two halves, when they agree.
+  BetStatus? split(double line, BetStatus Function(double) grade) {
+    if ((line * 4).round() % 2 == 0) return grade(line);
+    final lo = grade(line - 0.25), hi = grade(line + 0.25);
+    return lo == hi ? lo : null;
+  }
+
   switch (market) {
     case 'result':
       if (s == 'draw') return win(hs == as);
@@ -368,15 +381,21 @@ BetStatus? gradePick(String market, String selection, String home, String away, 
     case 'handicap':
       final side = team();
       final line = double.tryParse(RegExp(r'([+-]?\d+(?:\.\d+)?)\s*$').firstMatch(s)?.group(1) ?? '');
-      if (side == null || line == null || (line * 4).round() % 2 != 0) return null; // quarter lines: skip
-      final diff = (side == 'home' ? hs - as : as - hs) + line;
-      return diff == 0 ? BetStatus.push : win(diff > 0);
+      if (side == null || line == null) return null;
+      final margin = side == 'home' ? hs - as : as - hs;
+      return split(line, (l) => margin + l == 0 ? BetStatus.push : win(margin + l > 0));
     case 'goals':
       final t = RegExp(r'^(over|under) (\d+(?:\.\d+)?)').firstMatch(s);
       if (t == null) return null;
-      final line = double.parse(t.group(2)!), total = hs + as;
-      if (total == line) return BetStatus.push;
-      return win(t.group(1) == 'over' ? total > line : total < line);
+      return split(double.parse(t.group(2)!), (l) => overUnder(t.group(1) == 'over', l, hs + as));
+    case 'team_goals':
+      final side = team();
+      final rest = s.substring(side == 'home' ? h.length : side == 'away' ? a.length : 0).trim();
+      final t = RegExp(r'^(over|under) (\d+(?:\.\d+)?)').firstMatch(rest);
+      if (side == null || t == null) return null;
+      return split(double.parse(t.group(2)!), (l) => overUnder(t.group(1) == 'over', l, side == 'home' ? hs : as));
+    case 'win_to_nil':
+      return switch (team()) { 'home' => win(hs > as && as == 0), 'away' => win(as > hs && hs == 0), _ => null };
     case 'btts':
       final both = hs > 0 && as > 0;
       return win(s.endsWith('no') ? !both : both);

@@ -1072,6 +1072,7 @@ void main() {
     await shot('match_h2h');
   });
   _zonesTest();
+  _parlayPickTest();
 }
 
 void _zonesTest() {
@@ -1101,6 +1102,50 @@ void _zonesTest() {
     expect(find.text('Group with Lanús', skipOffstage: false), findsOneWidget);
     expect(find.textContaining('In different groups'), findsOneWidget);
     if (shots) await expectLater(find.byType(MatchPage), matchesGoldenFile('screenshots/match_table_zones.png'));
+  });
+}
+
+void _parlayPickTest() {
+  testWidgets('picking for a parlay: a tapped match opens the markets, never a single bet', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final store = (await tester.runAsync(seededStore))!;
+    MatchesScreen.debugToday = DateTime(2026, 10, 18);
+    addTearDown(() => MatchesScreen.debugToday = null);
+    final picks = <(String, String, double)>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: MatchesTabs(
+          store: store,
+          api: FixturesApi(client: _fixturesClient()),
+          today: DateTime(2026, 10, 18),
+          onPick: (m, sel, odds) => picks.add((m.id, sel, odds)),
+        ),
+      ),
+    ));
+    await settle(tester);
+    await tester.tap(find.text('AFC Bournemouth').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose a market'), findsOneWidget);
+    expect(find.text('Log a bet'), findsNothing);
+    // Match result is priced: the odds are already in.
+    expect(find.widgetWithText(FilledButton, 'Add to parlay'), findsOneWidget);
+    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Odds')).controller!.text, '2.10');
+    // A handicap has no price in the feed: typed by hand.
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Handicap'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Odds')).controller!.text, '');
+    await tester.enterText(find.widgetWithText(TextField, 'Odds'), '1.85');
+    await tester.pumpAndSettle();
+    expect(find.text('Settles by itself from the final score.'), findsOneWidget);
+    final add = find.widgetWithText(FilledButton, 'Add to parlay');
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    expect(picks.single.$2, 'AFC Bournemouth -0.5');
+    expect(picks.single.$3, 1.85);
   });
 }
 

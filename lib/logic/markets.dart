@@ -32,6 +32,8 @@ class Market {
         'half_time' => tr('Half-time result'),
         'correct_score' => tr('Correct score'),
         'scorer' => tr('Goalscorer'),
+        'team_goals' => tr('Team total'),
+        'win_to_nil' => tr('Win to nil'),
         'other' => tr('Other'),
         _ => label,
       };
@@ -47,18 +49,21 @@ class Market {
   bool get hasLine => line != null;
   bool get hasText => input != null;
 
-  /// The sides to choose from for a match between [home] and [away].
-  List<String> sides(String home, String away) => switch (id) {
-        'result' || 'half_time' => [home, 'Draw', away],
+  /// The sides to choose from for a match between [home] and [away]. Sports
+  /// without draws ([draws] false) only offer the two teams for a result.
+  List<String> sides(String home, String away, {bool draws = true}) => switch (id) {
+        'result' || 'half_time' => [home, if (draws) 'Draw', away],
         'double_chance' => ['$home or draw', '$home or $away', '$away or draw'],
-        'dnb' || 'handicap' => [home, away],
+        'dnb' || 'handicap' || 'win_to_nil' => [home, away],
+        'team_goals' => ['$home over', '$home under', '$away over', '$away under'],
         'goals' || 'corners' || 'cards' => ['Over', 'Under'],
         'btts' => ['Yes', 'No'],
         _ => const [],
       };
 
-  /// The selection text for a side, line and free text.
-  String selection({String? side, double? line, String text = ''}) {
+  /// The selection text for a side, line and free text. [unit] is what the
+  /// totals count: goals, points or runs.
+  String selection({String? side, double? line, String text = '', String unit = 'goals'}) {
     final t = text.trim();
     final l = line == null ? '' : formatLine(line, signed: signedLine);
     return switch (id) {
@@ -66,7 +71,9 @@ class Market {
       'double_chance' => side ?? '',
       'dnb' => '$side draw no bet',
       'handicap' => '$side $l',
-      'goals' => '$side $l goals',
+      'goals' => '$side $l $unit',
+      'team_goals' => '$side $l $unit',
+      'win_to_nil' => '$side to win to nil',
       'corners' => '$side $l corners',
       'cards' => '$side $l cards',
       'btts' => 'Both teams to score: $side',
@@ -90,8 +97,32 @@ const markets = <Market>[
   Market('half_time', 'Half-time result'),
   Market('correct_score', 'Correct score', input: 'Score, e.g. 2-1'),
   Market('scorer', 'Goalscorer', input: 'Player, e.g. Haaland'),
+  Market('team_goals', 'Team total', line: 1.5),
+  Market('win_to_nil', 'Win to nil'),
   Market('other', 'Other', input: 'Your pick, e.g. Arsenal win both halves'),
 ];
+
+/// The markets that make sense for [sport] ('soccer', 'basketball',
+/// 'baseball'), most used first. Football gets them all; the others have no
+/// draws, corners or cards.
+List<Market> marketsFor(String sport) {
+  if (sport == 'soccer') {
+    const order = ['result', 'double_chance', 'handicap', 'goals', 'btts', 'dnb', 'team_goals', 'win_to_nil'];
+    return [for (final id in order) marketById(id), for (final m in markets) if (!order.contains(m.id)) m];
+  }
+  final line = sport == 'basketball' ? (-5.5, 220.5, 110.5, 0.5) : (-1.5, 8.5, 4.5, 0.5);
+  return [
+    marketById('result'),
+    Market('handicap', 'Handicap', line: line.$1, step: line.$4, signedLine: true),
+    Market('goals', 'Over/Under goals', line: line.$2, step: line.$4),
+    Market('team_goals', 'Team total', line: line.$3, step: line.$4),
+    marketById('other'),
+  ];
+}
+
+/// Markets [gradePick] can settle from the final score alone. Picks in the
+/// others (corners, cards, scorers, half-time) are marked by the user.
+const scoreSettled = {'result', 'double_chance', 'dnb', 'handicap', 'goals', 'btts', 'correct_score', 'team_goals', 'win_to_nil'};
 
 Market marketById(String? id) => markets.firstWhere((m) => m.id == id, orElse: () => markets.last);
 
@@ -119,6 +150,8 @@ String marketOf(String selection) {
   if (has(r'correct score|^\d+\s*-\s*\d+$')) return 'correct_score';
   if (has(r'draw no bet|\bdnb\b')) return 'dnb';
   if (has(r'^(over|under|o|u)\s*\d')) return 'goals';
+  if (has(r'.\s(over|under)\s+\d+(\.\d+)?\s*(goals?|points?|runs?)?$')) return 'team_goals';
+  if (has(r'to nil$')) return 'win_to_nil';
   if (has(r'\bor draw\b|\bor\b.*\bor\b|^(1x|x2|12)$| or ')) return 'double_chance';
   if (has(r'to score|anytime|scorer')) return 'scorer';
   if (has(r'[+-]\d+(\.\d+)?\s*$|handicap|spread|\bah\b')) return 'handicap';

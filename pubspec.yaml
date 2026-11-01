@@ -1,7 +1,7 @@
 name: bank_track
 description: "Bank Track: bankroll and bet tracker for bettors."
 publish_to: 'none'
-version: 0.22.0+27
+version: 0.23.0+28
 
 environment:
   sdk: ^3.13.5
