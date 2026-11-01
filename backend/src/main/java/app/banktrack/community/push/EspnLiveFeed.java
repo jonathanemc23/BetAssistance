@@ -17,6 +17,13 @@ public class EspnLiveFeed implements LiveFeed {
     static final Pattern FEED = Pattern.compile("[a-z]+/[a-z0-9._-]+");
 
     private final RestClient http = RestClient.create("https://site.api.espn.com/apis/site/v2/sports");
+    private final PushStats stats;
+    private final java.time.Clock clock;
+
+    public EspnLiveFeed(PushStats stats, java.time.Clock clock) {
+        this.stats = stats;
+        this.clock = clock;
+    }
 
     @Override
     public Optional<LiveAlerts.Game> read(String feed, String matchId) {
@@ -28,6 +35,7 @@ public class EspnLiveFeed implements LiveFeed {
             return body == null ? Optional.empty() : parse(body);
         } catch (RuntimeException e) {
             log.warn("No live score for {} {}: {}", feed, matchId, e.getMessage());
+            stats.feedError(clock.instant(), feed, matchId, e.getMessage());
             return Optional.empty();
         }
     }

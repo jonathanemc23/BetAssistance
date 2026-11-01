@@ -123,6 +123,11 @@ class PushApiTest {
         assertThat(tick()).isEqualTo(1);
         assertThat(sender.sent.getLast()).contains("Full time: Everton 1-0 Chelsea");
         assertThat(tick()).isZero();
+
+        mvc.perform(get("/push/status")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.phones").value(1))
+                .andExpect(jsonPath("$.matchesFollowed").value(1))
+                .andExpect(jsonPath("$.lastRound").value(org.hamcrest.Matchers.not("none since start")));
     }
 
     @Test

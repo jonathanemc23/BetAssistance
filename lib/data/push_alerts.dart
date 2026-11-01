@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -22,7 +23,7 @@ const _sentPref = 'push.sent';
 /// full time by Web Push. The app sends the list when it opens and whenever
 /// it changes.
 class PushAlerts {
-  PushAlerts({this.server = pushServer, PushChannel? channel, http.Client? client, DateTime Function()? clock})
+  PushAlerts({this.server = pushServer, PushChannel? channel, http.Client? client, DateTime Function()? clock, this.syncDelay = const Duration(seconds: 2)})
       : channel = channel ?? PushChannel(),
         _client = client ?? http.Client(),
         _clock = clock ?? DateTime.now;
@@ -39,6 +40,14 @@ class PushAlerts {
   /// and the app doesn't show its own, so none come twice.
   DateTime? _synced;
 
+  BankStore? _watched;
+  Timer? _soon;
+  String? _lastMatches;
+
+  /// How long after a change to the bets the list goes to the server: soon
+  /// enough that a bet added just before closing the app is still followed.
+  final Duration syncDelay;
+
   bool get available => server.isNotEmpty && channel.supported;
 
   /// Whether the server is sending this phone's alerts.
@@ -50,6 +59,7 @@ class PushAlerts {
   /// hand, so a tap on the alerts switch can subscribe straight away.
   Future<void> prepare(BankStore store) async {
     if (!available) return;
+    _watch(store);
     await channel.register();
     try {
       final res = await _client.get(_url('/push/key')).timeout(const Duration(seconds: 20));
@@ -61,6 +71,24 @@ class PushAlerts {
       debugPrint('Push key: $e');
     }
   }
+
+  /// Sends the list a moment after the bets change, instead of waiting for
+  /// the next minute's check, which never comes once the app is closed.
+  void _watch(BankStore store) {
+    if (identical(_watched, store)) return;
+    _watched = store;
+    _lastMatches = _matchesKey(store);
+    store.addListener(() {
+      final key = _matchesKey(store);
+      if (key == _lastMatches) return;
+      _lastMatches = key;
+      _soon?.cancel();
+      _soon = Timer(syncDelay, () => sync(store));
+    });
+  }
+
+  String _matchesKey(BankStore store) =>
+      jsonEncode(pushMatches(store.bets, store.parlays, _clock().toUtc()));
 
   /// Switching alerts on, from a tap. Asks first, before anything else, as
   /// Safari only shows the prompt for a tap. Returns whether allowed.
