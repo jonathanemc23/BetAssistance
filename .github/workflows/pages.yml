@@ -10,6 +10,8 @@ name: Web app
 # address is the PUSH_SERVER_URL repository variable, or else the Cloud Run
 # service the "Deploy server" workflow made. Without one the app only alerts
 # while it's open.
+# Accounts (sign in and data saved on the account) need the same server; the
+# Firebase web key is in lib/data/account.dart.
 on:
   push:
     branches: [main]

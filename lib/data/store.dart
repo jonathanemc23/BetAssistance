@@ -100,6 +100,18 @@ class BankStore extends ChangeNotifier {
     await load();
   }
 
+  /// The user's data as saved on their account (see [AppDatabase.exportSnapshot]).
+  Future<Map<String, Object?>> snapshot() => _db.exportSnapshot();
+
+  /// Replaces the data on this device with the account's, then reloads.
+  Future<void> restoreSnapshot(Map<String, dynamic> snapshot) async {
+    await _db.importSnapshot(snapshot);
+    await load();
+  }
+
+  /// Whether nothing has been logged on this device yet.
+  bool get isEmpty => bets.isEmpty && txs.isEmpty && parlays.isEmpty && boards.isEmpty && favorites.isEmpty;
+
   Future<String?> pref(String key) => _db.pref(key);
   Future<void> setPref(String key, String value) => _db.setPref(key, value);
 
