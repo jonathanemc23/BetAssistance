@@ -6,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../logic/live_alerts.dart';
 import 'bet_settler.dart';
 import 'fixtures.dart';
+import 'push_alerts.dart';
 import 'store.dart';
 
 /// Preference keys. Alerts are on unless the user turns them off.
@@ -25,13 +26,16 @@ abstract class AlertSink {
 /// raises a notification on kick-off, each score change and full time. Each
 /// match has one notification that updates as the game goes on. With a
 /// [settler], results go into the bets on their own: when the app starts,
-/// after each full time and every [settleEvery] in between.
+/// after each full time and every [settleEvery] in between. With [push]
+/// (the web app), the alert server is kept up to date with the matches and
+/// sends the alerts itself, also with the app closed.
 class LiveAlertService {
   LiveAlertService({
     required this.store,
     required FixturesApi api,
     required this.sink,
     this.settler,
+    this.push,
     this.every = const Duration(minutes: 1),
     this.settleEvery = const Duration(minutes: 10),
     Future<Map<String, Match>> Function(List<Match>)? read,
@@ -43,6 +47,7 @@ class LiveAlertService {
   final BankStore store;
   final AlertSink sink;
   final BetSettler? settler;
+  final PushAlerts? push;
   final Duration every;
   final Duration settleEvery;
   DateTime? _settled;
@@ -54,7 +59,7 @@ class LiveAlertService {
   void start() {
     _timer?.cancel();
     _timer = Timer.periodic(every, (_) => poll());
-    _askOnce().then((_) => poll());
+    _askOnce().then((_) => push?.prepare(store)).then((_) => poll());
   }
 
   /// Asks for notification access once, when the app starts with alerts on,
@@ -84,6 +89,11 @@ class LiveAlertService {
     if (_busy) return const [];
     _busy = true;
     final out = <LiveAlert>[];
+    try {
+      if (push != null && await store.pref(alertsEnabledPref) != '0') await push!.sync(store);
+    } catch (e) {
+      debugPrint('Push alerts: $e');
+    }
     try {
       out.addAll(await _poll());
     } catch (e) {
@@ -127,7 +137,8 @@ class LiveAlertService {
       seen[m.id] = MatchSnapshot.of(m);
       if (alert == null) continue;
       out.add(alert);
-      await sink.show(alert);
+      // The server sent this one already.
+      if (push?.active != true) await sink.show(alert);
     }
     await store.setPref(_seenPref, MatchSnapshot.encodeAll(seen, now));
     return out;

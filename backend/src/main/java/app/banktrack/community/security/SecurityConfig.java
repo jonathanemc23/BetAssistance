@@ -20,6 +20,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -38,9 +41,12 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain api(HttpSecurity http, @Value("${banktrack.auth.dev-header:false}") boolean devHeader) throws Exception {
         http.csrf(c -> c.disable())
+                .cors(Customizer.withDefaults())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health").permitAll()
+                        // Live alerts: a phone is known by its push subscription, no sign-in (see PushController).
+                        .requestMatchers("/push/**").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll());
         if (devHeader) {
@@ -50,6 +56,19 @@ public class SecurityConfig {
             http.oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults()));
         }
         return http.build();
+    }
+
+    /** The web app (GitHub Pages) calls the server from the browser. */
+    @Bean
+    CorsConfigurationSource corsConfigurationSource(@Value("${banktrack.web-origins:https://jonathanemc23.github.io}") List<String> origins) {
+        CorsConfiguration c = new CorsConfiguration();
+        c.setAllowedOrigins(origins);
+        c.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE"));
+        c.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        c.setMaxAge(3600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", c);
+        return source;
     }
 
     /** Signs in as the user the X-Dev-User header names. Never on in production. */

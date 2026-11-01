@@ -61,6 +61,52 @@ Authentication for sign-in keeps the rules in one tested codebase.
 | `GET /api/challenge`, `POST /api/challenge/accept`, `/bets`, `/restart` | The pro bettor challenge |
 | `GET /api/tokens` | Token balance |
 
+## Live alerts with the app closed (Web Push)
+
+The web app on iPhone (added to the Home Screen, iOS 16.4 or later) only runs
+while it's open, so the alerts for kick-off, goals and full time come from
+here, by Web Push, the way Safari delivers notifications to a closed web app.
+
+- The bets stay on the phone. The app sends the server its push subscription
+  and the matches with open bets (next 7 days, ESPN leagues), when it opens
+  and whenever they change: `PUT /push/devices`. No sign-in: a phone is known
+  by its subscription.
+- `LiveAlertJob` reads ESPN's summary for each followed match from 30 minutes
+  before kick-off and sends what changed, with the same rules and texts
+  (English and Spanish) as `lib/logic/live_alerts.dart`.
+- `WebPush` encrypts each message for the browser (RFC 8291) and signs it with
+  the server's VAPID key (RFC 8292), plain JDK crypto. The key pair is made on
+  first start and kept in `push_keys`; `GET /push/key` hands out the public half.
+- Cloud Run sleeps between requests, so a Cloud Scheduler job calls
+  `POST /push/tick` every minute (header `X-Tick-Key`, the `PUSH_TICK_KEY`
+  setting). Elsewhere the job also runs on its own timer.
+- Subscriptions Apple or Google say are gone, and phones silent for 30 days,
+  are dropped.
+
+| Call | What it does |
+| --- | --- |
+| `GET /push/key` | The public key to subscribe with |
+| `PUT /push/devices` | `{subscription, lang, matches}`: save the phone and the matches it follows |
+| `DELETE /push/devices` | `{endpoint}`: alerts switched off |
+| `POST /push/tick` | Run a round now (Cloud Scheduler) |
+
+## Deploy (Google Cloud Run + Neon)
+
+`.github/workflows/backend-deploy.yml` deploys on every change to `backend/`
+on main, or by hand from Actions > Deploy server > Run workflow. After it, the
+web app is rebuilt and finds the server by itself. It needs:
+
+1. **`DATABASE_URL`** repository secret (Settings > Secrets and variables >
+   Actions): at neon.tech, create a project (free), then copy the direct
+   connection string from Connect (`postgresql://...?sslmode=require`).
+2. **Google Cloud** (project `betpilot-513404`, billing on, a $10 budget
+   alert): a service account `github-deploy`, then in Cloud Shell
+   `curl -sL https://raw.githubusercontent.com/jonathanemc23/BetAssistance/main/gcp.sh | bash`.
+   It turns on the services, gives the account its roles and lets this
+   repository's workflows sign in as it without a key (Workload Identity
+   Federation; downloadable keys are blocked by default on new Google
+   accounts). The provider and account it prints are in the workflows.
+
 ## Sign-in
 
 Every `/api` call needs a Firebase Authentication ID token

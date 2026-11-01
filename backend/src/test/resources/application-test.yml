@@ -7,3 +7,6 @@ banktrack:
   auth:
     dev-header: true
   settle-every: PT1000H
+  push:
+    every: PT1000H
+    tick-key: test-tick

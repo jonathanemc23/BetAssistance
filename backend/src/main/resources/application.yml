@@ -28,3 +28,9 @@ management:
 banktrack:
   auth:
     dev-header: ${DEV_AUTH:false}
+  # Live alerts by Web Push (push/). PUSH_TICK_KEY lets a scheduler run a round with POST /push/tick on hosts
+  # that sleep between requests; leave it empty to switch that call off.
+  push:
+    subject: ${PUSH_SUBJECT:https://jonathanemc23.github.io/BetAssistance/}
+    tick-key: ${PUSH_TICK_KEY:}
+  web-origins: ${WEB_ORIGINS:https://jonathanemc23.github.io}
