@@ -37,6 +37,16 @@ Future<void> loadFonts() async {
   }
   await roboto.load();
   await (FontLoader('MaterialIcons')..addFont(f('MaterialIcons-Regular.otf'))).load();
+  // The legend avatars' emblems.
+  for (final (family, file) in [
+    ('FontAwesomeSolid', 'Font-Awesome-7-Free-Solid-900.otf'),
+    ('FontAwesomeRegular', 'Font-Awesome-7-Free-Regular-400.otf'),
+    ('FontAwesomeBrands', 'Font-Awesome-7-Brands-Regular-400.otf'),
+  ]) {
+    await (FontLoader('packages/font_awesome_flutter/$family')
+          ..addFont(rootBundle.load('packages/font_awesome_flutter/lib/fonts/$file')))
+        .load();
+  }
 }
 
 Future<BankStore> seededStore() async {
@@ -165,11 +175,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Choose your avatar'), findsOneWidget);
     await tester.runAsync(() async {
-      await tester.tap(find.byKey(const Key('avatar-person:3')));
+      await tester.tap(find.byKey(const Key('avatar-legend:oracle')));
       await Future<void>.delayed(const Duration(milliseconds: 200));
     });
     await tester.pumpAndSettle();
-    expect(store.avatar, 'person:3');
+    expect(store.avatar, 'legend:oracle');
     await shot('avatar_picker');
     Navigator.of(tester.element(find.text('Choose your avatar'))).pop();
     await tester.pumpAndSettle();
@@ -943,7 +953,7 @@ void main() {
     communityClock = () => DateTime.utc(2026, 10, 18, 10);
     addTearDown(() => communityClock = DateTime.now);
     await tester.runAsync(() => store.saveSocialProfile(
-        const SocialProfile(name: 'Laura', handle: 'laura_bets', avatar: 'person:3', joined: '2026-10-18T10:00:00')));
+        const SocialProfile(name: 'Laura', handle: 'laura_bets', avatar: 'legend:oracle', joined: '2026-10-18T10:00:00')));
     await tester.tap(find.byKey(const Key('drawer-community')));
     await settle(tester);
     expect(find.text('Las apuestas más compradas'), findsOneWidget);

@@ -400,6 +400,22 @@ class AppDatabase {
     return {'schema': schemaVersion, 'tables': tables};
   }
 
+  /// Deletes the user's data and the price cache, keeping this device's own
+  /// preferences (see [devicePrefs]) and the app's theme and language.
+  Future<void> clearUserData() => db.transaction((txn) async {
+        for (final t in syncedTables) {
+          if (t == 'settings') continue;
+          await txn.delete(t);
+        }
+        await txn.delete('odds_history');
+        for (final r in await txn.query('settings')) {
+          final key = r['key'] as String;
+          // The look and language stay: they aren't private.
+          if (isDeviceSetting(key) || key.startsWith('pref.app.')) continue;
+          await txn.delete('settings', where: 'key = ?', whereArgs: [key]);
+        }
+      });
+
   /// Replaces the user's data with [snapshot] in one transaction, keeping
   /// this device's own preferences. A snapshot from a newer app is refused.
   Future<void> importSnapshot(Map<String, dynamic> snapshot) async {

@@ -1,7 +1,7 @@
 name: bank_track
 description: "Bank Track: bankroll and bet tracker for bettors."
 publish_to: 'none'
-version: 0.24.1+30
+version: 0.24.2+31
 
 environment:
   sdk: ^3.13.5
@@ -25,6 +25,7 @@ dependencies:
   url_launcher: ^6.3.3
   web: ^1.1.1
   sqflite_common_ffi_web: ^1.2.0
+  font_awesome_flutter: ^11.0.0
 
 dev_dependencies:
   flutter_test:

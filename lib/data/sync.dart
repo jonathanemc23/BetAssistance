@@ -126,9 +126,11 @@ class SyncService extends ChangeNotifier {
     if (state == SyncState.needsChoice) return;
     if (_running) {
       _again = true;
-      return;
+      return _current;
     }
     _running = true;
+    final done = Completer<void>();
+    _current = done.future;
     try {
       do {
         _again = false;
@@ -136,7 +138,33 @@ class SyncService extends ChangeNotifier {
       } while (_again && account.signedIn && state != SyncState.needsChoice);
     } finally {
       _running = false;
+      done.complete();
     }
+  }
+
+  Future<void>? _current;
+
+  /// One last save before signing out. True when everything on this device
+  /// is on the account, so clearing the device loses nothing.
+  Future<bool> saveBeforeSignOut() async {
+    _debounceTimer?.cancel();
+    await sync();
+    return state == SyncState.synced;
+  }
+
+  /// Signs out and clears the user's data from this device, so the next
+  /// person to open the app sees nothing of it. What this device knew about
+  /// the account is forgotten too, so signing in again downloads the
+  /// account's data instead of saving the empty device over it.
+  Future<void> signOutAndClear() async {
+    _debounceTimer?.cancel();
+    if (_running) await _current;
+    await account.signOut();
+    for (final k in [_uidPref, _versionPref, _hashPref]) {
+      await store.setPref(k, '');
+    }
+    lastSynced = null;
+    await store.clearUserData();
   }
 
   Future<void> _syncOnce({bool retried = false}) async {

@@ -109,6 +109,13 @@ class BankStore extends ChangeNotifier {
     await load();
   }
 
+  /// Removes the user's data from this device (after signing out); the
+  /// device's own settings stay.
+  Future<void> clearUserData() async {
+    await _db.clearUserData();
+    await load();
+  }
+
   /// Whether nothing has been logged on this device yet.
   bool get isEmpty => bets.isEmpty && txs.isEmpty && parlays.isEmpty && boards.isEmpty && favorites.isEmpty;
 
