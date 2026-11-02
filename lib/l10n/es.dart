@@ -1072,6 +1072,9 @@ const esStrings = <String, String>{
   'The Stallion': 'El Corcel',
   'The Black Widow': 'La Viuda Negra',
   'The Night': 'La Noche',
+  'Your bets are only saved on this device and could be lost. Sign in to keep them safe.':
+      'Tus apuestas solo están guardadas en este dispositivo y podrían perderse. Inicia sesión para protegerlas.',
+  'Close': 'Cerrar',
   // Players tab (basketball box score)
   'Players': 'Jugadores',
   'Player': 'Jugador',

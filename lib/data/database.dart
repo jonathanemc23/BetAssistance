@@ -175,6 +175,15 @@ final List<Future<void> Function(DatabaseExecutor db)> migrations = [
     await db.execute('ALTER TABLE bet_legs ADD COLUMN league_name TEXT');
     await db.execute('ALTER TABLE bet_legs ADD COLUMN kickoff TEXT');
   },
+  // 8 -> 9: a new bankroll starts at 0 (it was 1000). Someone already
+  // tracking bets who never set a starting balance keeps the 1000 they saw.
+  (db) async {
+    final set = await db.query('settings', where: 'key = ?', whereArgs: ['startBankroll']);
+    if (set.isNotEmpty) return;
+    final used = await db.rawQuery('SELECT (SELECT COUNT(*) FROM bets) + (SELECT COUNT(*) FROM transactions) AS n');
+    if (((used.first['n'] as int?) ?? 0) == 0) return;
+    await db.insert('settings', {'key': 'startBankroll', 'value': '1000.0'});
+  },
 ];
 
 int get schemaVersion => migrations.length;

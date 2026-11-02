@@ -5,6 +5,7 @@
 (function () {
   var version = '10.14.1';
   var ready = null;
+  var loaded = false;
 
   function load(src) {
     return new Promise(function (resolve, reject) {
@@ -22,19 +23,32 @@
       .then(function () {
         firebase.initializeApp({ apiKey: apiKey, projectId: project, authDomain: project + '.firebaseapp.com' });
         return firebase.auth().setPersistence(firebase.auth.Auth.Persistence.NONE);
-      });
+      })
+      .then(function () { loaded = true; });
   }
+
+  function start(apiKey, project) {
+    ready = ready || setUp(apiKey, project).catch(function (e) {
+      ready = null;
+      throw e;
+    });
+    return ready;
+  }
+
+  // Downloads Firebase while the sign-in page is open, so the tap on
+  // "Continue with Google" can open the window straight away. Browsers
+  // block a window opened after waiting for a download, which made the
+  // first tap do nothing.
+  window.bankTrackGooglePrepare = function (apiKey, project) {
+    start(apiKey, project).catch(function () {});
+  };
 
   // Resolves to JSON text: {uid, email, idToken, refreshToken} or {error}.
   window.bankTrackGoogleSignIn = async function (apiKey, project) {
     try {
-      ready = ready || setUp(apiKey, project);
-      try {
-        await ready;
-      } catch (e) {
-        ready = null;
-        throw e;
-      }
+      // Only wait when Firebase isn't there yet: any wait before the popup
+      // opens can make the browser block it.
+      if (!loaded) await start(apiKey, project);
       var provider = new firebase.auth.GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       var result = await firebase.auth().signInWithPopup(provider);
