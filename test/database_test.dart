@@ -46,6 +46,29 @@ void main() {
     await db.close();
   });
 
+  test('a new bankroll starts at 0; one already in use keeps the old 1000', () async {
+    final fresh = await AppDatabase.open(factory: factory, path: path);
+    expect((await fresh.settings()).startBankroll, 0);
+    await fresh.close();
+    await factory.deleteDatabase(path);
+
+    // A phone on the previous release with bets and no starting balance set.
+    final old = await factory.openDatabase(path,
+        options: OpenDatabaseOptions(version: 8, onCreate: (db, _) async {
+          for (final m in migrations.take(8)) {
+            await m(db);
+          }
+        }));
+    await old.insert('bets', {
+      'selection': 'Arsenal to win', 'sport': 'Soccer', 'date': '2026-10-01', 'stake': 20, 'odds': 2.1,
+      'status': 'won', 'created': '2026-10-01T10:00:00',
+    });
+    await old.close();
+    final db = await AppDatabase.open(factory: factory, path: path);
+    expect((await db.settings()).startBankroll, 1000);
+    await db.close();
+  });
+
   test("void status round-trips with the web version's stored value", () async {
     final db = await AppDatabase.open(factory: factory, path: path);
     final id = await db.saveBet(sample().copyWith(status: BetStatus.voided));

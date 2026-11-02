@@ -147,6 +147,11 @@ class AccountService extends ChangeNotifier {
     }
   }
 
+  /// Gets Google sign-in ready so the first tap opens its window.
+  void prepareGoogle() {
+    if (configured && googleAvailable) google.prepare(apiKey: apiKey, project: project);
+  }
+
   /// Google sign-in (the web app). Returns the error, or null when signed in
   /// or when the user closed the Google window.
   Future<String?> signInWithGoogle() async {

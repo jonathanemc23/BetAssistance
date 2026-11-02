@@ -323,7 +323,7 @@ class Settings {
   const Settings({
     this.currency = 'USD',
     this.oddsFormat = OddsFormat.decimal,
-    this.startBankroll = 1000,
+    this.startBankroll = 0,
     required this.startDate,
     this.unit = 10,
   });

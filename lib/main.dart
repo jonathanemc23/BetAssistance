@@ -123,6 +123,9 @@ class _HomeShellState extends State<HomeShell> {
   AppLifecycleListener? _lifecycle;
   bool _choiceShown = false;
 
+  /// The signed-out warning was closed for this visit.
+  bool _warningClosed = false;
+
   BankStore get store => widget.store;
 
   @override
@@ -265,21 +268,30 @@ class _HomeShellState extends State<HomeShell> {
             IconButton(tooltip: tr('Settings'), icon: const Icon(Icons.tune), onPressed: _openSettings),
           ],
         ),
-        body: IndexedStack(index: _tab, children: [
-          HomeScreen(
-            store: store,
-            api: widget.fixtures,
-            today: widget.today,
-            onLogBet: () => openBetForm(context, store, api: widget.fixtures),
-            onOpenBets: () => setState(() => _tab = 1),
-            onOpenMatches: _openMatches,
-          ),
-          BetsScreen(store: store, api: widget.fixtures),
-          if (_tab == 2 || _matchesShown)
-            MatchesTabs(store: store, api: widget.fixtures, today: widget.today)
-          else
-            const SizedBox.shrink(),
-          ChartsScreen(store: store),
+        body: Column(children: [
+          if (widget.account case final account? when account.configured && !_warningClosed)
+            ListenableBuilder(
+              listenable: account,
+              builder: (context, _) => account.signedIn
+                  ? const SizedBox.shrink()
+                  : SignedOutWarning(onSignIn: _openAccount, onClose: () => setState(() => _warningClosed = true)),
+            ),
+          Expanded(child: IndexedStack(index: _tab, children: [
+            HomeScreen(
+              store: store,
+              api: widget.fixtures,
+              today: widget.today,
+              onLogBet: () => openBetForm(context, store, api: widget.fixtures),
+              onOpenBets: () => setState(() => _tab = 1),
+              onOpenMatches: _openMatches,
+            ),
+            BetsScreen(store: store, api: widget.fixtures),
+            if (_tab == 2 || _matchesShown)
+              MatchesTabs(store: store, api: widget.fixtures, today: widget.today)
+            else
+              const SizedBox.shrink(),
+            ChartsScreen(store: store),
+          ])),
         ]),
         floatingActionButton: _tab == 1
             ? Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [

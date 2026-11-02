@@ -35,6 +35,12 @@ class _LoginPageState extends State<LoginPage> {
   AccountService get account => widget.account;
 
   @override
+  void initState() {
+    super.initState();
+    account.prepareGoogle();
+  }
+
+  @override
   void dispose() {
     _name.dispose();
     _email.dispose();
@@ -851,3 +857,50 @@ Future<void> showSyncChoice(BuildContext context, SyncService sync) => showDialo
         actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('Decide later')))],
       ),
     );
+
+/// A small reminder, while signed out, that the data only lives on this
+/// device and can be lost without an account.
+class SignedOutWarning extends StatelessWidget {
+  const SignedOutWarning({super.key, required this.onSignIn, required this.onClose});
+  final VoidCallback onSignIn;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      key: const Key('signed-out-warning'),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Material(
+        color: cs.tertiaryContainer,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+          child: Row(children: [
+            Icon(Icons.warning_amber_rounded, color: cs.onTertiaryContainer, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                tr('Your bets are only saved on this device and could be lost. Sign in to keep them safe.'),
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onTertiaryContainer, fontWeight: FontWeight.w600),
+              ),
+            ),
+            TextButton(
+              key: const Key('signed-out-warning-sign-in'),
+              onPressed: onSignIn,
+              style: TextButton.styleFrom(foregroundColor: cs.onTertiaryContainer, visualDensity: VisualDensity.compact),
+              child: Text(tr('Sign in'), style: const TextStyle(fontWeight: FontWeight.w800)),
+            ),
+            IconButton(
+              tooltip: tr('Close'),
+              visualDensity: VisualDensity.compact,
+              icon: Icon(Icons.close, size: 18, color: cs.onTertiaryContainer),
+              onPressed: onClose,
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
