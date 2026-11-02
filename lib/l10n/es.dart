@@ -1075,4 +1075,17 @@ const esStrings = <String, String>{
   'Your bets are only saved on this device and could be lost. Sign in to keep them safe.':
       'Tus apuestas solo están guardadas en este dispositivo y podrían perderse. Inicia sesión para protegerlas.',
   'Close': 'Cerrar',
+  // Players tab (basketball box score)
+  'Players': 'Jugadores',
+  'Player': 'Jugador',
+  'Starters': 'Titulares',
+  'Bench': 'Banca',
+  'Team totals': 'Totales del equipo',
+  'Did not play': 'No jugaron',
+  'Ejected': 'Expulsado',
+  'Live stats': 'Estadísticas en vivo',
+  'Live stats, updated every {seconds} seconds': 'Estadísticas en vivo, se actualizan cada {seconds} segundos',
+  'Tap a column to sort, or a player for their full line.': 'Toca una columna para ordenar, o un jugador para ver todos sus números.',
+  'Player stats appear here once the game tips off, and update live during it.': 'Las estadísticas de los jugadores aparecen aquí cuando empieza el partido y se actualizan en vivo.',
+  'There are no player stats for this game yet.': 'Todavía no hay estadísticas de jugadores para este partido.',
 };

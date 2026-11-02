@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide KeyEvent, TableRow;
@@ -16,6 +17,7 @@ import 'match_visuals.dart';
 import 'matches_screen.dart';
 import 'money_movement.dart';
 import 'parlay_screens.dart';
+import 'players_tab.dart';
 import 'pro_tips_page.dart';
 
 /// Picking for a parlay: tapping a match goes straight to choosing a pick on
@@ -41,8 +43,9 @@ Future<void> pickOnMatch(BuildContext context,
 }
 
 /// One match: score header, then tabs for an overview, odds, money movement, stats with a
-/// shot map, key events, line-ups, the league table, head-to-head, teams and news (ESPN
-/// summary feed).
+/// shot map, players (basketball box score), key events, line-ups, the league table,
+/// head-to-head, teams and news (ESPN summary feed). While the match is on, the page
+/// reads the feed again every [_MatchPageState._liveEvery].
 class MatchPage extends StatefulWidget {
   const MatchPage(
       {super.key, required this.match, required this.store, required this.api, this.onPick, this.initialTab = 0});
@@ -60,20 +63,83 @@ class MatchPage extends StatefulWidget {
   State<MatchPage> createState() => _MatchPageState();
 }
 
+/// The match page's tabs, in order.
+enum MatchTab { overview, odds, money, stats, players, events, lineups, table, h2h, teams, news }
+
 class _MatchPageState extends State<MatchPage> {
   MatchDetails? _details;
   String? _error;
   bool _loading = true;
+  Timer? _liveTimer;
 
-  static List<String> get _tabs => [
-        tr('Overview'), tr('Odds'), tr('Money'), tr('Stats'), tr('Events'), //
-        tr('Line-ups'), tr('Table'), tr('H2H'), tr('Teams'), tr('News'),
+  /// How often a live match is read again.
+  static const _liveEvery = Duration(seconds: 30);
+
+  /// Basketball on ESPN has a box score, so its page gets a Players tab.
+  bool get _hasPlayers => widget.match.league.knownSport == Sport.basketball && widget.match.league.onEspn;
+
+  List<MatchTab> get _tabs => [
+        for (final t in MatchTab.values)
+          if (t != MatchTab.players || _hasPlayers) t,
       ];
+
+  static String _label(MatchTab t) => switch (t) {
+        MatchTab.overview => tr('Overview'),
+        MatchTab.odds => tr('Odds'),
+        MatchTab.money => tr('Money'),
+        MatchTab.stats => tr('Stats'),
+        MatchTab.players => tr('Players'),
+        MatchTab.events => tr('Events'),
+        MatchTab.lineups => tr('Line-ups'),
+        MatchTab.table => tr('Table'),
+        MatchTab.h2h => tr('H2H'),
+        MatchTab.teams => tr('Teams'),
+        MatchTab.news => tr('News'),
+      };
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _liveTimer?.cancel();
+    super.dispose();
+  }
+
+  bool get _isLive => (_details?.state ?? widget.match.state) == MatchState.live;
+
+  /// Keeps reading the feed while the match is on; stops once it isn't.
+  void _watchLive() {
+    if (!_isLive) {
+      _liveTimer?.cancel();
+      _liveTimer = null;
+      return;
+    }
+    _liveTimer ??= Timer.periodic(_liveEvery, (_) => _refreshLive());
+  }
+
+  bool _refreshing = false;
+
+  /// A quiet read for a live match: the score, stats and box score update in
+  /// place, with no spinner, and a failed read waits for the next tick.
+  Future<void> _refreshLive() async {
+    if (_refreshing || _loading || !mounted) return;
+    _refreshing = true;
+    try {
+      final fresh = await widget.api.details(widget.match, refresh: true);
+      final shown = _details;
+      if (!mounted || shown == null) return;
+      setState(() => _details = shown.withLiveFrom(fresh));
+      _shownFrom = _details;
+    } catch (_) {
+      // The next tick tries again.
+    } finally {
+      _refreshing = false;
+      if (mounted) _watchLive();
+    }
   }
 
   Future<void> _load({bool refresh = false}) async {
@@ -84,6 +150,7 @@ class _MatchPageState extends State<MatchPage> {
     try {
       final d = await widget.api.details(widget.match, refresh: refresh);
       if (mounted) setState(() => _details = d);
+      _watchLive();
       _loadMore(d);
     } on FixturesException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -153,9 +220,10 @@ class _MatchPageState extends State<MatchPage> {
   @override
   Widget build(BuildContext context) {
     final m = widget.match;
+    final tabs = _tabs;
     return DefaultTabController(
-      length: _tabs.length,
-      initialIndex: widget.initialTab,
+      length: tabs.length,
+      initialIndex: widget.initialTab.clamp(0, tabs.length - 1),
       child: Scaffold(
         appBar: AppBar(
           title: Text(m.league.name),
@@ -189,7 +257,7 @@ class _MatchPageState extends State<MatchPage> {
           TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: [for (final t in _tabs) Tab(text: t)],
+            tabs: [for (final t in tabs) Tab(text: _label(t))],
           ),
           Expanded(child: _body()),
         ]),
@@ -209,17 +277,22 @@ class _MatchPageState extends State<MatchPage> {
     }
     final fmt = widget.store.settings.oddsFormat;
     final m = widget.match;
+    final tabs = _tabs;
     return TabBarView(children: [
-      _OverviewTab(match: m, details: d, format: fmt),
-      _OddsTab(match: m, details: d, format: fmt, onPick: _pick, forParlay: widget.onPick != null),
-      MoneyMovementView(match: m, details: d, store: widget.store),
-      _StatsTab(match: m, details: d),
-      _EventsTab(match: m, details: d),
-      _LineupsTab(match: m, details: d),
-      _TableTab(match: m, details: d),
-      _H2HTab(match: m, details: d),
-      _TeamsTab(match: m, details: d),
-      _NewsTab(news: d.news),
+      for (final t in tabs)
+        switch (t) {
+          MatchTab.overview => _OverviewTab(match: m, details: d, format: fmt, tabs: tabs),
+          MatchTab.odds => _OddsTab(match: m, details: d, format: fmt, onPick: _pick, forParlay: widget.onPick != null),
+          MatchTab.money => MoneyMovementView(match: m, details: d, store: widget.store),
+          MatchTab.stats => _StatsTab(match: m, details: d),
+          MatchTab.players => PlayersTab(match: m, details: d, live: _isLive, every: _liveEvery),
+          MatchTab.events => _EventsTab(match: m, details: d),
+          MatchTab.lineups => _LineupsTab(match: m, details: d),
+          MatchTab.table => _TableTab(match: m, details: d),
+          MatchTab.h2h => _H2HTab(match: m, details: d),
+          MatchTab.teams => _TeamsTab(match: m, details: d),
+          MatchTab.news => _NewsTab(news: d.news),
+        },
     ]);
   }
 }
@@ -234,7 +307,15 @@ class _Header extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final m = match;
-    final live = m.state == MatchState.live;
+    // A live page reads the feed again, so its status and score are newer
+    // than the match list's.
+    final d = details;
+    final fresh = d != null && d.state != MatchState.other && (d.homeScore != null || d.state == MatchState.scheduled);
+    final state = fresh ? d.state : m.state;
+    final live = state == MatchState.live;
+    final detail = fresh && d.clock.isNotEmpty ? d.clock : m.detail;
+    final homeScore = fresh && d.homeScore != null ? '${d.homeScore}' : m.home.score;
+    final awayScore = fresh && d.awayScore != null ? '${d.awayScore}' : m.away.score;
     Widget side(Team t, TeamInfo? info) => Expanded(
           child: Column(children: [
             Container(
@@ -258,8 +339,8 @@ class _Header extends StatelessWidget {
               Text(_wdl(info.record), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
           ]),
         );
-    final centre = m.hasScore
-        ? Text('${m.home.score ?? '-'} - ${m.away.score ?? '-'}',
+    final centre = m.hasScore || (fresh && homeScore != null)
+        ? Text('${homeScore ?? '-'} - ${awayScore ?? '-'}',
             style: theme.textTheme.displaySmall?.copyWith(
                 fontWeight: FontWeight.w900,
                 color: live ? cs.error : null,
@@ -273,13 +354,13 @@ class _Header extends StatelessWidget {
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Container(width: 6, height: 6, decoration: BoxDecoration(color: cs.onError, shape: BoxShape.circle)),
               const SizedBox(width: 5),
-              Text(tr('LIVE {clock}', {'clock': m.detail}), style: TextStyle(color: cs.onError, fontSize: 11, fontWeight: FontWeight.w800)),
+              Text(tr('LIVE {clock}', {'clock': detail}), style: TextStyle(color: cs.onError, fontSize: 11, fontWeight: FontWeight.w800)),
             ]),
           )
         : Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             decoration: BoxDecoration(color: cs.surface.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(20)),
-            child: Text(m.state == MatchState.scheduled ? tr('Kick-off') : m.detail,
+            child: Text(state == MatchState.scheduled ? tr('Kick-off') : detail,
                 style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
           );
     // Scorers and red cards under each team.
@@ -427,21 +508,21 @@ ListView _list(List<Widget> children) =>
 /// The match at a glance: win chances from the odds, key stats, the shot map,
 /// both teams' form and where they sit in the table. Each part links to its tab.
 class _OverviewTab extends StatelessWidget {
-  const _OverviewTab({required this.match, required this.details, required this.format});
+  const _OverviewTab({required this.match, required this.details, required this.format, required this.tabs});
   final Match match;
   final MatchDetails details;
   final OddsFormat format;
 
-  // Tab indexes in [_MatchPageState._tabs].
-  static const _statsTab = 3, _tableTab = 6, _teamsTab = 8;
+  /// The page's tabs, to link to the others.
+  final List<MatchTab> tabs;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final m = match, d = details;
-    void open(int tab) => DefaultTabController.of(context).animateTo(tab);
-    Widget more(String text, int tab) => Align(
+    void open(MatchTab tab) => DefaultTabController.of(context).animateTo(tabs.indexOf(tab));
+    Widget more(String text, MatchTab tab) => Align(
           alignment: Alignment.centerRight,
           child: TextButton(onPressed: () => open(tab), child: Text(text)),
         );
@@ -462,7 +543,7 @@ class _OverviewTab extends StatelessWidget {
           title: tr('Key stats'),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             StatTiles(values: d.statValues, max: 6),
-            more(tr('All stats'), _statsTab),
+            more(tr('All stats'), MatchTab.stats),
           ]),
         ),
       if (d.shots.isNotEmpty)
@@ -470,7 +551,7 @@ class _OverviewTab extends StatelessWidget {
           title: tr('Shot map'),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             ShotMap(shots: d.shots, home: m.home, away: m.away, compact: true),
-            more(tr('Every shot'), _statsTab),
+            more(tr('Every shot'), MatchTab.stats),
           ]),
         ),
       if (hasForm)
@@ -481,7 +562,7 @@ class _OverviewTab extends StatelessWidget {
               if (i == 1) Divider(height: 24, color: cs.outlineVariant),
               _FormGuideRow(team: t, info: inf, position: _position(inf), games: _TeamGame.of(t.name, inf)),
             ],
-            more(tr('Latest results'), _teamsTab),
+            more(tr('Latest results'), MatchTab.teams),
           ]),
         ),
       if (d.table.isNotEmpty) ...[
@@ -490,7 +571,7 @@ class _OverviewTab extends StatelessWidget {
           child: Text(tr('TABLE'), style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1, color: cs.primary)),
         ),
         StandingsTable(match: m, details: d, nearby: true),
-        more(tr('Full table'), _tableTab),
+        more(tr('Full table'), MatchTab.table),
       ],
     ];
     if (parts.isEmpty) {

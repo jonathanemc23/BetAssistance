@@ -29,6 +29,7 @@ class MatchDetails {
     this.statValues = const {},
     this.statNames = const [],
     this.attendance,
+    this.boxScore = const [],
   });
 
   final List<MatchOdds> odds;
@@ -66,6 +67,41 @@ class MatchDetails {
   final List<String> statNames;
   final int? attendance;
 
+  /// Each team's player stats (basketball box score), home first. Empty
+  /// before tip-off and for sports or leagues ESPN has no box score for.
+  final List<TeamBoxScore> boxScore;
+
+  /// The box score of [side] ('home' or 'away'), if the feed has one.
+  TeamBoxScore? boxScoreOf(String side) => boxScore.where((b) => b.side == side).firstOrNull;
+
+  /// These details with what changes while the match is on, from a newer
+  /// read of the feed ([fresh]): status, score, stats, events, shots, odds and
+  /// the box score. What was added after the first read (longer history,
+  /// a table) is kept.
+  MatchDetails withLiveFrom(MatchDetails fresh) => MatchDetails(
+    odds: fresh.odds.isNotEmpty ? fresh.odds : odds,
+    news: news,
+    home: home,
+    away: away,
+    events: fresh.events,
+    stats: fresh.stats,
+    statsAreSeason: fresh.statsAreSeason,
+    h2hSummary: h2hSummary,
+    h2h: h2h,
+    table: table,
+    tableTitle: tableTitle,
+    tableGroups: tableGroups,
+    state: fresh.state,
+    clock: fresh.clock,
+    homeScore: fresh.homeScore,
+    awayScore: fresh.awayScore,
+    shots: fresh.shots,
+    statValues: fresh.statValues,
+    statNames: fresh.statNames,
+    attendance: fresh.attendance ?? attendance,
+    boxScore: fresh.boxScore.isNotEmpty ? fresh.boxScore : boxScore,
+  );
+
   /// Only the status and score of [m], for matches no feed has details for.
   static MatchDetails statusOf(Match m) => MatchDetails(
     state: m.state,
@@ -96,6 +132,7 @@ class MatchDetails {
     statValues: statValues,
     statNames: statNames,
     attendance: attendance,
+    boxScore: boxScore,
   );
 
   /// These details with the longer [history]: each team's last results and
@@ -122,6 +159,7 @@ class MatchDetails {
     statValues: statValues,
     statNames: statNames,
     attendance: attendance,
+    boxScore: boxScore,
   );
 
   /// These details with what [FixturesApi.extras] found: a league table
@@ -155,6 +193,7 @@ class MatchDetails {
     statValues: statValues,
     statNames: statNames,
     attendance: attendance,
+    boxScore: boxScore,
   );
 }
 
@@ -324,6 +363,67 @@ class TeamInfo {
         subs: subs,
         color: color,
       );
+}
+
+/// One team's box score: a row of stats per player under [labels] ("PTS",
+/// "REB"...), as ESPN's summary sends it for basketball.
+class TeamBoxScore {
+  const TeamBoxScore({
+    required this.side,
+    required this.team,
+    this.labels = const [],
+    this.descriptions = const [],
+    this.keys = const [],
+    this.players = const [],
+    this.totals = const [],
+  });
+
+  /// 'home' or 'away'.
+  final String side;
+  final String team;
+
+  /// Column headings ("MIN", "PTS", "FG"...), what each means, and ESPN's
+  /// name for each ("points").
+  final List<String> labels, descriptions, keys;
+
+  /// In ESPN's order: starters first, then the bench.
+  final List<BoxPlayer> players;
+
+  /// The team's totals, one per column ('' where there is none).
+  final List<String> totals;
+
+  /// The column of ESPN's [key] ("points"), or -1.
+  int column(String key) => keys.indexOf(key);
+}
+
+class BoxPlayer {
+  const BoxPlayer({
+    required this.name,
+    this.shortName = '',
+    this.jersey = '',
+    this.position = '',
+    this.headshot,
+    this.starter = false,
+    this.didNotPlay = false,
+    this.ejected = false,
+    this.reason = '',
+    this.stats = const [],
+  });
+  final String name, shortName, jersey, position;
+  final String? headshot;
+  final bool starter, didNotPlay, ejected;
+
+  /// Why a player didn't play ("COACH'S DECISION", "INJURY..."). ESPN
+  /// sends a reason for players who did play too; it means nothing then.
+  final String reason;
+
+  /// One per column of the team's [TeamBoxScore.labels].
+  final List<String> stats;
+
+  bool get played => !didNotPlay && stats.isNotEmpty;
+
+  /// The stat in column [i], '' when there is none.
+  String at(int i) => i >= 0 && i < stats.length ? stats[i] : '';
 }
 
 class Player {
@@ -726,6 +826,11 @@ MatchDetails parseMatchDetails(String body) {
           _stat(as.firstWhere((a) => a is Map && a['name'] == s['name'], orElse: () => const {}) as Map),
         ),
   };
+  final boxScore = safe(() => [
+            for (final t in (json['boxscore']['players'] as List))
+              if (t is Map) ?_teamBox(t, sideOf(t['team']?['id']) ?? 'away'),
+          ]..sort((a, b) => (a.side == 'home' ? 0 : 1).compareTo(b.side == 'home' ? 0 : 1))) ??
+      const <TeamBoxScore>[];
   final homeName = '${competitor('home')?['team']?['displayName'] ?? ''}';
   final shots = safe(() => [
             for (final c in (json['commentary'] as List))
@@ -853,6 +958,42 @@ MatchDetails parseMatchDetails(String body) {
     statValues: statValues,
     statNames: [for (final s in hs) if (s is Map) '${s['name'] ?? ''}'],
     attendance: safe<int?>(() => (json['gameInfo']['attendance'] as num?)?.toInt()),
+    boxScore: boxScore,
+  );
+}
+
+/// A team's entry in the summary's `boxscore.players`, or null when it has
+/// no player stats.
+TeamBoxScore? _teamBox(Map t, String side) {
+  final groups = (t['statistics'] as List? ?? const []).whereType<Map>().toList();
+  if (groups.isEmpty) return null;
+  final g = groups.first;
+  List<String> strings(Object? l) => [for (final v in (l as List? ?? const [])) '${v ?? ''}'];
+  final players = [
+    for (final a in (g['athletes'] as List? ?? const []))
+      if (a is Map && a['athlete'] is Map)
+        BoxPlayer(
+          name: '${a['athlete']['displayName'] ?? ''}',
+          shortName: '${a['athlete']['shortName'] ?? ''}',
+          jersey: '${a['athlete']['jersey'] ?? ''}',
+          position: '${a['athlete']['position']?['abbreviation'] ?? ''}',
+          headshot: _try<String?>(() => a['athlete']['headshot']['href'] as String?),
+          starter: a['starter'] == true,
+          didNotPlay: a['didNotPlay'] == true,
+          ejected: a['ejected'] == true,
+          reason: '${a['reason'] ?? ''}',
+          stats: strings(a['stats']),
+        ),
+  ];
+  if (players.isEmpty) return null;
+  return TeamBoxScore(
+    side: side,
+    team: '${t['team']?['displayName'] ?? ''}',
+    labels: strings(g['labels'] ?? g['names']),
+    descriptions: strings(g['descriptions']),
+    keys: strings(g['keys']),
+    players: players,
+    totals: strings(g['totals']),
   );
 }
 
