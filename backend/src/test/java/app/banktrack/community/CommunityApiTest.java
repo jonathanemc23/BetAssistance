@@ -78,6 +78,13 @@ class CommunityApiTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.profile.handle").value("laura_bets"))
                 .andExpect(jsonPath("$.tokens").value(10));
+        mvc.perform(as("diego", get("/api/profiles/available").param("handle", "@Laura_Bets")))
+                .andExpect(jsonPath("$.handle").value("laura_bets"))
+                .andExpect(jsonPath("$.available").value(false));
+        mvc.perform(as("laura", get("/api/profiles/available").param("handle", "laura_bets")))
+                .andExpect(jsonPath("$.available").value(true));
+        mvc.perform(as("diego", get("/api/profiles/available").param("handle", "goalmachine")))
+                .andExpect(jsonPath("$.available").value(true));
         mvc.perform(as("diego", post("/api/profiles")).content("{\"handle\":\"laura_bets\"}")).andExpect(status().isConflict());
         mvc.perform(as("diego", post("/api/profiles")).content("{\"handle\":\"goalmachine\",\"name\":\"Diego\"}")).andExpect(status().isCreated());
 

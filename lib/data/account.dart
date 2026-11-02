@@ -67,6 +67,10 @@ class AccountService extends ChangeNotifier {
   final http.Client _client;
   final DateTime Function() _clock;
 
+  /// The HTTP client the account's calls go through, for other calls to the
+  /// same server.
+  http.Client get client => _client;
+
   Account? account;
   String? _refreshToken;
   String? _idToken;

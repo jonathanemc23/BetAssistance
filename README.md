@@ -33,15 +33,19 @@ from the same code (see [iPhone](#iphone) and [Web app](#web-app) below).
   Markets the score can't settle (corners, cards, scorers) stay for the
   user. It runs when the app starts, after each full time and every 10
   minutes, and sends a "Bet won/lost" notification when alerts are on.
-- **Community** (side menu, under Bet Tools): a community profile is needed
-  to join. The community page has a Become a pro bettor button on top (how
-  the challenge works and its requirements: 30 bets that can't be changed,
-  each with odds over 1.60, 60% to pass, a week's wait after a fail or a
-  restart, restart allowed from 10 bets), then the hottest bets to buy with
-  tokens, then free bets bettors post to gain followers (follow them, or post
-  up to 3 of your own a day; `lib/logic/community.dart`). In the app,
-  profiles, sellers and their bets are still simulated on the phone; the
-  server that shares them is in `backend/` (see below).
+- **Community** (side menu, under Bet Tools): you sign in first, then make
+  a community profile with a unique nametag (checked against the server as
+  you type). The page has your tokens next to your avatar, a closable Become
+  a pro bettor alert, a carousel of the hottest bets to buy, and tabs for
+  Free bets, Buy bets, History and Chat. Your profile shows who you follow
+  (followers and sales only for pro bettors) and the Pass the challenge,
+  become a pro bettor button (30 bets that can't be changed, each with odds
+  over 1.60, 60% to pass, a week's wait after a fail or a restart, restart
+  allowed from 10 bets). Tapping a bettor opens their public profile: bets
+  sold, win rate, average odds, stars, comments, Follow and Message
+  (`lib/logic/community.dart`, `lib/ui/community.dart`). Sign-in, nametags
+  and your profile are real (server in `backend/`, see below); other bettors,
+  their bets, reviews and chat are still simulated on the phone.
 - **Languages**: English and Spanish, picked in Settings (the phone's
   language by default). Every text goes through `tr()` in `lib/l10n/`;
   `test/l10n_test.dart` fails when a text has no Spanish.
