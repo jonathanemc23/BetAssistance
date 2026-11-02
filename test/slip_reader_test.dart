@@ -164,4 +164,46 @@ void main() {
     expect(r.stake, 60000);
     expect(r.totalOdds, 23.61);
   });
+
+  test('reads a Betano double as the web app reads it, crests and all', () {
+    // Text and positions as Tesseract.js reads Laura's screenshot in the web
+    // app, after tidyWords dropped the sport icons and crests.
+    final r = parseSlip(const [
+      SlipLine('Doble', left: 51, top: 221, right: 147, bottom: 250),
+      SlipLine('3.94', left: 1017, top: 223, right: 1084, bottom: 250),
+      SlipLine('1.70', left: 986, top: 357, right: 1058, bottom: 386),
+      SlipLine('Cruz Azul', left: 131, top: 356, right: 289, bottom: 385),
+      SlipLine('Resultado del partido', left: 132, top: 429, right: 478, bottom: 464),
+      SlipLine('Cruz Azul', left: 194, top: 507, right: 356, bottom: 538),
+      SlipLine('01/11/2026, 20:10', left: 763, top: 537, right: 1081, bottom: 574),
+      SlipLine('Club León', left: 194, top: 566, right: 364, bottom: 597),
+      SlipLine('Independiente Santa Fe', left: 132, top: 671, right: 530, bottom: 706),
+      SlipLine('2.32', left: 985, top: 672, right: 1057, bottom: 701),
+      SlipLine('Ganar el partido o liderar por 2 goles', left: 131, top: 744, right: 722, bottom: 779),
+      SlipLine('Independiente Santa Fe', left: 132, top: 822, right: 545, bottom: 859),
+      SlipLine('01/11/2026, 20:15', left: 763, top: 852, right: 1080, bottom: 889),
+      SlipLine('Once Caldas', left: 131, top: 881, right: 344, bottom: 912),
+    ]);
+    expect(r.legs.map((l) => (l.selection, l.event, l.market, l.odds)), [
+      ('Cruz Azul', 'Cruz Azul vs Club León', 'result', 1.70),
+      ('Independiente Santa Fe · Ganar el partido o liderar por 2 goles', 'Independiente Santa Fe vs Once Caldas', 'other', 2.32),
+    ]);
+    expect(r.totalOdds, 3.94);
+  });
+
+  test('"Doble oportunidad" is still a market, not the slip heading', () {
+    final r = parseSlip(screen([
+      ['Real Madrid o Empate', '1.30'],
+      ['Doble oportunidad'],
+      ['Real Madrid v Getafe'],
+    ]));
+    expect(r.legs.single.market, 'double_chance');
+  });
+
+  test('tidyWords drops crests, icons and unsure words', () {
+    expect(tidyWords([('®', 73), ('Cruz', 96), ('Azul', 96)]), [1, 2]);
+    expect(tidyWords([('(e)', 45), ('Independiente', 97), ('Santa', 97), ('Fe', 97)]), [1, 2, 3]);
+    expect(tidyWords([('Millonarios', 91), ('-', 92), ('Santa', 97), ('Fe', 96)]), [0, 1, 2, 3]);
+    expect(tidyWords([('tT', 6)]), isEmpty);
+  });
 }

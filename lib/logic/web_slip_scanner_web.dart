@@ -40,6 +40,10 @@ class TesseractSlipScanner implements SlipScanner {
     if (_worker != null) return _worker!;
     final tesseract = globalContext['Tesseract'] as JSObject;
     final w = await (tesseract.callMethod<JSPromise<JSObject>>('createWorker'.toJS, _languages.toJS)).toDart;
+    // Sparse text: slips are short pieces spread over the screen (pick on the
+    // left, price on the right, date in between). The default single-block
+    // mode runs them together and misreads team crests as letters.
+    await w.callMethod<JSPromise<JSAny?>>('setParameters'.toJS, {'tessedit_pageseg_mode': '11'}.jsify()).toDart;
     return _worker = w;
   }
 
@@ -51,11 +55,25 @@ class TesseractSlipScanner implements SlipScanner {
     final data = result['data'] as JSObject;
     final lines = <SlipLine>[];
     void add(JSObject l) {
-      final text = (l['text'] as JSString?)?.toDart.trim() ?? '';
-      if (text.isEmpty) return;
-      final box = l['bbox'] as JSObject;
-      double n(String k) => (box[k] as JSNumber).toDartDouble;
-      lines.add(SlipLine(text, left: n('x0'), top: n('y0'), right: n('x1'), bottom: n('y1')));
+      final words = [
+        for (final w in ((l['words'] as JSArray<JSObject>?)?.toDart ?? const <JSObject>[]))
+          (
+            text: (w['text'] as JSString?)?.toDart.trim() ?? '',
+            confidence: (w['confidence'] as JSNumber?)?.toDartDouble ?? 0,
+            box: w['bbox'] as JSObject,
+          ),
+      ];
+      final kept = tidyWords([for (final w in words) (w.text, w.confidence)]);
+      if (kept.isEmpty) return;
+      double n(JSObject box, String k) => (box[k] as JSNumber).toDartDouble;
+      final boxes = [for (final i in kept) words[i].box];
+      lines.add(SlipLine(
+        [for (final i in kept) words[i].text].join(' '),
+        left: boxes.map((b) => n(b, 'x0')).reduce((a, b) => a < b ? a : b),
+        top: boxes.map((b) => n(b, 'y0')).reduce((a, b) => a < b ? a : b),
+        right: boxes.map((b) => n(b, 'x1')).reduce((a, b) => a > b ? a : b),
+        bottom: boxes.map((b) => n(b, 'y1')).reduce((a, b) => a > b ? a : b),
+      ));
     }
 
     // Tesseract.js 5 lists the lines; later versions nest them in blocks.

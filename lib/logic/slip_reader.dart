@@ -33,6 +33,24 @@ class SlipRead {
   final String? error;
 }
 
+/// Which words of one OCR line to keep, as indexes: drops what the reader
+/// wasn't sure of (team crests and sport icons read as "(e)" or "8)") and
+/// symbols left at either end ("® Cruz Azul").
+List<int> tidyWords(List<(String, double)> words) {
+  final keep = [
+    for (final (i, (text, confidence)) in words.indexed)
+      if (text.isNotEmpty && confidence >= 50) i,
+  ];
+  bool symbol(int i) => !RegExp(r'[A-Za-zÀ-ÿ0-9]').hasMatch(words[i].$1);
+  while (keep.isNotEmpty && symbol(keep.first)) {
+    keep.removeAt(0);
+  }
+  while (keep.isNotEmpty && symbol(keep.last)) {
+    keep.removeLast();
+  }
+  return keep;
+}
+
 /// Reads the text of a bet slip screenshot. On the phone this is ML Kit's
 /// on-device text recognition; tests use a fake.
 abstract class SlipScanner {
@@ -246,11 +264,12 @@ String _clean(String s) => s
     .trim();
 
 final _parlayHead = RegExp(
-  r'^(combinada|parlay|parley|multiple|múltiple|acca|accumulator|apuesta multiple|apuesta combinada)',
+  r'^(combinada|parlay|parley|multiple|múltiple|acca|accumulator|apuesta multiple|apuesta combinada|'
+  r'(doble|triple|cuadruple|cuádruple|double|treble)(?=\s*[\d.,]*$))',
 );
 
 bool _isPlainResult(String market) => RegExp(
-  r'^(1x2|match result|resultado|full time result|tiempo reglamentario|ganador del partido|money ?line|1x2 tiempo reglamentario|resultado final)$',
+  r'^(1x2|match result|resultado|resultado del partido|ganador del encuentro|full time result|tiempo reglamentario|ganador del partido|money ?line|1x2 tiempo reglamentario|resultado final)$',
 ).hasMatch(_plain(market).trim());
 
 /// Picks that already name their market: lines, double chance, over/under.
@@ -275,7 +294,7 @@ bool _isMoneyRow(String lower) =>
 /// Rows that are slip chrome: headings, buttons, dates and ids.
 final _noise = RegExp(
   r'^(bet ?slip|boleto|cupon|cupón|mis apuestas|my bets|parlay|parley|combinada|multiple|múltiple|acca|accumulator|'
-  r'apuesta multiple|apuesta combinada|\d+ (selecciones|selections|legs|picks|fold)|singles?|sencillas?|'
+  r'apuesta multiple|apuesta combinada|(doble|triple|cuadruple|cuádruple|double|treble)(?=\s*[\d.,]*$)|\d+ (selecciones|selections|legs|picks|fold)|singles?|sencillas?|'
   r'en vivo|live|abiertas|open|settled|liquidadas|place bet|realizar apuesta|apostar|share|compartir|'
   r'id[: ]|ref[: ]|ticket|hoy|today|tomorrow|manana|mañana)(\b|$)|^[\d\s:/.-]+$',
   caseSensitive: false,
