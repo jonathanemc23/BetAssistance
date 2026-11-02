@@ -277,6 +277,12 @@ class BankStore extends ChangeNotifier {
   /// The handles of the bettors the user follows.
   Set<String> following = {};
 
+  /// The user's review of each bettor, by handle.
+  Map<String, Review> myReviews = {};
+
+  /// The user's chats with bettors, by handle, oldest message first.
+  Map<String, List<ChatMessage>> chats = {};
+
   Future<void> _loadCommunity() async {
     Object? read(String? raw) {
       try {
@@ -299,6 +305,17 @@ class BankStore extends ChangeNotifier {
     myFreeBets = [if (free is List) for (final j in free) ?Listing.fromJson(j)];
     final follows = read(await _db.pref('community.following'));
     following = {if (follows is List) for (final h in follows) '$h'};
+    final reviews = read(await _db.pref('community.reviews'));
+    myReviews = {
+      if (reviews is Map)
+        for (final e in reviews.entries) '${e.key}': ?Review.fromJson(e.value),
+    };
+    final chatsJson = read(await _db.pref('community.chats'));
+    chats = {
+      if (chatsJson is Map)
+        for (final e in chatsJson.entries)
+          if (e.value is List) '${e.key}': [for (final m in e.value as List) ?ChatMessage.fromJson(m)],
+    };
   }
 
   Future<void> saveSocialProfile(SocialProfile p) async {
@@ -391,6 +408,21 @@ class BankStore extends ChangeNotifier {
   Future<void> settleFreeBets(String matchId, int home, int away) => _saveFreeBets([
         for (final l in myFreeBets) l.bet.matchId == matchId && !l.bet.settled ? l.settle(home, away) : l,
       ]);
+
+  /// Saves the user's stars and comment for the bettor [handle], in place
+  /// of an earlier one.
+  Future<void> reviewBettor(String handle, Review r) async {
+    myReviews = {...myReviews, handle: r};
+    notifyListeners();
+    await _db.setPref('community.reviews', jsonEncode({for (final e in myReviews.entries) e.key: e.value.toJson()}));
+  }
+
+  /// Adds a message to the chat with [handle].
+  Future<void> sendChat(String handle, ChatMessage m) async {
+    chats = {...chats, handle: [...?chats[handle], m]};
+    notifyListeners();
+    await _db.setPref('community.chats', jsonEncode({for (final e in chats.entries) e.key: [for (final m in e.value) m.toJson()]}));
+  }
 
   Future<void> toggleFollow(String handle) async {
     following = following.contains(handle) ? ({...following}..remove(handle)) : {...following, handle};

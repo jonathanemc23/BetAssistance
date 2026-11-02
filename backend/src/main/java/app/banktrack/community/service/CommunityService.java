@@ -79,6 +79,13 @@ public class CommunityService {
         return me(userId);
     }
 
+    /** Whether [rawHandle] can be someone's new nametag: well formed and not taken by another user. */
+    public boolean handleAvailable(String userId, String rawHandle) {
+        String handle = cleanHandle(rawHandle);
+        if (handle == null) return false;
+        return profiles.findByHandle(handle).map(p -> p.getUserId().equals(userId)).orElse(true);
+    }
+
     @Transactional
     public Me updateProfile(String userId, String name, String bio, String avatar) {
         profile(userId).update(name, bio, avatar);

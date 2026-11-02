@@ -63,6 +63,13 @@ public class CommunityController {
         return community.updateProfile(user.getName(), p.name(), p.bio(), p.avatar());
     }
 
+    /** Whether a nametag is free, so the app can say so while it's typed. */
+    @GetMapping("/profiles/available")
+    public Map<String, Object> available(Principal user, @RequestParam String handle) {
+        String clean = CommunityService.cleanHandle(handle);
+        return Map.of("handle", clean == null ? "" : clean, "available", community.handleAvailable(user.getName(), handle));
+    }
+
     @GetMapping("/profiles/{handle}")
     public ProfileView profile(Principal user, @PathVariable String handle) {
         return community.profileByHandle(handle, user.getName());

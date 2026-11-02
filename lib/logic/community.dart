@@ -438,3 +438,110 @@ String? refuseFreeBet(List<Listing> mine, CommunityBet bet, DateTime now) {
 
 /// Free bets a bettor can post in a day, so followers see their best picks.
 const maxFreeBetsPerDay = 3;
+
+/// A star rating with a comment on a bettor's public profile.
+class Review {
+  const Review({required this.handle, required this.name, required this.stars, required this.text, required this.at});
+  final String handle, name, text;
+
+  /// 1 to 5.
+  final int stars;
+  final DateTime at;
+
+  Map<String, Object?> toJson() => {'handle': handle, 'name': name, 'stars': stars, 'text': text, 'at': at.toIso8601String()};
+
+  static Review? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final at = DateTime.tryParse('${j['at']}');
+    final stars = (j['stars'] as num?)?.toInt();
+    if (at == null || stars == null) return null;
+    return Review(handle: '${j['handle'] ?? ''}', name: '${j['name'] ?? ''}', stars: stars.clamp(1, 5), text: '${j['text'] ?? ''}', at: at);
+  }
+}
+
+/// One message in a chat with a bettor.
+class ChatMessage {
+  const ChatMessage({required this.text, required this.at, this.mine = true});
+  final String text;
+  final DateTime at;
+
+  /// Sent by the user; false for the bettor's replies.
+  final bool mine;
+
+  Map<String, Object?> toJson() => {'text': text, 'at': at.toIso8601String(), 'mine': mine};
+
+  static ChatMessage? fromJson(Object? j) {
+    if (j is! Map || j['text'] == null) return null;
+    final at = DateTime.tryParse('${j['at']}');
+    return at == null ? null : ChatMessage(text: '${j['text']}', at: at, mine: j['mine'] != false);
+  }
+}
+
+/// What a bettor's public profile shows: bets sold, win rate, average odds,
+/// stars and comments.
+class BettorStats {
+  const BettorStats({
+    required this.betsSold,
+    required this.wins,
+    required this.losses,
+    required this.averageOdds,
+    required this.reviews,
+  });
+
+  final int betsSold, wins, losses;
+  final double averageOdds;
+  final List<Review> reviews;
+
+  int get settled => wins + losses;
+
+  /// Won out of settled, 0 to 1; null before the first result.
+  double? get winRate => settled == 0 ? null : wins / settled;
+
+  /// The average of the stars, 0 when nobody rated yet.
+  double get stars => reviews.isEmpty ? 0 : reviews.fold<int>(0, (s, r) => s + r.stars) / reviews.length;
+}
+
+const _demoReviewers = [
+  ('nico_bets', 'Nicolás'),
+  ('mari_odds', 'Mariana'),
+  ('jp_parlays', 'Juan Pablo'),
+  ('sam_value', 'Sam'),
+  ('lu_corners', 'Lucía'),
+];
+
+const _demoComments = [
+  (5, 'Great reads on corners, three wins in a row for me.'),
+  (4, 'Solid picks, the odds are always fair.'),
+  (5, 'Worth every token. Clear and on time.'),
+  (3, 'Good week, a couple of misses on the weekend.'),
+  (4, 'Explains why behind each pick, I like that.'),
+  (5, 'Best bettor in the app for the Premier League.'),
+];
+
+/// A demo bettor's public numbers, the same on every visit, until profiles
+/// are shared by the server. [mine] adds the user's own review.
+BettorStats demoBettorStats(ProSeller s, {Review? mine, DateTime? now}) {
+  final seed = s.handle.codeUnits.fold<int>(17, (h, c) => (h * 31 + c) & 0x3fffffff);
+  final today = now ?? DateTime(2026, 11, 1);
+  final count = s.pro ? 3 + seed % 3 : 1 + seed % 2;
+  final reviews = [
+    ?mine,
+    for (var i = 0; i < count; i++)
+      if (_demoReviewers[(seed + i) % _demoReviewers.length] case (final handle, final name))
+        if (handle != mine?.handle)
+          Review(
+            handle: handle,
+            name: name,
+            stars: _demoComments[(seed + i * 7) % _demoComments.length].$1,
+            text: _demoComments[(seed + i * 7) % _demoComments.length].$2,
+            at: today.subtract(Duration(days: 1 + (seed + i * 5) % 20)),
+          ),
+  ];
+  return BettorStats(
+    betsSold: s.pro ? s.bets * 3 + seed % 40 : 0,
+    wins: s.wins,
+    losses: s.losses,
+    averageOdds: 1.65 + (seed % 55) / 100,
+    reviews: reviews,
+  );
+}

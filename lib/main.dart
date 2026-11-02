@@ -213,7 +213,7 @@ class _HomeShellState extends State<HomeShell> {
     final account = widget.account;
     final actions = <VoidCallback>[
       _openTools,
-      () => openCommunity(context, store: store, api: widget.fixtures, today: widget.today),
+      () => openCommunity(context, store: store, api: widget.fixtures, today: widget.today, account: widget.account),
       if (account != null) _openAccount,
       _openSettings,
     ];
