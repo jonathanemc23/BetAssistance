@@ -1113,6 +1113,79 @@ void _zonesTest() {
     expect(find.textContaining('In different groups'), findsOneWidget);
     if (shots) await expectLater(find.byType(MatchPage), matchesGoldenFile('screenshots/match_table_zones.png'));
   });
+
+  testWidgets('NBA game: a Players tab with both teams\' box scores, sortable, with each player\'s line', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final shots = Platform.environment['SCREENSHOTS'] == '1';
+    if (shots) await tester.runAsync(loadFonts);
+    final store = (await tester.runAsync(seededStore))!;
+    final match = Match(
+      id: '401809997',
+      league: const League('nba', 'NBA', sport: Sport.basketball),
+      kickoff: DateTime.utc(2025, 11, 1, 23),
+      home: const Team('Milwaukee Bucks', 'Bucks', null, '133'),
+      away: const Team('Sacramento Kings', 'Kings', null, '135'),
+      state: MatchState.finished,
+      detail: 'Final',
+    );
+    await tester.pumpWidget(MaterialApp(
+      theme: BankTrackApp.theme('olive'),
+      home: MatchPage(match: match, store: store, api: FixturesApi(client: _fixturesClient())),
+    ));
+    await settle(tester);
+    await openTab(tester, 'Players');
+    // The home team first, starters then the bench, and the team's totals.
+    expect(find.text('G. Antetokounmpo'), findsOneWidget);
+    expect(find.text('STARTERS'), findsOneWidget);
+    expect(find.text('BENCH'), findsOneWidget);
+    expect(find.text('Team totals'), findsOneWidget);
+    expect(find.text('PTS'), findsOneWidget);
+    expect(find.text('133'), findsWidgets);
+    expect(find.text('DID NOT PLAY', skipOffstage: false), findsOneWidget);
+    if (shots) await expectLater(find.byType(MatchPage), matchesGoldenFile('screenshots/match_players.png'));
+
+    // The other team.
+    await tester.tap(find.text('Kings'));
+    await tester.pumpAndSettle();
+    expect(find.text('D. Sabonis'), findsOneWidget);
+    expect(find.text('G. Antetokounmpo'), findsNothing);
+
+    // Sorted by points, the top scorer comes first and the groups go.
+    await tester.tap(find.text('PTS'));
+    await tester.pumpAndSettle();
+    expect(find.text('STARTERS'), findsNothing);
+    final lavine = tester.getTopLeft(find.text('Z. LaVine')).dy;
+    final sabonis = tester.getTopLeft(find.text('D. Sabonis')).dy;
+    expect(lavine, lessThan(sabonis));
+
+    // A player's whole line.
+    await tester.tap(find.text('D. Sabonis'));
+    await tester.pumpAndSettle();
+    expect(find.text('Domantas Sabonis'), findsOneWidget);
+    expect(find.text('8-13'), findsWidgets);
+  });
+
+  testWidgets('a football match has no Players tab', (tester) async {
+    final store = (await tester.runAsync(seededStore))!;
+    final match = Match(
+      id: '401877960',
+      league: const League('col.1', 'Primera A'),
+      kickoff: DateTime.utc(2026, 10, 6),
+      home: const Team('Independiente Medellín', 'Medellín', null, '0'),
+      away: const Team('Independiente Santa Fe', 'Santa Fe', null, '1'),
+      state: MatchState.finished,
+      detail: 'FT',
+    );
+    await tester.pumpWidget(MaterialApp(
+      theme: BankTrackApp.theme('olive'),
+      home: MatchPage(match: match, store: store, api: FixturesApi(client: _fixturesClient())),
+    ));
+    await settle(tester);
+    expect(find.widgetWithText(Tab, 'Players'), findsNothing);
+    expect(find.widgetWithText(Tab, 'Stats'), findsOneWidget);
+  });
 }
 
 void _parlayPickTest() {
@@ -1206,6 +1279,7 @@ http.Response _summaryFile(Uri url) => http.Response.bytes(
         '401878771' => 'test/data/espn_summary_pre.json',
         '401879260' => 'test/data/espn_summary_shots.json',
         '401841641' => 'test/data/espn_summary_arg_zones.json',
+        '401809997' => 'test/data/espn_nba_summary_box.json',
         _ => 'test/data/espn_summary_col.json',
       })
           .readAsBytesSync(),

@@ -87,4 +87,35 @@ void main() {
     expect(d.table.first.logo, startsWith('https://'));
     expect(d.attendance, 36983);
   });
+
+  test('basketball summary: each team\'s box score, home first, with who did not play', () {
+    final d = parseMatchDetails(data('espn_nba_summary_box.json'));
+    expect(d.boxScore.map((b) => b.side), ['home', 'away']);
+    final bucks = d.boxScoreOf('home')!;
+    expect(bucks.team, 'Milwaukee Bucks');
+    expect(bucks.labels.take(3), ['MIN', 'PTS', 'FG']);
+    expect(bucks.column('points'), 1);
+    expect(bucks.totals[bucks.column('points')], '133');
+    final giannis = bucks.players.firstWhere((p) => p.name == 'Giannis Antetokounmpo');
+    expect(giannis.starter, isTrue);
+    expect(giannis.played, isTrue);
+    expect(giannis.at(bucks.column('points')), '26');
+    expect(giannis.headshot, startsWith('https://'));
+    final kings = d.boxScoreOf('away')!;
+    expect(kings.players.where((p) => !p.played), hasLength(5));
+    expect(kings.players.where((p) => p.starter), hasLength(5));
+  });
+
+  test('a newer live read updates the score and box score, keeping what was added later', () {
+    final first = parseMatchDetails(data('espn_nba_summary_box.json'))
+        .withHistory(MatchHistory(h2h: [PastGame(date: DateTime(2025), home: 'A', away: 'B', score: '1-0')]));
+    const fresh = MatchDetails(state: MatchState.live, clock: 'Q4 2:10', homeScore: 120, awayScore: 118);
+    final d = first.withLiveFrom(fresh);
+    expect(d.state, MatchState.live);
+    expect(d.clock, 'Q4 2:10');
+    expect(d.homeScore, 120);
+    expect(d.h2h, hasLength(1));
+    // A read without a box score keeps the last one rather than blanking the tab.
+    expect(d.boxScore, hasLength(2));
+  });
 }
