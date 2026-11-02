@@ -29,7 +29,7 @@ class _PlayersTabState extends State<PlayersTab> {
   /// or null for ESPN's order: starters, then the bench.
   String? _sortBy;
 
-  static const _rowHeight = 44.0, _nameWidth = 150.0;
+  static const _rowHeight = 44.0, _nameWidth = 140.0;
 
   @override
   Widget build(BuildContext context) {
@@ -90,6 +90,7 @@ class _PlayersTabState extends State<PlayersTab> {
     final hasTotals = box.totals.any((t) => t.isNotEmpty);
 
     final pointsCol = box.column('points');
+    final order = _order(box);
     // The best figure in each column, to pick out who led the team in it.
     final best = <int, double>{
       for (var i = 0; i < box.labels.length; i++)
@@ -133,14 +134,9 @@ class _PlayersTabState extends State<PlayersTab> {
       );
     }
 
-    double width(int i) => switch (box.keys.elementAtOrNull(i) ?? '') {
-          'fieldGoalsMade-fieldGoalsAttempted' ||
-          'threePointFieldGoalsMade-threePointFieldGoalsAttempted' ||
-          'freeThrowsMade-freeThrowsAttempted' =>
-            56,
-          'plusMinus' => 44,
-          _ => 40,
-        };
+    // Set from the room there is, so the column at the edge shows half-way.
+    var scale = 1.0;
+    double width(int i) => scale * _baseWidth(box, i);
 
     Widget statCell(_Row r, int i) {
       final p = r.player;
@@ -221,35 +217,68 @@ class _PlayersTabState extends State<PlayersTab> {
           ]),
         ),
         Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.only(right: 12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [for (var i = 0; i < box.labels.length; i++) head(i)]),
-              SizedBox(width: _statsWidth(box, width), child: divider()),
-              for (final r in rows) Row(children: [for (var i = 0; i < box.labels.length; i++) statCell(r, i)]),
-              if (hasTotals) ...[
+          child: LayoutBuilder(builder: (context, constraints) {
+            scale = _fitScale(box, order, constraints.maxWidth);
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(right: 12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [for (final i in order) head(i)]),
                 SizedBox(width: _statsWidth(box, width), child: divider()),
-                Row(children: [
-                  for (var i = 0; i < box.labels.length; i++)
-                    SizedBox(
-                      width: width(i),
-                      height: _rowHeight,
-                      child: Center(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(box.totals.elementAtOrNull(i) ?? '',
-                              style: cellStyle?.copyWith(fontWeight: FontWeight.w800)),
+                for (final r in rows) Row(children: [for (final i in order) statCell(r, i)]),
+                if (hasTotals) ...[
+                  SizedBox(width: _statsWidth(box, width), child: divider()),
+                  Row(children: [
+                    for (final i in order)
+                      SizedBox(
+                        width: width(i),
+                        height: _rowHeight,
+                        child: Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(box.totals.elementAtOrNull(i) ?? '',
+                                style: cellStyle?.copyWith(fontWeight: FontWeight.w800)),
+                          ),
                         ),
                       ),
-                    ),
-                ]),
-              ],
-            ]),
-          ),
+                  ]),
+                ],
+              ]),
+            );
+          }),
         ),
       ]),
     );
+  }
+
+  /// Points, rebounds and assists first, then the rest in ESPN's order.
+  static List<int> _order(TeamBoxScore box) {
+    final first = [for (final k in const ['points', 'rebounds', 'assists']) box.column(k)].where((i) => i >= 0).toList();
+    return [...first, for (var i = 0; i < box.labels.length; i++) if (!first.contains(i)) i];
+  }
+
+  static double _baseWidth(TeamBoxScore box, int i) => switch (box.keys.elementAtOrNull(i) ?? '') {
+        'fieldGoalsMade-fieldGoalsAttempted' ||
+        'threePointFieldGoalsMade-threePointFieldGoalsAttempted' ||
+        'freeThrowsMade-freeThrowsAttempted' =>
+          56,
+        'plusMinus' => 44,
+        _ => 40,
+      };
+
+  /// How much to widen the columns so that, in [room], the last one in view
+  /// is cut at its middle: a hint that the table scrolls. 1 when all fit.
+  static double _fitScale(TeamBoxScore box, List<int> order, double room) {
+    final total = order.fold<double>(0, (a, i) => a + _baseWidth(box, i));
+    if (!room.isFinite || room <= 0 || total <= room) return 1;
+    var shown = 0.0, scale = 1.0;
+    for (final i in order) {
+      final w = _baseWidth(box, i);
+      if (shown + w / 2 > room) break;
+      scale = room / (shown + w / 2);
+      shown += w;
+    }
+    return scale.clamp(1.0, 1.6);
   }
 
   static double _statsWidth(TeamBoxScore box, double Function(int) width) {
@@ -317,7 +346,7 @@ class _PlayersTabState extends State<PlayersTab> {
               ]),
               const SizedBox(height: 16),
               Wrap(spacing: 8, runSpacing: 8, children: [
-                for (var i = 0; i < box.labels.length; i++)
+                for (final i in _order(box))
                   if (p.at(i).isNotEmpty)
                     Container(
                       width: 92,
