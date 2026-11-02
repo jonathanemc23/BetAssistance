@@ -237,6 +237,10 @@ void main() {
   });
 
   testWidgets('the sign-in page creates an account and shows what went wrong', (tester) async {
+    // A phone screen.
+    tester.view.physicalSize = const Size(1170, 2532);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
     final a = (await tester.runAsync(device))!;
     bool? result;
     await tester.pumpWidget(MaterialApp(
@@ -253,8 +257,12 @@ void main() {
     expect(find.byKey(const Key('login-google')), findsNothing);
     expect(find.byKey(const Key('login-not-now')), findsOneWidget);
 
+    // The name field only shows when creating an account.
+    expect(find.byKey(const Key('login-name')), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('login-switch')));
     await tester.tap(find.byKey(const Key('login-switch')));
-    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('login-name')), 'Laura');
     await tester.enterText(find.byKey(const Key('login-email')), 'laura@example.com');
     await tester.enterText(find.byKey(const Key('login-password')), '123');
     await tester.runAsync(() async {
@@ -272,5 +280,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(result, isTrue);
     expect(a.account.account?.email, 'laura@example.com');
+    expect(a.store.profileName, 'Laura');
   });
 }
