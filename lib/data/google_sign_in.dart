@@ -14,6 +14,10 @@ abstract class GoogleSignIn {
 
   bool get supported;
 
+  /// Gets the Google window ready (downloads what it needs) so a tap opens
+  /// it at once. Call it when the sign-in page shows.
+  void prepare({required String apiKey, required String project});
+
   /// Opens the Google window. Call it straight from a tap: browsers only
   /// allow a popup from one.
   Future<GoogleResult> signIn({required String apiKey, required String project});

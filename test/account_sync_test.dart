@@ -7,6 +7,8 @@ import 'package:bank_track/data/google_sign_in.dart';
 import 'package:bank_track/data/models.dart';
 import 'package:bank_track/data/store.dart';
 import 'package:bank_track/data/sync.dart';
+import 'package:bank_track/data/fixtures.dart';
+import 'package:bank_track/main.dart';
 import 'package:bank_track/ui/account_screens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -74,9 +76,23 @@ class FakeCloud {
       });
 }
 
+/// Google in a browser that remembers being got ready.
+class ReadyGoogle implements GoogleSignIn {
+  var prepared = 0;
+  @override
+  bool get supported => true;
+  @override
+  void prepare({required String apiKey, required String project}) => prepared++;
+  @override
+  Future<GoogleResult> signIn({required String apiKey, required String project}) async =>
+      const GoogleResult(error: 'auth/popup-closed-by-user');
+}
+
 class NoGoogle implements GoogleSignIn {
   @override
   bool get supported => false;
+  @override
+  void prepare({required String apiKey, required String project}) {}
   @override
   Future<GoogleResult> signIn({required String apiKey, required String project}) async =>
       const GoogleResult(error: 'unsupported');
@@ -324,5 +340,52 @@ void main() {
     expect(result, isTrue);
     expect(a.account.account?.email, 'laura@example.com');
     expect(a.store.profileName, 'Laura');
+  });
+
+  testWidgets('the sign-in page gets Google ready, so one tap opens its window', (tester) async {
+    final a = (await tester.runAsync(device))!;
+    final google = ReadyGoogle();
+    final account = AccountService(
+        store: a.store, apiKey: 'test-key', server: 'https://server.example.com/', client: cloud.client(), google: google);
+    await tester.pumpWidget(MaterialApp(home: LoginPage(account: account)));
+    await tester.pump();
+    expect(google.prepared, 1);
+  });
+
+  testWidgets('using the app signed out shows a small warning until closed', (tester) async {
+    tester.view.physicalSize = const Size(1170, 2532);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    final a = (await tester.runAsync(() async {
+      final d = await device();
+      await d.store.setPref(accountSkippedPref, '1');
+      return d;
+    }))!;
+    final fixtures = FixturesApi(client: MockClient((_) async => http.Response('{}', 404)));
+    await tester.pumpWidget(BankTrackApp(store: a.store, account: a.account, sync: a.sync, fixtures: fixtures));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await tester.pump();
+    expect(find.byKey(const Key('signed-out-warning')), findsOneWidget);
+    expect(find.text('Your bets are only saved on this device and could be lost. Sign in to keep them safe.'),
+        findsOneWidget);
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pump();
+    expect(find.byKey(const Key('signed-out-warning')), findsNothing);
+  });
+
+  testWidgets('no warning while signed in', (tester) async {
+    tester.view.physicalSize = const Size(1170, 2532);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    final a = (await tester.runAsync(() async {
+      final d = await device();
+      expect(await d.account.signUp('laura@example.com', 'secret1'), isNull);
+      return d;
+    }))!;
+    final fixtures = FixturesApi(client: MockClient((_) async => http.Response('{}', 404)));
+    await tester.pumpWidget(BankTrackApp(store: a.store, account: a.account, sync: a.sync, fixtures: fixtures));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await tester.pump();
+    expect(find.byKey(const Key('signed-out-warning')), findsNothing);
   });
 }
