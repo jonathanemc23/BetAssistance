@@ -1199,6 +1199,18 @@ void _zonesTest() {
     expect(find.text('PTS'), findsOneWidget);
     expect(find.text('133'), findsWidgets);
     expect(find.text('DID NOT PLAY', skipOffstage: false), findsOneWidget);
+    // Points, rebounds and assists lead; the column at the right edge is cut
+    // half-way to show the table scrolls.
+    final heads = ['PTS', 'REB', 'AST', 'MIN'].map((h) => tester.getTopLeft(find.text(h)).dx).toList();
+    expect(heads, orderedEquals([...heads]..sort()));
+    final table = tester.getRect(find.byType(SingleChildScrollView).last);
+    final cutHeads = [
+      for (final e in find.descendant(of: find.byType(SingleChildScrollView).last, matching: find.byType(Tooltip)).evaluate())
+        tester.getRect(find.byWidget(e.widget)),
+    ].where((r) => r.left < table.right && r.right > table.right);
+    expect(cutHeads, hasLength(1));
+    final cut = cutHeads.single;
+    expect((table.right - cut.left) / cut.width, closeTo(0.5, 0.15));
     if (shots) await expectLater(find.byType(MatchPage), matchesGoldenFile('screenshots/match_players.png'));
 
     // The other team.
