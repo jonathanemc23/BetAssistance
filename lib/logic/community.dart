@@ -17,7 +17,7 @@ class SocialProfile {
   final String handle;
   final String bio;
 
-  /// As the profile picture stores it: 'person:3', a photo path, or empty.
+  /// As the profile picture stores it: 'legend:dragon', a photo path, or empty.
   final String avatar;
   final String joined;
 
@@ -304,22 +304,22 @@ class ProSeller {
 
 /// The sellers the market shows until real profiles can be shared.
 const demoSellers = [
-  ProSeller('goalmachine', 'Diego R.', 'person:0', 41, 22),
-  ProSeller('cornerqueen', 'Sofia M.', 'person:1', 37, 19),
-  ProSeller('valuehunter', 'Marcus T.', 'person:4', 52, 31),
-  ProSeller('la_pizarra', 'Camila V.', 'person:7', 33, 18),
-  ProSeller('underdog_fc', 'Andrés P.', 'person:2', 45, 28),
-  ProSeller('stats_nerd', 'Hannah K.', 'person:9', 39, 24),
+  ProSeller('goalmachine', 'Diego R.', 'legend:dragon', 41, 22),
+  ProSeller('cornerqueen', 'Sofia M.', 'legend:queen', 37, 19),
+  ProSeller('valuehunter', 'Marcus T.', 'legend:mastermind', 52, 31),
+  ProSeller('la_pizarra', 'Camila V.', 'legend:oracle', 33, 18),
+  ProSeller('underdog_fc', 'Andrés P.', 'legend:wolf', 45, 28),
+  ProSeller('stats_nerd', 'Hannah K.', 'legend:wizard', 39, 24),
 ];
 
 /// The bettors who post free bets: some pros, some still building a following.
 const demoTipsters = [
-  ProSeller('cornerqueen', 'Sofia M.', 'person:1', 37, 19, followers: 1840),
-  ProSeller('btts_daily', 'Lucas F.', 'person:5', 21, 15, followers: 312, pro: false),
-  ProSeller('la_pizarra', 'Camila V.', 'person:7', 33, 18, followers: 960),
-  ProSeller('over_kings', 'Valentina G.', 'person:10', 14, 9, followers: 145, pro: false),
-  ProSeller('goalmachine', 'Diego R.', 'person:0', 41, 22, followers: 2210),
-  ProSeller('tikitaka_tips', 'Mateo L.', 'person:3', 9, 7, followers: 58, pro: false),
+  ProSeller('cornerqueen', 'Sofia M.', 'legend:queen', 37, 19, followers: 1840),
+  ProSeller('btts_daily', 'Lucas F.', 'legend:raven', 21, 15, followers: 312, pro: false),
+  ProSeller('la_pizarra', 'Camila V.', 'legend:oracle', 33, 18, followers: 960),
+  ProSeller('over_kings', 'Valentina G.', 'legend:phoenix', 14, 9, followers: 145, pro: false),
+  ProSeller('goalmachine', 'Diego R.', 'legend:dragon', 41, 22, followers: 2210),
+  ProSeller('tikitaka_tips', 'Mateo L.', 'legend:knight', 9, 7, followers: 58, pro: false),
 ];
 
 /// A bet for sale: who sells it, its price in tokens, and the bet itself,

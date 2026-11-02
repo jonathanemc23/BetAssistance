@@ -230,6 +230,49 @@ void main() {
     expect(after.signedIn, isFalse);
   });
 
+  test('signing out clears the device, and signing in again brings everything back', () async {
+    final a = await device();
+    await a.account.signUp('laura@example.com', 'secret1');
+    await a.store.saveBet(bet('Arsenal to win'));
+    await a.store.setProfileName('Laura');
+    await a.store.setAvatar('legend:dragon');
+    await a.store.setTheme('ocean');
+    await a.store.setPref('ai.key', 'sk-ant-secret');
+    expect(await a.sync.saveBeforeSignOut(), isTrue);
+
+    await a.sync.signOutAndClear();
+    expect(a.account.signedIn, isFalse);
+    expect(a.store.bets, isEmpty);
+    expect(a.store.profileName, '');
+    expect(a.store.avatar, '');
+    // The device's own settings and the look stay.
+    expect(a.store.themeId, 'ocean');
+    expect(await a.store.pref('ai.key'), 'sk-ant-secret');
+    // The account still has it all.
+    expect(cloud.data['uid-1']!.data, contains('Arsenal to win'));
+
+    // Signing in again downloads it rather than saving the empty device over it.
+    await a.account.signIn('laura@example.com', 'secret1');
+    await a.sync.sync();
+    expect(a.selections, ['Arsenal to win']);
+    expect(a.store.profileName, 'Laura');
+    expect(a.store.avatar, 'legend:dragon');
+    expect(cloud.data['uid-1']!.data, contains('Arsenal to win'));
+  });
+
+  test('signing out offline says the latest changes are not saved', () async {
+    final a = await device();
+    await a.account.signUp('laura@example.com', 'secret1');
+    await a.sync.sync();
+    await a.store.saveBet(bet('Arsenal to win'));
+    final offline = SyncService(
+      store: a.store,
+      account: a.account,
+      client: MockClient((_) async => throw const SocketException('offline')),
+    );
+    expect(await offline.saveBeforeSignOut(), isFalse);
+  });
+
   test('without the Firebase key there are no accounts', () async {
     final a = await device();
     final off = AccountService(store: a.store, apiKey: '', server: 'https://s', google: NoGoogle());

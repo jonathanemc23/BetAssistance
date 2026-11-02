@@ -5,10 +5,11 @@ import 'package:image_picker/image_picker.dart';
 
 import '../l10n/l10n.dart';
 import '../data/store.dart';
+import 'legend_avatar.dart';
 import 'person_avatar.dart';
 
 /// Avatars from before 0.17: an emoji on a coloured disc. Still shown for
-/// users who picked one; the picker offers [personLooks] now.
+/// users who picked one; the picker offers [legends] now.
 final avatarEmojis = ['⚽', '🏀', '⚾', '🎾', '🦁', '🐺', '🦅', '🐯', '🔥', '⭐', '👑', '🎯'];
 final avatarColors = [
   Color(0xFFC5A059),
@@ -63,6 +64,23 @@ class AvatarImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final a = avatar;
+    final legend = legendOf(a);
+    if (legend != null) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: border
+              ? [
+                  BoxShadow(color: legend.glow.withValues(alpha: 0.35), blurRadius: size / 5),
+                  const BoxShadow(color: Color(0x55000000), blurRadius: 8, offset: Offset(0, 2)),
+                ]
+              : null,
+        ),
+        child: LegendAvatar(legend: legend, size: size),
+      );
+    }
     final person = personOf(a);
     if (person != null) {
       return Container(
@@ -110,7 +128,7 @@ Future<String?> Function() pickAvatarPhoto = () async {
   return f?.path;
 };
 
-/// The avatar choices: the preset people, a photo from the gallery, or none.
+/// The avatar choices: the legends, a photo from the gallery, or none.
 Future<void> showAvatarPicker(BuildContext context, BankStore store) => pickAvatar(
       context,
       current: () => store.avatar,
@@ -141,29 +159,41 @@ Future<void> pickAvatar(
           return SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Center(child: AvatarImage(avatar: avatar, name: name?.call() ?? '', size: 80)),
                 const SizedBox(height: 12),
                 Text(tr('Choose your avatar'),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 16),
-                Wrap(spacing: 12, runSpacing: 12, alignment: WrapAlignment.center, children: [
-                  for (final (i, look) in personLooks.indexed)
+                Wrap(spacing: 10, runSpacing: 14, alignment: WrapAlignment.center, children: [
+                  for (final legend in legends)
                     () {
-                      final value = 'person:$i';
+                      final value = 'legend:${legend.id}';
                       final on = avatar == value;
-                      return InkWell(
-                        key: Key('avatar-$value'),
-                        customBorder: const CircleBorder(),
-                        onTap: () => onPick(value),
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: on ? cs.primary : Colors.transparent, width: 3),
-                          ),
-                          child: PersonAvatar(look: look, size: 56),
+                      return SizedBox(
+                        width: 74,
+                        child: InkWell(
+                          key: Key('avatar-$value'),
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => onPick(value),
+                          child: Column(children: [
+                            Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: on ? cs.primary : Colors.transparent, width: 3),
+                              ),
+                              child: LegendAvatar(legend: legend, size: 58),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(legend.name,
+                                maxLines: 2,
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                    fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                                    color: on ? cs.primary : cs.onSurfaceVariant)),
+                          ]),
                         ),
                       );
                     }(),
@@ -180,7 +210,7 @@ Future<void> pickAvatar(
                   label: Text(tr('Use a photo')),
                 ),
                 if (avatar.isNotEmpty) TextButton(onPressed: () => onPick(''), child: Text(tr('Remove avatar'))),
-              ]),
+              ])),
             ),
           );
         },

@@ -121,7 +121,8 @@ class _CreateProfileState extends State<_CreateProfile> {
   late final _name = TextEditingController(text: widget.store.profileName);
   final _handle = TextEditingController();
   final _bio = TextEditingController();
-  late final _avatar = ValueNotifier(widget.store.avatar.startsWith('person:') ? widget.store.avatar : 'person:0');
+  late final _avatar = ValueNotifier(
+      widget.store.avatar.startsWith('legend:') || widget.store.avatar.startsWith('person:') ? widget.store.avatar : 'legend:dragon');
   String? _handleError;
 
   @override

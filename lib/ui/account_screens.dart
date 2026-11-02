@@ -700,7 +700,7 @@ class AccountPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      tr('Signing out keeps your data on this device and on your account.'),
+                      tr('Your data stays safe on your account. Signing out removes it from this device until you sign in again.'),
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
@@ -711,10 +711,7 @@ class AccountPage extends StatelessWidget {
                         style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
                         icon: const Icon(Icons.logout),
                         label: Text(tr('Sign out')),
-                        onPressed: () async {
-                          await account.signOut();
-                          if (context.mounted) Navigator.pop(context);
-                        },
+                        onPressed: () => signOutAndClear(context, account: account, sync: sync),
                       ),
                     ),
                   ]),
@@ -781,6 +778,38 @@ class _AccountCard extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// Signs out after one last save, clears this device and shows the sign-in
+/// page. When the last save fails (offline), asks first: changes made since
+/// the last save would be lost.
+Future<void> signOutAndClear(BuildContext context, {required AccountService account, required SyncService sync}) async {
+  final navigator = Navigator.of(context);
+  final saved = await sync.saveBeforeSignOut();
+  if (!saved && context.mounted) {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('Some changes are not saved yet')),
+        content: Text(tr(
+            "BetPilot couldn't reach the server, so your latest changes are only on this device. If you sign out now they are lost. Try again when you're online.")),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel'))),
+          TextButton(
+            key: const Key('sign-out-anyway'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('Sign out anyway')),
+          ),
+        ],
+      ),
+    );
+    if (go != true) return;
+  }
+  await sync.signOutAndClear();
+  await account.store.setPref(accountSkippedPref, '');
+  navigator.popUntil((r) => r.isFirst);
+  await navigator.push<bool>(
+      MaterialPageRoute(fullscreenDialog: true, builder: (_) => LoginPage(account: account, atLaunch: true)));
 }
 
 /// The two ways out when this device and the account both have data.
