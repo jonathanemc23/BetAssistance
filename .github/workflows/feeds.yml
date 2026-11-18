@@ -1,0 +1,62 @@
+name: Feed check
+
+# Every morning, reads the real ESPN and TheSportsDB feeds with the app's own
+# readers (test_live/). The app depends on these free feeds without an
+# agreement, so they can change their format without notice; when a check
+# fails this opens an issue (or comments on the one already open), and
+# GitHub emails the repository owner.
+on:
+  schedule:
+    - cron: '0 7 * * *' # 07:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: feed-check
+  cancel-in-progress: true
+
+jobs:
+  feeds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          # Same pinned version as the app's other workflows.
+          flutter-version: 3.47.9
+          cache: true
+      - run: flutter pub get
+      - name: Check the feeds
+        id: check
+        run: |
+          set -o pipefail
+          flutter test test_live --reporter expanded 2>&1 | tee feeds.log
+
+      - name: Report a failure
+        if: failure() && steps.check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Feed check failed"
+          {
+            echo "The daily check of the ESPN and TheSportsDB feeds failed on $(date -u +%Y-%m-%d)."
+            echo "One of them may have changed its format, or was down this morning."
+            echo
+            echo "Run: $RUN_URL"
+            echo
+            echo '```'
+            grep -E '\[E\]|Expected|Actual|reason|Exception' feeds.log | head -40
+            echo '```'
+          } > body.md
+          OPEN=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number --jq '.[0].number')
+          if [ -n "$OPEN" ]; then
+            gh issue comment "$OPEN" --body-file body.md
+          else
+            gh issue create --title "$TITLE" --body-file body.md
+          fi
