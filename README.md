@@ -137,6 +137,14 @@ To sign CI builds with the release key, add two repository secrets:
 `KEYSTORE_BASE64` (`base64 -w0 android/app/banktrack-release.jks`) and
 `KEY_PROPERTIES` (the contents of `android/key.properties`).
 
+`.github/workflows/feeds.yml` reads the real ESPN and TheSportsDB feeds every
+morning at 07:00 UTC with the app's own readers (`flutter test test_live`):
+football match lists, a match page's stats, the stake builder's past games,
+NBA games and box scores, and a TheSportsDB-only league. The unit tests use
+saved answers, so this is what notices when a feed changes its format. A
+failure opens a "Feed check failed" issue, or comments on the open one. Run it
+by hand from the Actions tab (Feed check, Run workflow).
+
 ## iPhone
 
 `ios/` is the iPhone app: bundle id `com.banktrack.app` (same as Android),
