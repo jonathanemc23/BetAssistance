@@ -20,6 +20,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned: a new stable release can deprecate APIs and fail `flutter analyze`.
+          # Bump on purpose, after running analyze and the tests on the new version.
+          flutter-version: 3.47.9
           cache: true
       - run: flutter pub get
 
