@@ -74,40 +74,53 @@ Future<void> showShareBet(BuildContext context, BankStore store, Bet bet) {
 Future<Bet?> showPasteLink(BuildContext context) async {
   final clip = await Clipboard.getData(Clipboard.kTextPlain);
   if (!context.mounted) return null;
-  final ctrl = TextEditingController(text: clip?.text ?? '');
-  String? error;
-  Bet? decode() => BetLink.decode(ctrl.text,
-      today: isoDate(DateTime.now()), created: DateTime.now().toIso8601String());
-  final bet = await showDialog<Bet>(
-    context: context,
-    builder: (c) => StatefulBuilder(
-      builder: (c, setState) => AlertDialog(
+  return showDialog<Bet>(context: context, builder: (c) => _PasteLinkDialog(initial: clip?.text ?? ''));
+}
+
+/// Owns its text controller, so the controller lives until the dialog has
+/// finished closing (disposing it as soon as the dialog returned broke the
+/// closing animation, which still draws the field).
+class _PasteLinkDialog extends StatefulWidget {
+  const _PasteLinkDialog({required this.initial});
+  final String initial;
+
+  @override
+  State<_PasteLinkDialog> createState() => _PasteLinkDialogState();
+}
+
+class _PasteLinkDialogState extends State<_PasteLinkDialog> {
+  late final _ctrl = TextEditingController(text: widget.initial);
+  String? _error;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _open() {
+    final b = BetLink.decode(_ctrl.text, today: isoDate(DateTime.now()), created: DateTime.now().toIso8601String());
+    if (b == null) {
+      setState(() => _error = tr("That doesn't look like a BetPilot bet link"));
+    } else {
+      Navigator.pop(context, b);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
         title: Text(tr('Open a bet link')),
         content: TextField(
-          controller: ctrl,
+          controller: _ctrl,
           minLines: 2,
           maxLines: 4,
-          decoration: InputDecoration(hintText: tr('Paste the link or message'), errorText: error),
+          decoration: InputDecoration(hintText: tr('Paste the link or message'), errorText: _error),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: Text(tr('Cancel'))),
-          FilledButton(
-            onPressed: () {
-              final b = decode();
-              if (b == null) {
-                setState(() => error = tr("That doesn't look like a BetPilot bet link"));
-              } else {
-                Navigator.pop(c, b);
-              }
-            },
-            child: Text(tr('Open')),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Cancel'))),
+          FilledButton(onPressed: _open, child: Text(tr('Open'))),
         ],
-      ),
-    ),
-  );
-  ctrl.dispose();
-  return bet;
+      );
 }
 
 String betTitle(Bet b) => b.isParlay ? tr('{n}-leg parlay', {'n': b.legs.length}) : trPick(b.selection);

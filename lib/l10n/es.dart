@@ -296,6 +296,7 @@ const esStrings = <String, String>{
   'Bets': 'Apuestas',
   // bank_screens.dart
   'Enter an amount above zero': 'Introduce un importe mayor que cero',
+  'Enter a number, 0 or more': 'Introduce un número, 0 o más',
   'Deposit added': 'Depósito añadido',
   'Withdrawal added': 'Retiro añadido',
   'Add deposit': 'Añadir depósito',
