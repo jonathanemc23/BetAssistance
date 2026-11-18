@@ -8,6 +8,7 @@ import 'package:bank_track/data/store.dart';
 import 'package:bank_track/main.dart';
 import 'package:bank_track/ui/account_screens.dart' show LoginPage;
 import 'package:bank_track/ui/community.dart' show BettorProfilePage;
+import 'package:bank_track/ui/format.dart' show Fmt;
 import 'package:bank_track/ui/match_page.dart';
 import 'package:bank_track/ui/match_visuals.dart';
 import 'package:bank_track/ui/matches_screen.dart';
@@ -159,6 +160,12 @@ void main() {
     expect(find.text('BANK'), findsOneWidget);
     expect(find.text('Welcome back'), findsOneWidget);
     expect(find.text('2 open bets'), findsOneWidget);
+    expect(find.text('In play'), findsOneWidget);
+    // The bank drops by what open bets have staked: 45 is in play.
+    expect(store.stats.exposure, 45);
+    expect(find.text(Fmt(store.settings).money(store.stats.balance - 45)), findsOneWidget);
+    expect(find.text(Fmt(store.settings).money(45)), findsOneWidget);
+    expect(find.byKey(const Key('appbar-tokens')), findsOneWidget);
     expect(find.text('Important matches today'), findsOneWidget);
     expect(find.text('Arsenal'), findsOneWidget); // live
     expect(find.text('AFC Bournemouth'), findsOneWidget);
