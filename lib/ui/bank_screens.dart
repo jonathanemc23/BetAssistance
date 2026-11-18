@@ -185,6 +185,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late OddsFormat _odds;
   bool _showKey = false;
   bool _alerts = true;
+  String? _startError, _unitError;
 
   @override
   void initState() {
@@ -228,9 +229,18 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _save() async {
+    // A typo used to save the bankroll or the unit as 0; keep the user on the
+    // page instead, with the field marked.
+    final start = double.tryParse(_start.text.trim().replaceAll(',', '.'));
+    final unit = double.tryParse(_unit.text.trim().replaceAll(',', '.'));
+    setState(() {
+      _startError = start == null || start < 0 ? tr('Enter a number, 0 or more') : null;
+      _unitError = unit == null || unit <= 0 ? tr('Enter an amount above zero') : null;
+    });
+    if (_startError != null || _unitError != null) return;
     final s = widget.store.settings.copyWith(
-      startBankroll: double.tryParse(_start.text.replaceAll(',', '.')) ?? 0,
-      unit: double.tryParse(_unit.text.replaceAll(',', '.')) ?? 0,
+      startBankroll: start,
+      unit: unit,
       currency: _currency,
       startDate: _startDate,
       oddsFormat: _odds,
@@ -308,7 +318,7 @@ class _SettingsPageState extends State<SettingsPage> {
         TextField(
           controller: _start,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: tr('Starting bankroll')),
+          decoration: InputDecoration(labelText: tr('Starting bankroll'), errorText: _startError),
         ),
         gap,
         InkWell(
@@ -330,7 +340,9 @@ class _SettingsPageState extends State<SettingsPage> {
           controller: _unit,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
-              labelText: tr('Unit size'), helperText: tr('The stake you treat as one unit, used to show profit in units')),
+              labelText: tr('Unit size'),
+              helperText: tr('The stake you treat as one unit, used to show profit in units'),
+              errorText: _unitError),
         ),
         gap,
         DropdownButtonFormField<String>(
