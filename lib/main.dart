@@ -26,6 +26,7 @@ import 'ui/charts_screen.dart';
 import 'ui/community.dart';
 import 'ui/home_screen.dart';
 import 'ui/matches_screen.dart';
+import 'ui/pro_tips_page.dart' show TokenChip;
 import 'ui/themes.dart';
 import 'ui/share_ui.dart';
 import 'ui/slip_import.dart';
@@ -259,12 +260,13 @@ class _HomeShellState extends State<HomeShell> {
         drawer: _drawer(context),
         appBar: AppBar(
           title: _tab == 0
-              ? const BrandTitle()
+              ? const FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: BrandTitle())
               : Text(switch (_tab) { 1 => tr('Bet register'), 2 => tr('Matches'), _ => tr('Charts') },
                   style: const TextStyle(fontWeight: FontWeight.w700)),
           actions: [
             if (_tab == 1)
               IconButton(tooltip: tr('Open a bet link'), icon: const Icon(Icons.add_link), onPressed: _pasteLink),
+            if (_tab == 0) TokenChip(key: const Key('appbar-tokens'), store: store),
             IconButton(tooltip: tr('Settings'), icon: const Icon(Icons.tune), onPressed: _openSettings),
           ],
         ),
