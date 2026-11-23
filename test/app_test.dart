@@ -173,7 +173,7 @@ void main() {
     expect(find.text('Leeds United'), findsNothing); // finished: not in the strip
     expect(find.text('Barcelona to win'), findsNothing);
     await shot('home');
-    await tester.scrollUntilVisible(find.text('Free tips'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(find.text('BetPilot free picks for today'), 300, scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('home-pro-tips')), findsOneWidget);
     await shot('home_tips');
@@ -188,7 +188,18 @@ void main() {
     await shot('tip_locked');
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await tester.drag(find.text('Free tips'), const Offset(0, 2000));
+    // A free pick opens its page with the pick and the analysis behind it.
+    await tester.scrollUntilVisible(find.text('Under 2.5 goals'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Under 2.5 goals'));
+    await settle(tester);
+    expect(find.text('Free pick'), findsOneWidget);
+    expect(find.byKey(const Key('tip-refund-note')), findsNothing);
+    expect(find.text('Analysis'), findsOneWidget);
+    expect(find.byKey(const Key('analysis-market')), findsOneWidget);
+    await shot('tip_free');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.drag(find.text('BetPilot free picks for today'), const Offset(0, 2000));
     await tester.pumpAndSettle();
 
     // The avatar is picked from Home, and shows there.
@@ -655,6 +666,25 @@ void main() {
     await tester.tap(find.text('30 days'));
     await tester.pumpAndSettle();
     expect(find.text('Bankroll over time'), findsOneWidget);
+  });
+
+  testWidgets('home with no big matches left today shows the next day and its picks', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final store = (await tester.runAsync(seededStore))!;
+    await tester.pumpWidget(BankTrackApp(
+      store: store,
+      fixtures: FixturesApi(client: _fixturesClient()),
+      today: DateTime(2026, 10, 17),
+    ));
+    await settle(tester);
+    expect(find.byKey(const Key('home-next-day')), findsOneWidget);
+    expect(find.textContaining('Big matches on'), findsOneWidget);
+    expect(find.text('AFC Bournemouth'), findsOneWidget);
+    await tester.scrollUntilVisible(find.textContaining('BetPilot free picks for'), 300,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.byKey(const Key('home-pro-tips')), findsOneWidget);
   });
 
   testWidgets('stake builder: match stats, picks from two matches, validate', (tester) async {

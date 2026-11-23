@@ -46,6 +46,10 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Match>? _matches;
   String? _error;
 
+  /// The day the strip and the tips are for: today, or the next day with
+  /// big matches when today has none left.
+  DateTime? _day;
+
   BankStore get store => widget.store;
   DateTime get _today => widget.today ?? DateTime.now();
 
@@ -58,8 +62,20 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _load({bool refresh = false}) async {
     setState(() => _error = null);
     try {
-      final list = await widget.api.featuredMatches(_today, refresh: refresh);
-      if (mounted) setState(() => _matches = list);
+      var day = _today;
+      var list = await widget.api.featuredMatches(day, refresh: refresh);
+      // Nothing left today: the next day with big matches, up to 3 days on.
+      for (var i = 1; i <= 3 && list.isEmpty; i++) {
+        day = DateTime(_today.year, _today.month, _today.day + i);
+        list = await widget.api.featuredMatches(day, refresh: refresh);
+      }
+      if (list.isEmpty) day = _today;
+      if (mounted) {
+        setState(() {
+          _matches = list;
+          _day = day;
+        });
+      }
     } on FixturesException catch (e) {
       if (mounted) setState(() => _error = e.message);
     }
@@ -87,7 +103,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openHub(int tab) => openProTipsHub(context, store: store, api: widget.api, today: _today, tab: tab);
 
-  void _openTips(Match m, {int tab = 0}) => openProTips(context, store: store, match: m, api: widget.api, tab: tab);
 
   @override
   Widget build(BuildContext context) {
@@ -98,17 +113,38 @@ class _HomeScreenState extends State<HomeScreen> {
     final pro = [
       for (final (m, t) in tips) ...[for (final p in t.pro) (m, p)],
     ];
-    final free = [
-      for (final (m, t) in tips)
-        if (t.daily.isNotEmpty) (m, t.daily.first),
-    ].take(4).toList();
+    final free = freePicksOfTheDay([for (final (m, t) in tips) for (final d in t.daily) (m, d)]);
+    final day = _day ?? _today;
+    final later = day.year != _today.year || day.month != _today.month || day.day != _today.day;
+    final dayName = DateFormat('EEEE d MMMM').format(day);
 
     return RefreshIndicator(
       onRefresh: () => _load(refresh: true),
       child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
         _HomeHeader(store: store, onSummary: _openSummary, onLogBet: widget.onLogBet, onOpenBets: widget.onOpenBets),
         const SizedBox(height: 22),
-        _SectionTitle(title: tr('Important matches today'), action: tr('All matches'), onAction: widget.onOpenMatches),
+        if (later)
+          Container(
+            key: const Key('home-next-day'),
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(children: [
+              Icon(Icons.event_available, size: 18, color: Theme.of(context).colorScheme.onSecondaryContainer),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(tr('No big matches left today. Here are the picks for {day}.', {'day': dayName}),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSecondaryContainer)),
+              ),
+            ]),
+          ),
+        _SectionTitle(
+            title: later ? tr('Big matches on {day}', {'day': dayName}) : tr('Important matches today'),
+            action: tr('All matches'),
+            onAction: widget.onOpenMatches),
         SizedBox(
           height: 156,
           child: matches == null
@@ -153,13 +189,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 match: pro[i].$1,
                 tip: pro[i].$2,
                 store: store,
-                onTap: () => openTipPage(context, store: store, match: pro[i].$1, tip: pro[i].$2),
+                onTap: () => openTipPage(context, store: store, match: pro[i].$1, tip: pro[i].$2, api: widget.api),
               ),
             ),
           ),
         ],
         const SizedBox(height: 22),
-        _SectionTitle(title: tr('Free tips'), action: tr('More'), onAction: () => _openHub(0)),
+        _SectionTitle(
+            title: later ? tr('BetPilot free picks for {day}', {'day': dayName}) : tr('BetPilot free picks for today'),
+            action: tr('More'),
+            onAction: () => _openHub(0)),
         if (matches != null && free.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -167,7 +206,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ),
         for (final (m, t) in free)
-          _FreeTipRow(match: m, tip: t, format: store.settings.oddsFormat, onTap: () => _openTips(m)),
+          _FreeTipRow(
+              match: m,
+              tip: t,
+              format: store.settings.oddsFormat,
+              onTap: () => openTipPage(context, store: store, match: m, tip: t, api: widget.api)),
         if (free.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 6),

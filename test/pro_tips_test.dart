@@ -189,4 +189,24 @@ void main() {
     expect(store.tokens, 0);
     expect(store.isUnlocked(t), isFalse);
   });
+
+  test('free picks of the day: the likeliest, one per match, at most 3 and 2 High', () {
+    Tip t(String id, double chance, Confidence level) => Tip(
+        matchId: id,
+        legs: const [TipLeg(TipMarket.homeWin, 'Home', 1.5)],
+        chance: chance,
+        reasons: const [],
+        free: true,
+        level: level);
+    final picks = freePicksOfTheDay([
+      ('a', t('a', 0.70, Confidence.high)),
+      ('a', t('a', 0.69, Confidence.high)),
+      ('b', t('b', 0.66, Confidence.high)),
+      ('c', t('c', 0.64, Confidence.high)),
+      ('d', t('d', 0.55, Confidence.medium)),
+      ('e', t('e', 0.52, Confidence.medium)),
+    ]);
+    expect(picks.map((p) => p.$1), ['a', 'b', 'd']);
+    expect(freePicksOfTheDay(<(String, Tip)>[]), isEmpty);
+  });
 }
