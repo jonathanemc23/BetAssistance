@@ -189,8 +189,8 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     // A free pick opens its page with the pick and the analysis behind it.
-    await tester.scrollUntilVisible(find.text('Under 2.5 goals'), 300, scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('Under 2.5 goals'));
+    await tester.scrollUntilVisible(find.byKey(const Key('home-free-tip')).first, 300, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(const Key('home-free-tip')).first);
     await settle(tester);
     expect(find.text('Free pick'), findsOneWidget);
     expect(find.byKey(const Key('tip-refund-note')), findsNothing);
