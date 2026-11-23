@@ -290,7 +290,7 @@ class _HomeShellState extends State<HomeShell> {
               MatchesTabs(store: store, api: widget.fixtures, today: widget.today)
             else
               const SizedBox.shrink(),
-            ChartsScreen(store: store),
+            ChartsScreen(store: store, today: widget.today),
           ])),
         ]),
         floatingActionButton: _tab == 1

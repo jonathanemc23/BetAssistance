@@ -7,6 +7,7 @@ import 'package:bank_track/data/models.dart';
 import 'package:bank_track/data/store.dart';
 import 'package:bank_track/main.dart';
 import 'package:bank_track/ui/account_screens.dart' show LoginPage;
+import 'package:bank_track/ui/charts_screen.dart';
 import 'package:bank_track/ui/community.dart' show BettorProfilePage;
 import 'package:bank_track/ui/match_page.dart';
 import 'package:bank_track/ui/match_visuals.dart';
@@ -616,7 +617,27 @@ void main() {
     await tester.tap(find.text('Charts'));
     await tester.pumpAndSettle();
     expect(find.text('Bankroll over time'), findsOneWidget);
+    expect(find.text('Max drawdown'), findsOneWidget);
     await shot('charts');
+    final charts = find.descendant(of: find.byType(ChartsScreen), matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.text('Running profit'), 300, scrollable: charts);
+    await tester.ensureVisible(find.text('Profit per bet'));
+    await tester.pumpAndSettle();
+    await shot('charts_per_bet');
+    await tester.scrollUntilVisible(find.text('Win rate by odds'), 300, scrollable: charts);
+    await tester.pumpAndSettle();
+    await shot('charts_sport_odds');
+    await tester.scrollUntilVisible(find.text('Day of the week'), 300, scrollable: charts);
+    await tester.ensureVisible(find.text('More breakdowns'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Market'));
+    await tester.pumpAndSettle();
+    await shot('charts_breakdowns');
+    // A shorter period keeps only the bets inside it.
+    await tester.scrollUntilVisible(find.text('30 days'), -300, scrollable: charts);
+    await tester.tap(find.text('30 days'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bankroll over time'), findsOneWidget);
   });
 
   testWidgets('stake builder: match stats, picks from two matches, validate', (tester) async {
