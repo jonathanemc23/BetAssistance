@@ -710,6 +710,9 @@ const _filler = {
 /// [text] in lower case without accents, for matching what people type.
 String plainText(String text) => text.toLowerCase().split('').map((c) => _accents[c] ?? c).join();
 
+/// The words that name a team, without accents, case and filler like "FC".
+Set<String> teamWords(String name) => _teamWords(name);
+
 Set<String> _teamWords(String name) {
   final plain = plainText(name);
   return plain.split(RegExp(r'[^a-z0-9]+')).where((w) => w.length > 1 && !_filler.contains(w)).toSet();
@@ -1384,6 +1387,10 @@ class FixturesApi {
     _days[key] = (DateTime.now(), list, missed);
     return list;
   }
+
+  /// Every match on [day] in all the leagues the app knows, for finding the
+  /// match behind a pick. TheSportsDB is read too when [withTsdb].
+  Future<List<Match>> allMatchesOn(DateTime day, {bool withTsdb = false}) => _allOn(day, withTsdb: withTsdb);
 
   /// The days searched for a pick's match, nearest first: picks are mostly
   /// for today and the next few days. TheSportsDB is only read for the

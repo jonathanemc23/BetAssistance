@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:bank_track/data/fixtures.dart';
@@ -56,5 +57,97 @@ void main() {
     final down = FixturesApi(client: MockClient((_) async => throw const SocketException('down')));
     const leg = ParlayLeg(selection: 'Chelsea', event: 'Everton vs Chelsea', odds: 2.2);
     expect((await linkLegs(down, const [leg])).single.isLinked, isFalse);
+  });
+
+  fuzzyTests();
+}
+
+/// An ESPN scoreboard with [games] (id, kick-off UTC, home, away), each
+/// served only on its own UTC day.
+MockClient _boardClient(List<(String, String, String, String)> games) {
+  final base = jsonDecode(File('test/data/espn_scoreboard_draftkings.json').readAsStringSync()) as Map<String, dynamic>;
+  final template = jsonEncode((base['events'] as List).single);
+  Map<String, dynamic> game((String, String, String, String) g) {
+    final e = jsonDecode(template) as Map<String, dynamic>;
+    final (id, date, home, away) = g;
+    e['id'] = id;
+    e['date'] = date;
+    final c = (e['competitions'] as List).single as Map<String, dynamic>;
+    c['id'] = id;
+    c['date'] = date;
+    for (final t in c['competitors'] as List) {
+      final team = t['team'] as Map<String, dynamic>;
+      final name = t['homeAway'] == 'home' ? home : away;
+      for (final k in ['displayName', 'shortDisplayName', 'name', 'location']) {
+        team[k] = name;
+      }
+      team['id'] = '${name.hashCode}';
+    }
+    return e;
+  }
+
+  return MockClient((req) async {
+    if (req.url.host.contains('thesportsdb')) return http.Response('{"events":null}', 200);
+    if (!req.url.path.contains('/eng.1/scoreboard')) return http.Response('{"events":[]}', 200);
+    final day = req.url.queryParameters["dates"];
+
+    final events = [
+      for (final g in games)
+        if (g.$2.substring(0, 10).replaceAll('-', '') == day) game(g),
+    ];
+    // As bytes: a String body would go out as Latin-1 and "León" would break.
+    return http.Response.bytes(utf8.encode(jsonEncode({...base, 'events': events})), 200);
+  });
+}
+
+void fuzzyTests() {
+  test('team names written short or misread still count as the same club', () {
+    expect(teamScore('Man Utd', 'Manchester United'), greaterThanOrEqualTo(0.8));
+    expect(teamScore('Atl. Madrid', 'Atlético Madrid'), greaterThanOrEqualTo(0.8));
+    expect(teamScore('Chelsae', 'Chelsea'), greaterThanOrEqualTo(0.8));
+    expect(teamScore('Club León', 'León'), 1);
+    expect(teamScore('Real Madrid', 'Real Betis'), lessThan(0.55));
+    expect(teamScore('Leeds United', 'Manchester United'), lessThan(0.55));
+  });
+
+  final now = DateTime(2026, 11, 23, 12);
+
+  test('short and misread names are linked to the match', () async {
+    final api = FixturesApi(client: _boardClient([('1', '2026-11-23T15:00Z', 'Manchester United', 'Chelsea')]));
+    final links = await findLinks(api, const [ParlayLeg(selection: 'Man Utd', event: 'Man Utd vs Chelsae', odds: 2.1)], now: now);
+    expect(links.single.leg.isLinked, isTrue);
+    expect(links.single.leg.matchId, '1');
+    expect(links.single.leg.selection, 'Manchester United to win');
+  });
+
+  test('when several matches fit, the user is asked and nothing is linked on its own', () async {
+    final api = FixturesApi(client: _boardClient([
+      ('1', '2026-11-23T15:00Z', 'Manchester United', 'Arsenal'),
+      ('2', '2026-11-23T17:30Z', 'Manchester City', 'Arsenal'),
+    ]));
+    const leg = ParlayLeg(selection: 'Arsenal', event: 'Manchester vs Arsenal', odds: 2.4);
+    final link = (await findLinks(api, const [leg], now: now)).single;
+    expect(link.needsPick, isTrue);
+    expect(link.candidates.map((c) => c.match.id).toSet(), {'1', '2'});
+    expect((await linkLegs(api, const [leg])).single.isLinked, isFalse);
+  });
+
+  test('the date on the slip finds older matches and picks the right meeting', () async {
+    final api = FixturesApi(client: _boardClient([
+      ('10', '2026-11-01T20:10Z', 'Cruz Azul', 'León'),
+      ('11', '2026-11-24T20:10Z', 'Cruz Azul', 'León'),
+    ]));
+    const leg = ParlayLeg(selection: 'Cruz Azul', event: 'Cruz Azul vs Club León', odds: 1.7);
+    final dated = (await findLinks(api, const [leg], dates: [DateTime(2026, 11, 1, 20, 10)], now: now)).single;
+    expect(dated.leg.matchId, '10');
+    final undated = (await findLinks(api, const [leg], now: now)).single;
+    expect(undated.leg.matchId, '11');
+  });
+
+  test('a pick naming only one team offers that team\'s match to choose', () async {
+    final api = FixturesApi(client: _boardClient([('1', '2026-11-24T15:00Z', 'Everton', 'Chelsea')]));
+    final link = (await findLinks(api, const [ParlayLeg(selection: 'Chelsea to win', odds: 1.9)], now: now)).single;
+    expect(link.needsPick, isTrue);
+    expect(link.candidates.single.match.id, '1');
   });
 }

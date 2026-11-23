@@ -189,6 +189,20 @@ void main() {
       ('Independiente Santa Fe · Ganar el partido o liderar por 2 goles', 'Independiente Santa Fe vs Once Caldas', 'other', 2.32),
     ]);
     expect(r.totalOdds, 3.94);
+    // The kick-offs on the slip, used to find the matches even days later.
+    expect(r.legs.map((l) => l.date), [DateTime(2026, 11, 1, 20, 10), DateTime(2026, 11, 1, 20, 15)]);
+  });
+
+  test('reads kick-off dates the ways slips write them', () {
+    final now = DateTime(2026, 11, 23, 9);
+    expect(slipDate('18/10/2026, 08:00', now), DateTime(2026, 10, 18, 8));
+    expect(slipDate('10/18/26 8:00', now), DateTime(2026, 10, 18, 8)); // month first when it must be
+    expect(slipDate('05/01 20:00', now), DateTime(2027, 1, 5, 20)); // no year: the nearest one
+    expect(slipDate('Hoy 18:00', now), DateTime(2026, 11, 23, 18));
+    expect(slipDate('Mañana 15:30', now), DateTime(2026, 11, 24, 15, 30));
+    expect(slipDate('Más de 2.5', now), isNull);
+    expect(slipDate('Marcador 2-1', now), isNull);
+    expect(slipDate('Arsenal 1.85', now), isNull);
   });
 
   test('"Doble oportunidad" is still a market, not the slip heading', () {

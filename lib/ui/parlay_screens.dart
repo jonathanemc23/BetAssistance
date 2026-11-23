@@ -267,7 +267,9 @@ class _ParlayPageState extends State<ParlayPage> {
       builder: (_) => _ExternalLegSheet(format: store.settings.oddsFormat),
     );
     if (leg == null) return;
-    final linked = (await linkLegs(widget.api, [leg])).single;
+    final links = await findLinks(widget.api, [leg]);
+    if (!mounted) return;
+    final linked = (await chooseMatches(context, links)).single;
     await store.addLeg(_parlay ?? p, linked);
   }
 
