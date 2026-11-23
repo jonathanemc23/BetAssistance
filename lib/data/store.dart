@@ -186,11 +186,14 @@ class BankStore extends ChangeNotifier {
   bool isUnlocked(Tip t) => t.free || unlockedTips.containsKey(t.id);
 
   /// Spends the tip's tokens to unlock it. False when there aren't enough.
-  Future<bool> unlockTip(Tip t) async {
+  /// With [match] the tip shows in the bet register's Bought section and
+  /// settles from the final score on its own.
+  Future<bool> unlockTip(Tip t, {Match? match}) async {
     if (isUnlocked(t)) return true;
     if (tokens < t.cost) return false;
     tokens -= t.cost;
-    unlockedTips[t.id] = UnlockedTip(cost: t.cost, at: _now(), tip: t);
+    unlockedTips[t.id] =
+        UnlockedTip(cost: t.cost, at: _now(), tip: t, match: match == null ? null : TipMatch.of(match));
     await _saveTips();
     return true;
   }
@@ -203,12 +206,24 @@ class BankStore extends ChangeNotifier {
       final u = unlockedTips[t.id];
       if (u == null || u.result != null) continue;
       final won = t.result(home, away)!;
-      unlockedTips[t.id] = u.settled(won ? 'won' : 'refunded');
+      unlockedTips[t.id] = u.settledAs(won ? 'won' : 'refunded');
       if (!won) tokens += u.cost;
       changed = true;
     }
     if (changed) await _saveTips();
   }
+
+  /// The bought Pro tips still waiting for their match's result, with the
+  /// match they are on.
+  Iterable<UnlockedTip> get openTips =>
+      unlockedTips.values.where((u) => !u.settled && u.tip != null && u.match != null);
+
+  /// Settles the Pro tips bought on [matchId], as they were bought, with
+  /// its final score.
+  Future<void> settleTipsOn(String matchId, int home, int away) => settleTips([
+        for (final u in openTips)
+          if (u.match!.id == matchId) u.tip!,
+      ], home, away);
 
   /// The Pro tips bought for [matchId], as they were bought.
   List<Tip> boughtTips(String matchId) => [

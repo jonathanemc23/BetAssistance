@@ -390,10 +390,78 @@ String ordinal(int n) {
   return '$n${switch (n % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', _ => 'th' }}';
 }
 
+/// The match a bought tip is on, kept with it so the tip can be listed in
+/// the bet register and settled from the final score without opening it.
+class TipMatch {
+  const TipMatch({
+    required this.id,
+    required this.leagueSlug,
+    required this.leagueName,
+    required this.home,
+    required this.away,
+    required this.kickoff,
+    this.homeLogo,
+    this.awayLogo,
+  });
+  final String id, leagueSlug, leagueName, home, away;
+  final String? homeLogo, awayLogo;
+  final DateTime kickoff; // UTC
+
+  factory TipMatch.of(Match m) => TipMatch(
+        id: m.id,
+        leagueSlug: m.league.slug,
+        leagueName: m.league.name,
+        home: m.home.name,
+        away: m.away.name,
+        homeLogo: m.home.logo,
+        awayLogo: m.away.logo,
+        kickoff: m.kickoff.toUtc(),
+      );
+
+  String get title => '$home vs $away';
+
+  Match toMatch() => Match(
+        id: id,
+        league: leagueBySlug(leagueSlug) ?? League(leagueSlug, leagueName),
+        kickoff: kickoff,
+        home: Team(home, home, homeLogo, null),
+        away: Team(away, away, awayLogo, null),
+        state: MatchState.scheduled,
+        detail: '',
+      );
+
+  Map<String, Object?> toJson() => {
+        'id': id,
+        'league': leagueSlug,
+        'leagueName': leagueName,
+        'home': home,
+        'away': away,
+        'homeLogo': homeLogo,
+        'awayLogo': awayLogo,
+        'kickoff': kickoff.toIso8601String(),
+      };
+
+  static TipMatch? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final kickoff = DateTime.tryParse('${j['kickoff'] ?? ''}');
+    if (j['id'] == null || kickoff == null) return null;
+    return TipMatch(
+      id: '${j['id']}',
+      leagueSlug: '${j['league'] ?? ''}',
+      leagueName: '${j['leagueName'] ?? ''}',
+      home: '${j['home'] ?? ''}',
+      away: '${j['away'] ?? ''}',
+      homeLogo: j['homeLogo'] as String?,
+      awayLogo: j['awayLogo'] as String?,
+      kickoff: kickoff.toUtc(),
+    );
+  }
+}
+
 /// A Pro tip the user paid for, kept as it was bought. [result] is 'won'
 /// or 'refunded' once the match is over.
 class UnlockedTip {
-  const UnlockedTip({required this.cost, required this.at, this.result, this.tip});
+  const UnlockedTip({required this.cost, required this.at, this.result, this.tip, this.match});
   final int cost;
   final String at;
   final String? result;
@@ -401,15 +469,23 @@ class UnlockedTip {
   /// The tip as bought (missing for tips bought before 0.16).
   final Tip? tip;
 
-  UnlockedTip settled(String result) => UnlockedTip(cost: cost, at: at, result: result, tip: tip);
+  /// The match it is on (missing for tips bought before the bet register
+  /// listed them).
+  final TipMatch? match;
 
-  Map<String, dynamic> toJson() => {'cost': cost, 'at': at, 'result': ?result, 'tip': ?tip?.toJson()};
+  bool get settled => result != null;
+
+  UnlockedTip settledAs(String result) => UnlockedTip(cost: cost, at: at, result: result, tip: tip, match: match);
+
+  Map<String, dynamic> toJson() =>
+      {'cost': cost, 'at': at, 'result': ?result, 'tip': ?tip?.toJson(), 'match': ?match?.toJson()};
 
   factory UnlockedTip.fromJson(Map<String, dynamic> j) => UnlockedTip(
         cost: (j['cost'] as num?)?.toInt() ?? 0,
         at: '${j['at'] ?? ''}',
         result: j['result'] as String?,
         tip: j['tip'] is Map ? Tip.fromJson((j['tip'] as Map).cast<String, dynamic>()) : null,
+        match: TipMatch.fromJson(j['match']),
       );
 }
 

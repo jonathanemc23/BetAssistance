@@ -25,6 +25,7 @@ import 'slip_reader_test.dart' show screen;
 import 'stake_community_test.dart' show boxSummary;
 import 'package:bank_track/l10n/l10n.dart';
 import 'package:bank_track/logic/community.dart';
+import 'package:bank_track/logic/pro_tips.dart';
 import 'package:bank_track/logic/slip_reader.dart';
 import 'package:bank_track/logic/stake_stats.dart';
 import 'package:bank_track/ui/slip_import.dart';
@@ -685,6 +686,74 @@ void main() {
     await tester.scrollUntilVisible(find.textContaining('BetPilot free picks for'), 300,
         scrollable: find.byType(Scrollable).first);
     expect(find.byKey(const Key('home-pro-tips')), findsOneWidget);
+  });
+
+  testWidgets('register: the Bought section lists Pro tips and Community bets with their charts', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    if (shots) await tester.runAsync(loadFonts);
+    Future<void> shot(String name) async {
+      if (shots) await expectLater(find.byType(BankTrackApp), matchesGoldenFile('screenshots/$name.png'));
+    }
+
+    final store = (await tester.runAsync(() async {
+      // A database of its own: the shared in-memory one carries other tests' data.
+      final db = await AppDatabase.open(
+          factory: databaseFactoryFfi, path: '${Directory.systemTemp.createTempSync('bought').path}/bank.db');
+      await db.saveSettings(const Settings(startBankroll: 1000, startDate: '2026-07-18', unit: 20));
+      await db.setPref('app.language', 'en');
+      final store = BankStore(db);
+      await store.load();
+      await store.addTokens(30);
+      Match m(String id, String home, String away, int day) => Match(
+            id: id,
+            league: const League('eng.1', 'Premier League'),
+            kickoff: DateTime.utc(2026, 10, day, 15),
+            home: Team(home, home, null, null),
+            away: Team(away, away, null, null),
+            state: MatchState.scheduled,
+            detail: '',
+          );
+      Tip t(String id, TipMarket market, String pick, double odds, Confidence level) => Tip(
+          matchId: id, legs: [TipLeg(market, pick, odds)], chance: 0.5, reasons: const [], free: false, level: level);
+      final games = [
+        (m('901', 'Arsenal', 'Chelsea', 12), t('901', TipMarket.homeWin, 'Arsenal to win', 1.95, Confidence.high), (2, 0)),
+        (m('902', 'Leeds', 'Everton', 13), t('902', TipMarket.over25, 'Over 2.5 goals', 2.05, Confidence.max), (3, 1)),
+        (m('903', 'Fulham', 'Wolves', 14), t('903', TipMarket.awayWin, 'Wolves to win', 2.25, Confidence.max), (1, 1)),
+        (m('904', 'Brighton', 'Spurs', 19), t('904', TipMarket.bttsYes, 'Both teams to score: Yes', 1.85, Confidence.high), null),
+      ];
+      for (final (match, tip, score) in games) {
+        await store.unlockTip(tip, match: match);
+        if (score case (final h, final a)) await store.settleTipsOn(match.id, h, a);
+      }
+      final bought = [
+        (m('911', 'Real Madrid', 'Sevilla', 11), const TipLeg(TipMarket.homeWin, 'Real Madrid to win', 1.7), (2, 1)),
+        (m('912', 'Inter', 'Napoli', 12), const TipLeg(TipMarket.under25, 'Under 2.5 goals', 1.9), (2, 2)),
+        (m('913', 'Bayern', 'Dortmund', 19), const TipLeg(TipMarket.bttsYes, 'Both teams to score: Yes', 1.6), null),
+      ];
+      for (final (i, (match, leg, score)) in bought.indexed) {
+        final l = Listing(seller: demoSellers[i], bet: CommunityBet.on(match, leg, placed: 'demo'), price: listingPrice(leg.odds));
+        await store.buyListing(l);
+        if (score case (final h, final a)) await store.settleCommunity(match.id, h, a);
+      }
+      return store;
+    }))!;
+    await tester.pumpWidget(BankTrackApp(store: store, fixtures: FixturesApi(client: _fixturesClient()), today: DateTime(2026, 10, 18)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bets'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bet-filter-bought')));
+    await tester.pumpAndSettle();
+    expect(find.text('7 bought bets'), findsOneWidget);
+    expect(find.text('Arsenal to win'), findsOneWidget);
+    expect(find.text('67% won'), findsOneWidget);
+    await shot('bets_bought');
+    await tester.drag(find.byKey(const Key('bought-view')), const Offset(0, -720));
+    await tester.pumpAndSettle();
+    expect(find.text('Real Madrid to win'), findsOneWidget);
+    expect(find.text('50% won'), findsOneWidget);
+    await shot('bets_bought_community');
   });
 
   testWidgets('stake builder: match stats, picks from two matches, validate', (tester) async {

@@ -11,7 +11,8 @@ import 'store.dart';
 /// same feeds the app reads: the user's bets (singles and parlay legs picked
 /// from the Matches list), Parlay builder parlays, community bets and NBA
 /// pro stakes. Run by [LiveAlertService] when the app starts, after each
-/// full time and every few minutes in between.
+/// full time and every few minutes in between. Pro tips bought with tokens
+/// settle here too.
 class BetSettler {
   BetSettler({
     required this.store,
@@ -55,6 +56,9 @@ class BetSettler {
     }
     for (final b in store.openCommunityBets) {
       need(b.toMatch());
+    }
+    for (final u in store.openTips) {
+      need(u.match!.toMatch());
     }
     final stakes = [for (final s in store.proStakes) if (s.status == BetStatus.pending) s];
     for (final s in stakes) {
@@ -136,6 +140,15 @@ class BetSettler {
       if (m == null) continue;
       final (h, a) = finalScore(m)!;
       await store.settleCommunity(id, h, a);
+    }
+
+    // Pro tips bought with tokens: a lost one gives its tokens back.
+    final tipMatches = {for (final u in store.openTips) u.match!.id};
+    for (final id in tipMatches) {
+      final m = scores[id];
+      if (m == null) continue;
+      final (h, a) = finalScore(m)!;
+      await store.settleTipsOn(id, h, a);
     }
 
     // Pro stakes.

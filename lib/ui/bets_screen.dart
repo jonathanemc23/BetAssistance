@@ -4,15 +4,18 @@ import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
 import '../data/models.dart';
 import '../data/store.dart';
+import '../logic/purchased.dart';
 import '../logic/stats.dart';
 import 'bet_form.dart';
 import 'bet_review_page.dart';
+import 'charts_screen.dart' show ResultsDonut;
 import 'format.dart';
 import 'share_ui.dart';
 
-enum BetFilter { all, open, won, lost, parlays }
+enum BetFilter { all, bought, open, won, lost, parlays }
 
-/// The bet register: every bet, filters, quick settling and sharing.
+/// The bet register: every bet, filters, quick settling and sharing, and
+/// the bets bought with tokens (Pro tips and Community bets) under Bought.
 class BetsScreen extends StatefulWidget {
   const BetsScreen({super.key, required this.store, required this.api});
   final BankStore store;
@@ -31,6 +34,7 @@ class BetsScreenState extends State<BetsScreen> {
         BetFilter.won => b.countsAsWin == true,
         BetFilter.lost => b.countsAsWin == false,
         BetFilter.parlays => b.isParlay,
+        BetFilter.bought => false,
       };
 
   /// Asks how much the bookmaker paid, then settles the bet as cashed out.
@@ -102,32 +106,37 @@ class BetsScreenState extends State<BetsScreen> {
     final list = store.bets.where(_matches).toList();
     final pl = list.where((b) => b.isSettled).fold<double>(0, (a, b) => a + b.profit);
     final theme = Theme.of(context);
+    final chips = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        for (final f in BetFilter.values)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: Text(switch (f) {
+                BetFilter.all => tr('All'),
+                BetFilter.open => trc('status', 'Open'),
+                BetFilter.won => tr('Won'),
+                BetFilter.lost => tr('Lost'),
+                BetFilter.parlays => tr('Parlays'),
+                BetFilter.bought => tr('Bought'),
+              }),
+              avatar: f == BetFilter.bought ? const Icon(Icons.shopping_bag_outlined, size: 16) : null,
+              key: Key('bet-filter-${f.name}'),
+              selected: _filter == f,
+              showCheckmark: false,
+              onSelected: (_) => setState(() => _filter = f),
+            ),
+          ),
+      ]),
+    );
+    if (_filter == BetFilter.bought) return _BoughtView(store: store, header: chips);
 
     return CustomScrollView(slivers: [
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
         sliver: SliverList.list(children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(children: [
-              for (final f in BetFilter.values)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(switch (f) {
-                      BetFilter.all => tr('All'),
-                      BetFilter.open => trc('status', 'Open'),
-                      BetFilter.won => tr('Won'),
-                      BetFilter.lost => tr('Lost'),
-                      BetFilter.parlays => tr('Parlays'),
-                    }),
-                    selected: _filter == f,
-                    showCheckmark: false,
-                    onSelected: (_) => setState(() => _filter = f),
-                  ),
-                ),
-            ]),
-          ),
+          chips,
           const SizedBox(height: 4),
           Row(children: [
             Text(trn(list.length, '{n} bet', '{n} bets'), style: theme.textTheme.bodySmall),
@@ -342,6 +351,165 @@ class _ReviewButton extends StatelessWidget {
             ),
           ]),
         ),
+      ),
+    );
+  }
+}
+
+/// The Bought section: the Pro tips and Community bets bought with tokens,
+/// each with its own won vs lost chart. They settle on their own from the
+/// final score, like the rest of the register.
+class _BoughtView extends StatelessWidget {
+  const _BoughtView({required this.store, required this.header});
+  final BankStore store;
+  final Widget header;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final pro = purchasedBets(PurchaseSource.pro, tips: store.unlockedTips, listings: store.boughtListings);
+    final community = purchasedBets(PurchaseSource.community, tips: store.unlockedTips, listings: store.boughtListings);
+    return ListView(key: const Key('bought-view'), padding: const EdgeInsets.fromLTRB(16, 8, 16, 168), children: [
+      header,
+      const SizedBox(height: 4),
+      Text(trn(pro.length + community.length, '{n} bought bet', '{n} bought bets'), style: theme.textTheme.bodySmall),
+      const SizedBox(height: 8),
+      _BoughtSection(
+        key: const Key('bought-pro'),
+        title: tr('Pro tips'),
+        icon: Icons.workspace_premium_outlined,
+        empty: tr('The Pro tips you unlock with tokens show here, with their result.'),
+        bets: pro,
+        odds: store.settings.oddsFormat,
+      ),
+      const SizedBox(height: 12),
+      _BoughtSection(
+        key: const Key('bought-community'),
+        title: tr('Bought in Community'),
+        icon: Icons.groups_outlined,
+        empty: tr('The bets you buy from other bettors in Community show here, with their result.'),
+        bets: community,
+        odds: store.settings.oddsFormat,
+      ),
+      const SizedBox(height: 8),
+      Text(tr("Bought bets settle on their own with the match's final score. They have no stake, so they don't change your bankroll."),
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+    ]);
+  }
+}
+
+class _BoughtSection extends StatelessWidget {
+  const _BoughtSection(
+      {super.key, required this.title, required this.icon, required this.empty, required this.bets, required this.odds});
+  final String title, empty;
+  final OddsFormat odds;
+  final IconData icon;
+  final List<PurchasedBet> bets;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = PurchaseTally.of(bets);
+    final rate = t.winRate;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(icon, size: 20, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
+            if (rate != null)
+              Text(tr('{p}% won', {'p': (rate * 100).toStringAsFixed(0)}),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                      color: rate >= 0.5 ? BankColors.win(context) : BankColors.loss(context), fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 2),
+          Text(tr('Won vs lost'), style: theme.textTheme.bodySmall),
+          const SizedBox(height: 16),
+          if (bets.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(empty, style: theme.textTheme.bodySmall),
+            )
+          else ...[
+            ResultsDonut(
+              parts: [
+                (tr('Won'), t.won, BankColors.win(context)),
+                (tr('Lost'), t.lost, BankColors.loss(context)),
+                (tr('Pending'), t.open, BankColors.pending(context)),
+              ],
+              total: t.total,
+              unit: tr('bets'),
+            ),
+            const SizedBox(height: 16),
+            for (final b in bets) ...[
+              _BoughtTile(bet: b, odds: odds),
+              const SizedBox(height: 8),
+            ],
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+class _BoughtTile extends StatelessWidget {
+  const _BoughtTile({required this.bet, required this.odds});
+  final PurchasedBet bet;
+  final OddsFormat odds;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final status = switch (bet.won) { true => BetStatus.won, false => BetStatus.lost, null => BetStatus.pending };
+    final color = BankColors.forStatus(context, status);
+    final when = bet.kickoff == null ? '' : Fmt.date(isoDate(bet.kickoff!.toLocal()));
+    final sub = [bet.matchTitle, bet.leagueName, when].where((s) => s.isNotEmpty).join(' · ');
+    final meta = [
+      '@ ${formatOdds(bet.odds, odds)}',
+      trn(bet.cost, '{n} token', '{n} tokens'),
+      if (bet.seller.isNotEmpty) '@${bet.seller}',
+    ].join(' · ');
+    return Container(
+      key: Key('bought-${bet.id}'),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
+      ),
+      child: IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(width: 4, color: color),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(trPick(bet.pick), style: theme.textTheme.titleSmall),
+                if (sub.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
+                  ),
+                const SizedBox(height: 2),
+                Text(meta, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              ]),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(border: Border.all(color: color), borderRadius: BorderRadius.circular(99)),
+                child: Text(status.label.toUpperCase(),
+                    style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+              ),
+            ),
+          ),
+        ]),
       ),
     );
   }

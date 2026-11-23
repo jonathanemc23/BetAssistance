@@ -370,6 +370,23 @@ class _ResultsPie extends StatelessWidget {
         BankColors.neutral(context)
       ),
     ];
+    return ResultsDonut(parts: parts, total: bets.length, unit: tr('bets'));
+  }
+}
+
+/// A ring of results with the total in the middle and a legend of counts
+/// beside it: the Results chart, also used by the bet register's Bought
+/// section.
+class ResultsDonut extends StatelessWidget {
+  const ResultsDonut({super.key, required this.parts, required this.total, required this.unit});
+
+  /// Label, count and colour of each slice.
+  final List<(String, int, Color)> parts;
+  final int total;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
     return Row(children: [
       SizedBox(
         width: 140,
@@ -384,8 +401,8 @@ class _ResultsPie extends StatelessWidget {
             ],
           )),
           Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('${bets.length}', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-            Text(tr('bets'), style: Theme.of(context).textTheme.bodySmall),
+            Text('$total', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+            Text(unit, style: Theme.of(context).textTheme.bodySmall),
           ]),
         ]),
       ),
