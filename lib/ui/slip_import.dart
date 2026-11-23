@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 import '../l10n/l10n.dart';
 import '../data/fixtures.dart';
@@ -126,7 +127,7 @@ Future<(List<ParlayLeg>, double)?> _readSlip(
   }
   if (!context.mounted) return null;
   Navigator.of(context, rootNavigator: true).pop();
-  final result = await Navigator.of(context).push<(List<ParlayLeg>, double)>(
+  final result = await Navigator.of(context).push<(List<ParlayLeg>, double, List<DateTime?>)>(
     MaterialPageRoute(
       builder: (_) => SlipReviewPage(read: read, format: store.settings.oddsFormat, saveLabel: saveLabel),
     ),
@@ -139,10 +140,85 @@ Future<(List<ParlayLeg>, double)?> _readSlip(
       content: Row(children: [CircularProgressIndicator(), SizedBox(width: 20), Expanded(child: Text(tr('Finding the matches…')))]),
     ),
   );
-  final legs = await linkLegs(api, result.$1);
+  final links = await findLinks(api, result.$1, dates: result.$3);
   if (!context.mounted) return null;
   Navigator.of(context, rootNavigator: true).pop();
+  final legs = await chooseMatches(context, links);
+  if (!context.mounted) return null;
+  final missing = legs.where((l) => !l.isLinked && l.sport == 'Soccer').length;
+  if (missing > 0) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(trn(
+        missing,
+        "Couldn't find the match for {n} selection. You can pick it from the Matches list.",
+        "Couldn't find the match for {n} selections. You can pick them from the Matches list.",
+      )),
+      persist: false,
+    ));
+  }
   return (legs, result.$2);
+}
+
+/// The picks of [links], with the user choosing the match for each one that
+/// several matches (or one unsure match) could be. "None of these" leaves
+/// the pick unlinked.
+Future<List<ParlayLeg>> chooseMatches(BuildContext context, List<LegLink> links) async {
+  final out = <ParlayLeg>[];
+  for (final l in links) {
+    if (!l.needsPick || !context.mounted) {
+      out.add(l.leg);
+      continue;
+    }
+    final m = await showModalBottomSheet<Match>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => MatchChoiceSheet(leg: l.leg, candidates: [for (final c in l.candidates) c.match]),
+    );
+    out.add(m == null ? l.leg : l.leg.linkedTo(m, selection: resultPick(l.leg.selection, m)));
+  }
+  return out;
+}
+
+/// Asks which real match a pick from a slip is, when more than one fits.
+class MatchChoiceSheet extends StatelessWidget {
+  const MatchChoiceSheet({super.key, required this.leg, required this.candidates});
+  final ParlayLeg leg;
+  final List<Match> candidates;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final when = DateFormat('EEE d MMM, HH:mm');
+    return SafeArea(
+      child: SingleChildScrollView(
+        key: const Key('match-choice'),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(tr('Which match is it?'), style: theme.textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              leg.event.isEmpty ? leg.selection : '${leg.selection} · ${leg.event}',
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 8),
+            for (final m in candidates)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.sports_soccer),
+                title: Text(m.title),
+                subtitle: Text('${m.league.name} · ${when.format(m.kickoff.toLocal())}'),
+                onTap: () => Navigator.pop(context, m),
+              ),
+            const SizedBox(height: 4),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('None of these'))),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// The selections read from the slip, editable, before they are saved.
@@ -159,11 +235,14 @@ class SlipReviewPage extends StatefulWidget {
 }
 
 class _LegFields {
-  _LegFields(String selection, String event, String odds)
+  _LegFields(String selection, String event, String odds, [this.date])
     : selection = TextEditingController(text: selection),
       event = TextEditingController(text: event),
       odds = TextEditingController(text: odds);
   final TextEditingController selection, event, odds;
+
+  /// The kick-off the slip shows, used to find the match.
+  final DateTime? date;
 
   void dispose() {
     selection.dispose();
@@ -174,7 +253,7 @@ class _LegFields {
 
 class _SlipReviewPageState extends State<SlipReviewPage> {
   late final List<_LegFields> _legs = [
-    for (final l in widget.read.legs) _LegFields(l.selection, l.event, formatOdds(l.odds, widget.format)),
+    for (final l in widget.read.legs) _LegFields(l.selection, l.event, formatOdds(l.odds, widget.format), l.date),
   ];
   late final _stake = TextEditingController(
     text: widget.read.stake == null ? '' : widget.read.stake!.toStringAsFixed(widget.read.stake! % 1 == 0 ? 0 : 2),
@@ -212,7 +291,7 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
     final legs = [
       for (final l in _legs) ParlayLeg(selection: l.selection.text.trim(), event: l.event.text.trim(), odds: _odds(l)!),
     ];
-    Navigator.pop(context, (legs, double.tryParse(_stake.text.replaceAll(',', '.')) ?? 0));
+    Navigator.pop(context, (legs, double.tryParse(_stake.text.replaceAll(',', '.')) ?? 0, [for (final l in _legs) l.date]));
   }
 
   @override
@@ -291,7 +370,12 @@ class _SlipReviewPageState extends State<SlipReviewPage> {
                               flex: 3,
                               child: TextField(
                                 controller: l.event,
-                                decoration: InputDecoration(labelText: tr('Match')),
+                                decoration: InputDecoration(
+                                  labelText: tr('Match'),
+                                  helperText: l.date == null
+                                      ? null
+                                      : tr('Kick-off {when}', {'when': DateFormat('d MMM, HH:mm').format(l.date!)}),
+                                ),
                               ),
                             ),
                             const SizedBox(width: 10),

@@ -927,6 +927,11 @@ const esStrings = <String, String>{
   // slip_import.dart
   'Reading the slip…': 'Leyendo el boleto…',
   'Finding the matches…': 'Buscando los partidos…',
+  'Which match is it?': '¿Cuál es el partido?',
+  'None of these': 'Ninguno de estos',
+  'Kick-off {when}': 'Inicio {when}',
+  'Couldn\'t find the match for {n} selection. You can pick it from the Matches list.': 'No se encontró el partido de {n} selección. Puedes elegirlo en la lista de partidos.',
+  'Couldn\'t find the match for {n} selections. You can pick them from the Matches list.': 'No se encontró el partido de {n} selecciones. Puedes elegirlos en la lista de partidos.',
   'Check the slip': 'Revisa el boleto',
   'The text reader didn\'t work on this phone ({error}). Add the selections by hand for now.': 'El lector de texto no funcionó en este teléfono ({error}). Por ahora añade las selecciones a mano.',
   'Couldn\'t read any selections from this picture. Add them by hand, or try a sharper screenshot of the slip.': 'No se pudo leer ninguna selección de esta imagen. Añádelas a mano o prueba una captura más nítida del boleto.',

@@ -26,6 +26,12 @@ from the same code (see [iPhone](#iphone) and [Web app](#web-app) below).
   player's season average to match its price. With no game left to start
   the button reads "No NBA matches today, try again tomorrow" and takes no
   tokens. Pro tips settle from ESPN's box score and log as a parlay.
+- **Bet slip from screenshot**: each selection read from the slip is matched
+  to a real match (`lib/logic/leg_linker.dart`) by its teams, allowing short
+  forms and misread letters ("Man Utd", "Atl. Madrid", "Chelsae"), and by the
+  kick-off date the slip shows, so older slips are found too. A sure match is
+  linked on its own; when several fit (or only one team is known) the app asks
+  which one it is, with "None of these" to leave it unlinked.
 - **Automatic results**: `lib/data/bet_settler.dart` puts in the result of
   open bets once their match is over: singles and parlay legs picked from
   the Matches list (legs now keep their match), Parlay builder parlays,

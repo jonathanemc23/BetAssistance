@@ -14,9 +14,13 @@ class SlipLine {
 /// A selection read from a slip. Any field can be wrong; the user checks
 /// them before the parlay is saved.
 class SlipLeg {
-  const SlipLeg({required this.selection, this.event = '', this.market = '', required this.odds});
+  const SlipLeg({required this.selection, this.event = '', this.market = '', required this.odds, this.date});
   final String selection;
   final String event;
+
+  /// The kick-off the slip shows for the match ("18/10/2026, 08:00",
+  /// "Hoy 18:00"), in the phone's time. Null when it shows none.
+  final DateTime? date;
 
   /// One of the [markets] ids, from the slip's market text or the selection.
   final String market;
@@ -61,9 +65,11 @@ abstract class SlipScanner {
 /// but each selection has a price on its own row, a pick next to or above
 /// it, and usually the match ("A v B", "A - B", "A vs B") and the market
 /// close by. Rows about the stake, returns and totals are kept apart.
-SlipRead parseSlip(List<SlipLine> lines) {
+SlipRead parseSlip(List<SlipLine> lines, {DateTime? now}) {
   final rows = _rows(lines);
   if (rows.isEmpty) return const SlipRead();
+  final today = now ?? DateTime.now();
+  final dates = [for (final r in rows) slipDate(r.join(' '), today)];
 
   double? stake, total;
   final kinds = <_Kind>[];
@@ -142,6 +148,10 @@ SlipRead parseSlip(List<SlipLine> lines) {
         if (kinds[i] != _Kind.noise && kinds[i] != _Kind.price) i,
     ];
 
+    DateTime? date;
+    for (var i = from; i < to && date == null; i++) {
+      date = dates[i];
+    }
     String? event, market;
     final texts = <String>[];
     for (final i in block) {
@@ -169,9 +179,42 @@ SlipRead parseSlip(List<SlipLine> lines) {
     if (market != null && !_isPlainResult(market) && !_saysItAll.hasMatch(_plain(selection))) {
       selection = '$selection · $market';
     }
-    legs.add(SlipLeg(selection: selection, event: event ?? '', market: _marketId(market, selection), odds: prices[p]!));
+    legs.add(SlipLeg(selection: selection, event: event ?? '', market: _marketId(market, selection), odds: prices[p]!, date: date));
   }
   return SlipRead(legs: legs, stake: stake, totalOdds: total);
+}
+
+/// The kick-off date written in [text], if any: "18/10/2026, 08:00",
+/// "18/10 20:00", "Hoy 18:00", "Tomorrow 15:30". Day first unless that
+/// can't be a date ("10/18/2026"). With no year, the one nearest [now].
+DateTime? slipDate(String text, DateTime now) {
+  final lower = _plain(text);
+  final time = RegExp(r'\b(\d{1,2}):(\d{2})\b').firstMatch(lower);
+  final h = time == null ? 0 : int.parse(time.group(1)!), min = time == null ? 0 : int.parse(time.group(2)!);
+  if (h > 23 || min > 59) return null;
+  final rel = RegExp(r'^(hoy|today|manana|tomorrow|ayer|yesterday)\b').firstMatch(lower.trim());
+  if (rel != null) {
+    final shift = switch (rel.group(1)) { 'manana' || 'tomorrow' => 1, 'ayer' || 'yesterday' => -1, _ => 0 };
+    return DateTime(now.year, now.month, now.day + shift, h, min);
+  }
+  final d = RegExp(r'\b(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?\b').firstMatch(lower);
+  if (d == null) return null;
+  // Without a year or a time it may be a price, a line or a score ("2.5", "2-1").
+  if (d.group(3) == null && time == null) return null;
+  final a = int.parse(d.group(1)!), b = int.parse(d.group(2)!);
+  var (day, month) = (a, b);
+  if (month > 12 && day <= 12) (day, month) = (b, a);
+  if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+  DateTime at(int y) => DateTime(y, month, day, h, min);
+  final y = d.group(3);
+  if (y != null) {
+    final year = y.length == 2 ? 2000 + int.parse(y) : int.parse(y);
+    final out = at(year);
+    return out.month == month ? out : null;
+  }
+  final options = [at(now.year - 1), at(now.year), at(now.year + 1)].where((t) => t.month == month);
+  if (options.isEmpty) return null;
+  return options.reduce((x, y) => x.difference(now).abs() <= y.difference(now).abs() ? x : y);
 }
 
 enum _Kind { price, event, market, text, noise }
