@@ -178,7 +178,15 @@ const _aliases = {
 /// share a word ("Real Madrid", "Real Betis").
 double teamScore(String a, String b) {
   if (sameTeam(a, b)) return 1;
-  final wa = teamWords(a).toList(), wb = teamWords(b).toList();
+  // One- and two-letter bits are mostly crests and club initials read as
+  // text ("rc", "if"); they only count when a name has nothing else.
+  List<String> words(String s) {
+    final all = teamWords(s).toList();
+    final long = all.where((w) => w.length > 2).toList();
+    return long.isEmpty ? all : long;
+  }
+
+  final wa = words(a), wb = words(b);
   if (wa.isEmpty || wb.isEmpty) return 0;
   final (small, big) = wa.length <= wb.length ? (wa, wb) : (wb, wa);
   final used = <int>{};

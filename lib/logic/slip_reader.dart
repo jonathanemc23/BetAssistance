@@ -75,7 +75,9 @@ SlipRead parseSlip(List<SlipLine> lines, {DateTime? now}) {
   final kinds = <_Kind>[];
   final prices = <double?>[];
   final rest = <String>[];
-  for (final r in rows) {
+  for (var r in rows) {
+    // A live score at the right of a team's row ("Arsenal ... 1").
+    if (r.length > 1 && RegExp(r'^\d{1,2}$').hasMatch(r.last.trim())) r = r.sublist(0, r.length - 1);
     var text = r.join(' ');
     final lower = _plain(text);
     if (_noise.hasMatch(lower)) {
@@ -288,7 +290,7 @@ double? _amount(String s) {
 }
 
 String _plain(String s) {
-  const acc = {'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n', 'ü': 'u', 'ç': 'c', 'ã': 'a', 'õ': 'o'};
+  const acc = {'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n', 'ü': 'u', 'ç': 'c', 'ã': 'a', 'õ': 'o', 'ø': 'o', 'å': 'a'};
   return s.toLowerCase().split('').map((c) => acc[c] ?? c).join();
 }
 
@@ -298,7 +300,14 @@ String _withoutDates(String s) => s
     .replaceAll(RegExp(r'\b\d{1,2}:\d{2}\b'), ' ')
     .trim();
 
+/// A live match's clock: "03'", "45+2'", "90’".
+final _clock = RegExp(r"\b\d{1,3}(\+\d{1,2})?\s?['’´`]");
+
 String _clean(String s) => s
+    .replaceAll(_clock, ' ')
+    // A team crest read as a stray letter or two before the name: "Y Brondby
+    // IF", "rc Midtjylland".
+    .replaceAll(RegExp(r'^([a-z]{1,2}|[A-Z])\s+(?=[A-ZÀ-Ý])'), '')
     .replaceAll(RegExp(r'^[\s•·✓✔☑○●◉▪■□x×*>-]+(?=\S)'), '')
     .replaceAll(RegExp(r'^[?+©®]\s*(?=[A-Za-zÀ-ÿ])'), '')
     .replaceAll(RegExp(r'\s*[✓✔☑✅]+\s*$'), '')
@@ -339,7 +348,9 @@ final _noise = RegExp(
   r'^(bet ?slip|boleto|cupon|cupón|mis apuestas|my bets|parlay|parley|combinada|multiple|múltiple|acca|accumulator|'
   r'apuesta multiple|apuesta combinada|(doble|triple|cuadruple|cuádruple|double|treble)(?=\s*[\d.,]*$)|\d+ (selecciones|selections|legs|picks|fold)|singles?|sencillas?|'
   r'en vivo|live|abiertas|open|settled|liquidadas|place bet|realizar apuesta|apostar|share|compartir|'
-  r'id[: ]|ref[: ]|ticket|hoy|today|tomorrow|manana|mañana)(\b|$)|^[\d\s:/.-]+$',
+  r'id[: ]|ref[: ]|ticket|hoy|today|tomorrow|manana|mañana)(\b|$)|^[\d\s:/.-]+$|'
+  // A live match's clock and score beside the teams: "03'", "45+2' 1", "HT".
+  r"^\d{1,3}(\+\d{1,2})?\s?['’´`](\s*\d{1,2})?$|^(ht|ft|descanso|entretiempo|half ?time|en juego)$",
   caseSensitive: false,
 );
 

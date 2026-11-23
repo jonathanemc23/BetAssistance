@@ -144,6 +144,18 @@ void fuzzyTests() {
     expect(undated.leg.matchId, '11');
   });
 
+  test('a live slip as the web app reads it finds the match being played today', () async {
+    // Laura's Betano single: no date (the match is live), "ø" read as "o",
+    // "j" read as "i".
+    final api = FixturesApi(client: _boardClient([
+      ('20', '2026-11-23T11:00Z', 'Brøndby IF', 'FC Midtjylland'),
+      ('21', '2026-11-26T17:45Z', 'Pafos', 'FC Midtjylland'),
+    ]));
+    const leg = ParlayLeg(selection: 'Fc Midtiylland', event: 'Brondby IF vs Midtiylland', odds: 2.8);
+    final link = (await findLinks(api, const [leg], now: now)).single;
+    expect((link.leg.isLinked, link.leg.matchId, link.leg.selection), (true, '20', 'FC Midtjylland to win'));
+  });
+
   test('a pick naming only one team offers that team\'s match to choose', () async {
     final api = FixturesApi(client: _boardClient([('1', '2026-11-24T15:00Z', 'Everton', 'Chelsea')]));
     final link = (await findLinks(api, const [ParlayLeg(selection: 'Chelsea to win', odds: 1.9)], now: now)).single;

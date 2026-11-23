@@ -193,6 +193,39 @@ void main() {
     expect(r.legs.map((l) => l.date), [DateTime(2026, 11, 1, 20, 10), DateTime(2026, 11, 1, 20, 15)]);
   });
 
+  test('reads a live Betano single as the web app reads it, clock and crests and all', () {
+    // Text and positions as Tesseract.js reads Laura's screenshot of a live
+    // bet (Brøndby IF vs FC Midtjylland at 03'), after tidyWords.
+    final r = parseSlip(const [
+      SlipLine('Simple \$28.000', left: 50, top: 221, right: 304, bottom: 256),
+      SlipLine('2.80', left: 1018, top: 224, right: 1084, bottom: 249),
+      SlipLine('2.80', left: 985, top: 357, right: 1058, bottom: 386),
+      SlipLine('Fc Midtiylland', left: 56, top: 345, right: 372, bottom: 399),
+      SlipLine('Resultado del partido', left: 132, top: 429, right: 478, bottom: 464),
+      SlipLine('Y Brondby IF', left: 136, top: 500, right: 380, bottom: 548),
+      SlipLine("03'", left: 974, top: 537, right: 1022, bottom: 568),
+      SlipLine('rc Midtiylland', left: 130, top: 560, right: 441, bottom: 606),
+      SlipLine('Apuesta', left: 52, top: 660, right: 182, bottom: 691),
+      SlipLine('\$28.000', left: 953, top: 657, right: 1081, bottom: 689),
+      SlipLine('Ganancias potenciales', left: 53, top: 759, right: 426, bottom: 793),
+      SlipLine('\$78.400', left: 910, top: 754, right: 1080, bottom: 796),
+    ]);
+    expect(r.legs.map((l) => (l.selection, l.event, l.market, l.odds, l.date)), [
+      ('Fc Midtiylland', 'Brondby IF vs Midtiylland', 'result', 2.80, null),
+    ]);
+    expect(r.stake, 28000);
+  });
+
+  test('a live clock beside a team is not part of its name', () {
+    final r = parseSlip(screen([
+      ['Arsenal', '1.85'],
+      ['Resultado del partido'],
+      ["Arsenal 45+2'", '1'],
+      ['Chelsea', '0'],
+    ]));
+    expect(r.legs.single.event, 'Arsenal vs Chelsea');
+  });
+
   test('reads kick-off dates the ways slips write them', () {
     final now = DateTime(2026, 11, 23, 9);
     expect(slipDate('18/10/2026, 08:00', now), DateTime(2026, 10, 18, 8));
