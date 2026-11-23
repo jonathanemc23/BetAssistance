@@ -11,6 +11,11 @@ class Portrait {
 /// The portraits the picker offers. Append new ones at the end.
 const portraits = <Portrait>[
   Portrait('01'),
+  Portrait('02'),
+  Portrait('03'),
+  Portrait('04'),
+  Portrait('05'),
+  Portrait('06'),
 ];
 
 /// The portrait in an avatar value (`portrait:<id>`), if it is one.
