@@ -7,6 +7,7 @@ import '../l10n/l10n.dart';
 import '../data/store.dart';
 import 'legend_avatar.dart';
 import 'person_avatar.dart';
+import 'portrait_avatar.dart';
 
 /// Avatars from before 0.17: an emoji on a coloured disc. Still shown for
 /// users who picked one; the picker offers [legends] now.
@@ -64,6 +65,18 @@ class AvatarImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final a = avatar;
+    final portrait = portraitOf(a);
+    if (portrait != null) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: border ? const [BoxShadow(color: Color(0x44000000), blurRadius: 8, offset: Offset(0, 2))] : null,
+        ),
+        child: PortraitAvatar(portrait: portrait, size: size),
+      );
+    }
     final legend = legendOf(a);
     if (legend != null) {
       return Container(
@@ -184,6 +197,31 @@ Future<void> pickAvatar(
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 16),
+                Text(tr('Portraits'), style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant)),
+                const SizedBox(height: 10),
+                Wrap(spacing: 10, runSpacing: 14, alignment: WrapAlignment.center, children: [
+                  for (final p in portraits)
+                    () {
+                      final value = 'portrait:${p.id}';
+                      final on = avatar == value;
+                      return InkWell(
+                        key: Key('avatar-$value'),
+                        customBorder: const CircleBorder(),
+                        onTap: () => onPick(value),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: on ? cs.primary : Colors.transparent, width: 3),
+                          ),
+                          child: PortraitAvatar(portrait: p, size: 74),
+                        ),
+                      );
+                    }(),
+                ]),
+                const SizedBox(height: 18),
+                Text(tr('Emblems'), style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant)),
+                const SizedBox(height: 10),
                 Wrap(spacing: 10, runSpacing: 14, alignment: WrapAlignment.center, children: [
                   for (final legend in legends)
                     () {

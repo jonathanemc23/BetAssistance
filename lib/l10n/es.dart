@@ -552,6 +552,8 @@ const esStrings = <String, String>{
   'Welcome back': 'Bienvenido de nuevo',
   'BANK': 'BANCA',
   'In play': 'En juego',
+  'Portraits': 'Retratos',
+  'Emblems': 'Emblemas',
   'The Rook': 'La Torre',
   'The Navigator': 'El Navegante',
   'The Bishop': 'El Alfil',
