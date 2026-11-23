@@ -403,3 +403,24 @@ class UnlockedTip {
         tip: j['tip'] is Map ? Tip.fromJson((j['tip'] as Map).cast<String, dynamic>()) : null,
       );
 }
+
+/// The day's free picks across [tips]: the likeliest free tips, one per
+/// match, [n] at most, of which at most [highs] are High and the rest
+/// Medium.
+List<(M, Tip)> freePicksOfTheDay<M>(Iterable<(M, Tip)> tips, {int n = 3, int highs = 2}) {
+  final all = [for (final t in tips) if (t.$2.free) t]..sort((a, b) => b.$2.chance.compareTo(a.$2.chance));
+  final out = <(M, Tip)>[];
+  final matches = <String>{};
+  var high = 0;
+  for (final t in all) {
+    if (out.length == n) break;
+    if (matches.contains(t.$2.matchId)) continue;
+    if (t.$2.level != Confidence.medium) {
+      if (high == highs) continue;
+      high++;
+    }
+    matches.add(t.$2.matchId);
+    out.add(t);
+  }
+  return out;
+}

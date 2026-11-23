@@ -1,6 +1,6 @@
 import 'dart:ui' show ImageFilter;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide TableRow;
 import 'package:intl/intl.dart';
 
 import '../l10n/l10n.dart';
@@ -509,23 +509,48 @@ class _ProTab extends StatelessWidget {
 }
 
 /// Opens one tip on a page of its own: the match, the bet type, the odds
-/// and the chance; the pick and the reasons once it is free or unlocked.
-Future<void> openTipPage(BuildContext context, {required BankStore store, required Match match, required Tip tip}) =>
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => TipPage(store: store, match: match, tip: tip)));
+/// and the chance; the pick and the analysis behind it once it is free or
+/// unlocked. With [api] the page reads the match's form, table and
+/// head-to-head.
+Future<void> openTipPage(BuildContext context,
+        {required BankStore store, required Match match, required Tip tip, FixturesApi? api}) =>
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => TipPage(store: store, match: match, tip: tip, api: api)));
 
-class TipPage extends StatelessWidget {
-  const TipPage({super.key, required this.store, required this.match, required this.tip});
+class TipPage extends StatefulWidget {
+  const TipPage({super.key, required this.store, required this.match, required this.tip, this.api});
   final BankStore store;
   final Match match;
   final Tip tip;
+  final FixturesApi? api;
+
+  @override
+  State<TipPage> createState() => _TipPageState();
+}
+
+class _TipPageState extends State<TipPage> {
+  MatchDetails? _details;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.api?.details(widget.match).then((d) {
+      if (mounted) setState(() => _details = d);
+    }, onError: (Object _) {});
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final store = widget.store, match = widget.match;
     final open = match.state == MatchState.scheduled;
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) {
+        // The tip with the match page's facts behind it, once they're in.
+        final tip = _details == null
+            ? widget.tip
+            : (pickTips(match, _details!).all.where((t) => t.id == widget.tip.id).firstOrNull ?? widget.tip);
         final unlocked = store.isUnlocked(tip);
         return Scaffold(
           appBar: AppBar(
@@ -535,9 +560,8 @@ class TipPage extends StatelessWidget {
           body: ListView(padding: const EdgeInsets.only(bottom: 32), children: [
             _Teams(match: match, score: null),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const SizedBox(height: 6),
                 TipCard(
                   key: const Key('tip-page-card'),
                   tip: tip,
@@ -564,6 +588,7 @@ class TipPage extends StatelessWidget {
                       ),
                     ]),
                   ),
+                if (unlocked) TipAnalysis(match: match, tip: tip, details: _details, loading: _details == null && widget.api != null),
                 const _PreviewNote(),
               ]),
             ),
@@ -571,6 +596,209 @@ class TipPage extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// The main facts behind a pick, all from the feed: what the bookmaker's
+/// prices say for each result, both teams' recent form and goals, their
+/// places in the table and the last meetings.
+class TipAnalysis extends StatelessWidget {
+  const TipAnalysis({super.key, required this.match, required this.tip, this.details, this.loading = false});
+  final Match match;
+  final Tip tip;
+  final MatchDetails? details;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final d = details ?? const MatchDetails();
+    final level = tip.free ? BankColors.win(context) : levelColor(tip.level);
+    final markets = {for (final c in pricedMarkets(match, d)) c.leg.market: c.chance};
+
+    Widget section(String title, List<Widget> children, {Key? key}) => Container(
+          key: key,
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          decoration: BoxDecoration(color: cs.surfaceContainerLow, borderRadius: BorderRadius.circular(18)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title.toUpperCase(),
+                style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1, color: cs.onSurfaceVariant)),
+            const SizedBox(height: 10),
+            ...children,
+          ]),
+        );
+
+    // One outcome's chance as a bar; the picked one stands out.
+    Widget bar(String label, double p, bool picked) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(children: [
+            SizedBox(
+              width: 110,
+              child: Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(fontWeight: picked ? FontWeight.w900 : FontWeight.w500)),
+            ),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: p,
+                  minHeight: 10,
+                  color: picked ? level : cs.outline,
+                  backgroundColor: cs.surfaceContainerHighest,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 38,
+              child: Text('${(p * 100).round()}%',
+                  textAlign: TextAlign.end,
+                  style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w900, color: picked ? level : null)),
+            ),
+          ]),
+        );
+
+    // Recent results as coloured letters, newest first.
+    Widget form(String name, String? logo, String f) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(children: [
+            TeamLogo(url: logo, name: name, size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(name,
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+            ),
+            for (final r in f.split('').take(5))
+              Container(
+                width: 22,
+                height: 22,
+                margin: const EdgeInsets.only(left: 4),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: switch (r) {
+                    'W' => BankColors.win(context),
+                    'L' => BankColors.loss(context),
+                    _ => cs.outline,
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(trForm(r),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11)),
+              ),
+          ]),
+        );
+
+    final home = match.home.name, away = match.away.name;
+    final soccer = match.league.knownSport == Sport.soccer;
+    final odds = [
+      if (markets[TipMarket.homeWin] case final p?) (tr('{team} win', {'team': home}), p, tip.market == TipMarket.homeWin),
+      if (soccer && markets[TipMarket.draw] != null) (tr('Draw'), markets[TipMarket.draw]!, tip.market == TipMarket.draw),
+      if (markets[TipMarket.awayWin] case final p?) (tr('{team} win', {'team': away}), p, tip.market == TipMarket.awayWin),
+    ];
+    final totals = [
+      for (final m in [TipMarket.over25, TipMarket.under25, TipMarket.overLine, TipMarket.underLine])
+        if (markets[m] case final p?)
+          (trPick(pricedMarkets(match, d).firstWhere((c) => c.leg.market == m).leg.pick), p, tip.market == m),
+    ];
+
+    TableRow? row(Team t, TeamInfo info) =>
+        d.table.where((r) => (info.id.isNotEmpty && r.teamId == info.id) || r.team == t.name).firstOrNull;
+    final rows = [(match.home, row(match.home, d.home)), (match.away, row(match.away, d.away))];
+
+    // Goals for and against per game over the last results, from their scores.
+    (double, double)? goals(TeamInfo info, String name) {
+      var f = 0, a = 0, n = 0;
+      for (final g in info.lastGames.take(5)) {
+        final m = RegExp(r'^\s*(\d+)\s*-\s*(\d+)').firstMatch(g.score);
+        if (m == null) continue;
+        final h = int.parse(m[1]!), w = int.parse(m[2]!);
+        final atHome = g.home == name || g.home == info.name;
+        f += atHome ? h : w;
+        a += atHome ? w : h;
+        n++;
+      }
+      return n == 0 ? null : (f / n, a / n);
+    }
+
+    final gh = goals(d.home, home), ga = goals(d.away, away);
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+        padding: const EdgeInsets.only(left: 4, bottom: 10, top: 4),
+        child: Row(children: [
+          Icon(Icons.insights, size: 18, color: level),
+          const SizedBox(width: 6),
+          Text(tr('Analysis'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+          if (loading) ...[
+            const SizedBox(width: 10),
+            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+          ],
+        ]),
+      ),
+      if (odds.isNotEmpty || totals.isNotEmpty)
+        section(tr('What the bookmaker prices say'), [
+          for (final (l, p, picked) in [...odds, ...totals]) bar(l, p, picked),
+          Text(tr('Chances from the real odds, with the bookmaker margin removed.'),
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+        ], key: const Key('analysis-market')),
+      if (d.home.form.isNotEmpty || d.away.form.isNotEmpty)
+        section(tr('Recent form'), [
+          if (d.home.form.isNotEmpty) form(home, match.home.logo, d.home.form),
+          if (d.away.form.isNotEmpty) form(away, match.away.logo, d.away.form),
+          if (gh != null || ga != null)
+            Text(
+                [
+                  if (gh != null)
+                    tr('{team}: {for} scored and {against} conceded per game',
+                        {'team': home, 'for': gh.$1.toStringAsFixed(1), 'against': gh.$2.toStringAsFixed(1)}),
+                  if (ga != null)
+                    tr('{team}: {for} scored and {against} conceded per game',
+                        {'team': away, 'for': ga.$1.toStringAsFixed(1), 'against': ga.$2.toStringAsFixed(1)}),
+                ].join('\n'),
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+        ], key: const Key('analysis-form')),
+      if (rows.any((r) => r.$2 != null))
+        section(d.tableTitle.isEmpty ? tr('League table') : d.tableTitle, [
+          for (final (t, r) in rows)
+            if (r != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(children: [
+                  SizedBox(
+                    width: 34,
+                    child: Text(ordinal(r.rank), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900)),
+                  ),
+                  TeamLogo(url: t.logo, name: t.name, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(t.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  if (r.points.isNotEmpty)
+                    Text(tr('{n} pts', {'n': r.points}), style: const TextStyle(fontWeight: FontWeight.w800)),
+                ]),
+              ),
+        ], key: const Key('analysis-table')),
+      if (d.h2h.isNotEmpty)
+        section(tr('Last meetings'), [
+          if (d.h2hSummary.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(d.h2hSummary, style: const TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          for (final g in d.h2h.take(3))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(children: [
+                Expanded(child: Text('${g.home} ${g.score} ${g.away}', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                if (g.date != null)
+                  Text(DateFormat.yMMMd().format(g.date!),
+                      style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              ]),
+            ),
+        ], key: const Key('analysis-h2h')),
+    ]);
   }
 }
 
