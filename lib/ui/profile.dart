@@ -73,8 +73,7 @@ class AvatarImage extends StatelessWidget {
           shape: BoxShape.circle,
           boxShadow: border
               ? [
-                  BoxShadow(color: legend.glow.withValues(alpha: 0.35), blurRadius: size / 5),
-                  const BoxShadow(color: Color(0x55000000), blurRadius: 8, offset: Offset(0, 2)),
+                  const BoxShadow(color: Color(0x44000000), blurRadius: 8, offset: Offset(0, 2)),
                 ]
               : null,
         ),
@@ -92,6 +91,25 @@ class AvatarImage extends StatelessWidget {
           boxShadow: border ? const [BoxShadow(color: Color(0x33000000), blurRadius: 8, offset: Offset(0, 2))] : null,
         ),
         child: PersonAvatar(look: person, size: size),
+      );
+    }
+    if (a.isEmpty && name.isEmpty) {
+      // No avatar and no name: a plain signet with a person outline.
+      return Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF26272B), Color(0xFF0C0C0E)],
+          ),
+          border: Border.all(color: const Color(0xFFE4B85C), width: size * 0.032),
+          boxShadow: border ? const [BoxShadow(color: Color(0x44000000), blurRadius: 8, offset: Offset(0, 2))] : null,
+        ),
+        child: Icon(Icons.person_outline, color: const Color(0xFFE4B85C), size: size * 0.5),
       );
     }
     final photo = ProfileAvatar.photoOf(a);
