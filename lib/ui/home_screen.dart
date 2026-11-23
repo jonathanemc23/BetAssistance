@@ -207,6 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         for (final (m, t) in free)
           _FreeTipRow(
+            key: const Key('home-free-tip'),
               match: m,
               tip: t,
               format: store.settings.oddsFormat,
@@ -692,7 +693,7 @@ class _ProBanner extends StatelessWidget {
                       style: theme.textTheme.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 3),
                   Text(
-                    tr('Choose between our High and Max levels of trust. Real odds of 1.80 or more.'),
+                    tr('Choose between our High and Max levels of trust. Real odds from 1.80 to 2.30.'),
                     style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.8)),
                   ),
                   const SizedBox(height: 6),
@@ -729,7 +730,6 @@ class _ProTipBox extends StatelessWidget {
     final theme = Theme.of(context);
     const fg = Colors.white;
     final unlocked = store.isUnlocked(tip);
-    final level = levelColor(tip.level);
     Widget team(Team t) => Row(children: [
           Container(
             width: 26,
@@ -801,8 +801,6 @@ class _ProTipBox extends StatelessWidget {
                     ]),
                   ),
                 ]),
-                Text(tr('{pct}% chance', {'pct': tip.percent}),
-                    style: theme.textTheme.labelSmall?.copyWith(color: level, fontWeight: FontWeight.w800)),
                 const Spacer(),
                 if (unlocked)
                   Container(
@@ -848,7 +846,7 @@ class _ProTipBox extends StatelessWidget {
 
 /// One free tip: match, pick, odds and chance.
 class _FreeTipRow extends StatelessWidget {
-  const _FreeTipRow({required this.match, required this.tip, required this.format, required this.onTap});
+  const _FreeTipRow({super.key, required this.match, required this.tip, required this.format, required this.onTap});
   final Match match;
   final Tip tip;
   final OddsFormat format;
@@ -918,8 +916,6 @@ class _FreeTipRow extends StatelessWidget {
                       text: formatOdds(tip.odds, format),
                       style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
                 ])),
-                Text(tr('{pct}% chance', {'pct': tip.percent}),
-                    style: theme.textTheme.labelSmall?.copyWith(color: level, fontWeight: FontWeight.w800)),
               ]),
               Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
             ]),

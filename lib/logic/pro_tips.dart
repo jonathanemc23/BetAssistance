@@ -33,9 +33,9 @@ enum Confidence {
 }
 
 /// The odds rules: free tips from 1.40 to 2.00; Pro tips (High for 2 tokens,
-/// Max for 3) from 1.80 to 2.00, always a single on a real bookmaker price.
-/// A Pro tip needs at least a 44% chance; Max needs 50%.
-const freeMinOdds = 1.4, freeMaxOdds = 2.0, proMinOdds = 1.8, proMaxOdds = 2.0, proMinChance = 0.44;
+/// Max for 3) from 1.80 to 2.30, always a single on a real bookmaker price.
+/// A Pro tip needs at least a 40% chance; Max needs 50%.
+const freeMinOdds = 1.4, freeMaxOdds = 2.0, proMinOdds = 1.8, proMaxOdds = 2.3, proMinChance = 0.40;
 
 bool followsOddsRules(Tip t) => t.legs.length == 1 &&
     (t.free
@@ -303,7 +303,7 @@ bool _compatible(TipLeg a, TipLeg b) {
 }
 
 /// The day's tips for [match], from real bookmaker prices only. Pro tips:
-/// singles at odds from 1.80 to 2.00 the market gives at least a 44% chance,
+/// singles at odds from 1.80 to 2.30 the market gives at least a 40% chance,
 /// Max from 50%, at most two. Free tips: singles from 1.40 to 2.00 among the
 /// other markets, High from 62% and Medium below, at most two. Tips never go
 /// against each other. Only the match list's prices go in, so the tips are
@@ -327,17 +327,26 @@ MatchTips pickTips(Match match, MatchDetails details) {
 
   bool fits(TipLeg l) => picked.every((p) => _compatible(p, l));
   final pro = <Tip>[];
-  for (final c in candidates) {
-    if (pro.length == 2) break;
-    if (c.leg.odds < proMinOdds || c.leg.odds > proMaxOdds || c.chance < proMinChance || !fits(c.leg)) continue;
-    pro.add(tip(c, free: false, level: c.chance >= 0.5 ? Confidence.max : Confidence.high));
+  void addPro(int upTo) {
+    for (final c in candidates) {
+      if (pro.length >= upTo) break;
+      if (picked.contains(c.leg)) continue;
+      if (c.leg.odds < proMinOdds || c.leg.odds > proMaxOdds || c.chance < proMinChance || !fits(c.leg)) continue;
+      pro.add(tip(c, free: false, level: c.chance >= 0.5 ? Confidence.max : Confidence.high));
+    }
   }
+
+  // The best Pro tip first, then the free ones, then a second Pro tip: a
+  // long-priced second Pro pick never crowds out the free picks.
+  addPro(1);
   final daily = <Tip>[];
   for (final c in candidates) {
     if (daily.length == 2) break;
+    if (picked.contains(c.leg)) continue;
     if (c.leg.odds < freeMinOdds || c.leg.odds > freeMaxOdds || !fits(c.leg)) continue;
     daily.add(tip(c, free: true, level: Confidence.of(c.chance)));
   }
+  addPro(2);
   return MatchTips(daily: daily, pro: pro);
 }
 

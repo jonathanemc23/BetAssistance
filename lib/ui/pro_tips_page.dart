@@ -449,7 +449,7 @@ class _PreviewNote extends StatelessWidget {
 // ---------------------------------------------------------------- Pro tips
 
 /// How Pro tips are priced, under the token balance.
-String get proRulesText => tr('Pro tips come in two levels of trust, High (2 tokens) and Max (3 tokens), always at real odds of 1.80 or more. If a Pro tip loses, the tokens go back to your balance.');
+String get proRulesText => tr('Pro tips come in two levels of trust, High (2 tokens) and Max (3 tokens), always at real odds from 1.80 to 2.30. If a Pro tip loses, the tokens go back to your balance.');
 
 /// The token balance with the Get tokens button and the pricing rules.
 class _Wallet extends StatelessWidget {
@@ -887,10 +887,9 @@ class _FreePill extends StatelessWidget {
 
 /// A small fact about a tip, such as its odds.
 class _Fact extends StatelessWidget {
-  const _Fact(this.label, this.value, {this.color});
+  const _Fact(this.label, this.value);
   final String label;
   final String value;
-  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -903,7 +902,7 @@ class _Fact extends StatelessWidget {
         TextSpan(text: '$label ', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
         TextSpan(
             text: value,
-            style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900, color: color)),
+            style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900)),
       ])),
     );
   }
@@ -933,7 +932,6 @@ class TipCard extends StatelessWidget {
 
     final facts = Wrap(spacing: 6, runSpacing: 6, children: [
       _Fact(tip.isCombo ? tr('Combined odds') : tr('Odds'), formatOdds(tip.odds, format)),
-      _Fact(tr('Chance'), '${tip.percent}%', color: level),
     ]);
 
     final pick = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -951,22 +949,6 @@ class TipCard extends StatelessWidget {
             ]),
           ),
       const SizedBox(height: 10),
-      Row(children: [
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: tip.chance,
-              minHeight: 8,
-              color: level,
-              backgroundColor: cs.surfaceContainerHighest,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text('${tip.percent}%', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900, color: level)),
-      ]),
-      const SizedBox(height: 8),
       facts,
       const SizedBox(height: 10),
       for (final r in tip.reasons)
