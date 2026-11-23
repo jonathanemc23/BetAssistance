@@ -97,4 +97,55 @@ void main() {
     expect(formatOdds(1.5, OddsFormat.american), '-200');
     expect(formatOdds(1.91, OddsFormat.decimal), '1.91');
   });
+
+  test('profit per bet, running total, drawdown and streaks', () {
+    final bets = [
+      bet(BetStatus.won, date: '2026-01-01'), // +10 -> 10
+      bet(BetStatus.lost, date: '2026-01-02'), // -10 -> 0
+      bet(BetStatus.lost, date: '2026-01-03'), // -10 -> -10
+      bet(BetStatus.pending, date: '2026-01-03'),
+      bet(BetStatus.push, date: '2026-01-04'), // 0 -> -10, not a streak break
+      bet(BetStatus.lost, date: '2026-01-05'), // -10 -> -20
+      bet(BetStatus.won, odds: 4, date: '2026-01-06'), // +30 -> 10
+    ];
+    final pts = profitPerBet(bets);
+    expect(pts.map((p) => p.cumulative), [10, 0, -10, -10, -20, 10]);
+    final (dd, at) = maxDrawdown(pts);
+    expect(dd, 30);
+    expect(at, 4);
+    final s = streaks(pts);
+    expect(s.current, 1);
+    expect(s.bestWin, 1);
+    expect(s.worstLoss, 3);
+    expect(maxDrawdown(const []), (0.0, -1));
+  });
+
+  test('groups by odds band keep their order and know the break-even rate', () {
+    final bets = [
+      bet(BetStatus.won, odds: 1.4),
+      bet(BetStatus.lost, odds: 1.4),
+      bet(BetStatus.won, odds: 2.5),
+      bet(BetStatus.lost, odds: 2.5),
+      bet(BetStatus.lost, odds: 2.5),
+    ];
+    final g = profitBy(bets, (b) => oddsBand(b.odds), order: oddsBands);
+    expect(g.map((x) => x.label), ['< 1.50', '2.00 – 2.99']);
+    expect(g[0].winRate, 0.5);
+    expect(g[0].breakEven, closeTo(1 / 1.4, 1e-9));
+    expect(g[1].profit, 15 - 20);
+    expect(g[1].winRate, closeTo(1 / 3, 1e-9));
+    expect(oddsBand(5), '5.00 +');
+  });
+
+  test('a period starts on the right day and carries the balance in', () {
+    final today = DateTime(2026, 3, 30);
+    expect(periodStart(ChartPeriod.days30, today), '2026-03-01');
+    expect(periodStart(ChartPeriod.year, today), '2026-01-01');
+    expect(periodStart(ChartPeriod.all, today), isNull);
+    final pts = [DatePoint(DateTime(2026, 1, 1), 100), DatePoint(DateTime(2026, 2, 1), 150), DatePoint(DateTime(2026, 3, 10), 120)];
+    final cut = seriesFrom(pts, '2026-03-01');
+    expect(cut.map((p) => p.value), [150, 120]);
+    expect(cut.first.date, DateTime(2026, 3, 1));
+  });
 }
+
