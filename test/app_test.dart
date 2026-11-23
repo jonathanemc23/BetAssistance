@@ -1056,7 +1056,7 @@ void main() {
 
     // Home, the register and the side menu.
     expect(find.text('BANCA'), findsOneWidget);
-    expect(find.text('Partidos importantes de hoy'), findsOneWidget);
+    expect(find.text('Destacados de hoy'), findsOneWidget);
     await shot('es_home');
     await tester.tap(find.widgetWithText(NavigationDestination, 'Apuestas'));
     await tester.pumpAndSettle();

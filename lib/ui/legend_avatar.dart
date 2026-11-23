@@ -30,51 +30,64 @@ class Legend {
 
   /// The legend's title in the app's language.
   String get name => switch (id) {
-        'dragon' => tr('The Dragon'),
-        'oracle' => tr('The Oracle'),
-        'wizard' => tr('The Wizard'),
-        'shadow' => tr('The Shadow'),
-        'mastermind' => tr('The Mastermind'),
+        'dragon' => tr('The Rook'),
+        'oracle' => tr('The Navigator'),
+        'wizard' => tr('The Bishop'),
+        'shadow' => tr('The Guardian'),
+        'mastermind' => tr('The Strategist'),
         'king' => tr('The King'),
         'queen' => tr('The Queen'),
-        'knight' => tr('The Dark Knight'),
-        'raven' => tr('The Raven'),
-        'wolf' => tr('The Wolf'),
-        'phoenix' => tr('The Phoenix'),
-        'serpent' => tr('The Serpent'),
-        'masquerade' => tr('The Masquerade'),
-        'reaper' => tr('The Reaper'),
+        'knight' => tr('The Knight'),
+        'raven' => tr('The Scribe'),
+        'wolf' => tr('The Summit'),
+        'phoenix' => tr('The Marksman'),
+        'serpent' => tr('The Analyst'),
+        'masquerade' => tr('The Key'),
+        'reaper' => tr('The Anchor'),
         'crown' => tr('The Crown'),
-        'fortune' => tr('Lady Luck'),
+        'fortune' => tr('The Champion'),
         'diamond' => tr('The Diamond'),
         'stallion' => tr('The Stallion'),
-        'widow' => tr('The Black Widow'),
+        'widow' => tr('The Vault'),
         'night' => tr('The Night'),
         _ => id,
       };
 }
 
-const legends = <Legend>[
-  Legend('dragon', FontAwesomeIcons.dragon, Color(0xFF7A1A12), Color(0xFF150403), Color(0xFFFF6A3D), Metal.gold),
-  Legend('oracle', FontAwesomeIcons.eye, Color(0xFF3E1C6E), Color(0xFF0C0618), Color(0xFFB27CFF), Metal.gold),
-  Legend('wizard', FontAwesomeIcons.hatWizard, Color(0xFF1F2A78), Color(0xFF060918), Color(0xFF7FA6FF), Metal.silver),
-  Legend('shadow', FontAwesomeIcons.userNinja, Color(0xFF1E3236), Color(0xFF050A0B), Color(0xFF3FD6C6), Metal.silver),
-  Legend('mastermind', FontAwesomeIcons.userSecret, Color(0xFF2E2A24), Color(0xFF0A0907), Color(0xFFFFB547), Metal.gold),
-  Legend('king', FontAwesomeIcons.chessKing, Color(0xFF14316B), Color(0xFF040A19), Color(0xFFFFD36B), Metal.gold),
-  Legend('queen', FontAwesomeIcons.chessQueen, Color(0xFF5E1030), Color(0xFF14030A), Color(0xFFFF7FB0), Metal.gold),
-  Legend('knight', FontAwesomeIcons.chessKnight, Color(0xFF2C3440), Color(0xFF07090C), Color(0xFF9FB6D6), Metal.silver),
-  Legend('raven', FontAwesomeIcons.crow, Color(0xFF1A2236), Color(0xFF04060B), Color(0xFFC9D6FF), Metal.silver),
-  Legend('wolf', FontAwesomeIcons.wolfPackBattalion, Color(0xFF233046), Color(0xFF05080E), Color(0xFF8FC3FF), Metal.silver),
-  Legend('phoenix', FontAwesomeIcons.fireFlameCurved, Color(0xFF7A2A08), Color(0xFF170601), Color(0xFFFFA23D), Metal.gold),
-  Legend('serpent', FontAwesomeIcons.staffSnake, Color(0xFF0F4A2E), Color(0xFF020F09), Color(0xFF4CF0A0), Metal.emerald),
-  Legend('masquerade', FontAwesomeIcons.masksTheater, Color(0xFF4A1450), Color(0xFF100312), Color(0xFFE77CFF), Metal.gold),
-  Legend('reaper', FontAwesomeIcons.skull, Color(0xFF2A0D0D), Color(0xFF060202), Color(0xFFFF3B3B), Metal.silver),
-  Legend('crown', FontAwesomeIcons.crown, Color(0xFF40206A), Color(0xFF0D0618), Color(0xFFFFD36B), Metal.gold),
-  Legend('fortune', FontAwesomeIcons.diceD20, Color(0xFF0E4A55), Color(0xFF021014), Color(0xFF5FE6F2), Metal.gold),
-  Legend('diamond', FontAwesomeIcons.gem, Color(0xFF123E70), Color(0xFF030B17), Color(0xFF8FE3FF), Metal.silver),
-  Legend('stallion', FontAwesomeIcons.horseHead, Color(0xFF4A2A14), Color(0xFF110803), Color(0xFFFFB27A), Metal.bronze),
-  Legend('widow', FontAwesomeIcons.spider, Color(0xFF1A1A1F), Color(0xFF040405), Color(0xFFFF2E4D), Metal.crimson),
-  Legend('night', FontAwesomeIcons.moon, Color(0xFF16204A), Color(0xFF03050F), Color(0xFFB9C8FF), Metal.silver),
+// Muted grounds: navy, oxblood, forest, graphite, slate and plum.
+const _navy = (Color(0xFF1B2638), Color(0xFF0B1018));
+const _oxblood = (Color(0xFF3A1A1C), Color(0xFF140809));
+const _forest = (Color(0xFF1C2E26), Color(0xFF0A120E));
+const _graphite = (Color(0xFF26272B), Color(0xFF0C0C0E));
+const _slate = (Color(0xFF243039), Color(0xFF0C1115));
+const _plum = (Color(0xFF2C2131), Color(0xFF0F0A11));
+
+Legend _l(String id, FaIconData icon, (Color, Color) ground, Metal metal) =>
+    Legend(id, icon, ground.$1, ground.$2, metal.shades[1], metal);
+
+/// The ids are saved in profiles and never change; their emblems and names
+/// may.
+final legends = <Legend>[
+  _l('king', FontAwesomeIcons.chessKing, _navy, Metal.gold),
+  _l('queen', FontAwesomeIcons.chessQueen, _oxblood, Metal.gold),
+  _l('knight', FontAwesomeIcons.chessKnight, _graphite, Metal.silver),
+  _l('dragon', FontAwesomeIcons.chessRook, _forest, Metal.gold),
+  _l('wizard', FontAwesomeIcons.chessBishop, _slate, Metal.silver),
+  _l('crown', FontAwesomeIcons.crown, _plum, Metal.gold),
+  _l('diamond', FontAwesomeIcons.gem, _navy, Metal.silver),
+  _l('fortune', FontAwesomeIcons.trophy, _graphite, Metal.gold),
+  _l('mastermind', FontAwesomeIcons.scaleBalanced, _oxblood, Metal.silver),
+  _l('serpent', FontAwesomeIcons.chartLine, _forest, Metal.silver),
+  _l('phoenix', FontAwesomeIcons.bullseye, _slate, Metal.gold),
+  _l('oracle', FontAwesomeIcons.compass, _navy, Metal.bronze),
+  _l('shadow', FontAwesomeIcons.shieldHalved, _graphite, Metal.bronze),
+  _l('widow', FontAwesomeIcons.landmark, _forest, Metal.bronze),
+  _l('masquerade', FontAwesomeIcons.key, _plum, Metal.silver),
+  _l('reaper', FontAwesomeIcons.anchor, _slate, Metal.bronze),
+  _l('raven', FontAwesomeIcons.featherPointed, _oxblood, Metal.bronze),
+  _l('wolf', FontAwesomeIcons.mountain, _slate, Metal.silver),
+  _l('stallion', FontAwesomeIcons.horseHead, _graphite, Metal.bronze),
+  _l('night', FontAwesomeIcons.moon, _navy, Metal.silver),
 ];
 
 /// The legend in an avatar value (`legend:<id>`), if it is one.
@@ -100,6 +113,8 @@ class LegendAvatar extends StatelessWidget {
       );
 }
 
+/// A signet: a matte, dark ground, the emblem in brushed metal and a thin
+/// metal rim. No stars, glows or bright colours.
 class _LegendPainter extends CustomPainter {
   _LegendPainter(this.legend);
   final Legend legend;
@@ -113,58 +128,25 @@ class _LegendPainter extends CustomPainter {
     canvas.save();
     canvas.clipPath(Path()..addOval(rect));
 
-    // Deep background, lit from just above the middle.
+    // Matte ground, a touch lighter at the top.
     canvas.drawRect(
       rect,
       Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(0, -0.2),
-          radius: 0.85,
-          colors: [Color.lerp(legend.inner, Colors.white, 0.08)!, legend.inner, legend.outer],
-          stops: const [0, 0.45, 1],
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [legend.inner, legend.outer],
         ).createShader(rect),
     );
 
-    // Nebula wisps in the legend's colour.
-    void wisp(double x, double y, double r, double a) {
-      final o = Offset(x * s, y * s);
-      canvas.drawCircle(
-        o,
-        r * s,
-        Paint()
-          ..shader = RadialGradient(colors: [legend.glow.withValues(alpha: a), legend.glow.withValues(alpha: 0)])
-              .createShader(Rect.fromCircle(center: o, radius: r * s)),
-      );
-    }
-
-    wisp(0.22, 0.25, 0.35, 0.22);
-    wisp(0.82, 0.78, 0.4, 0.18);
-
-    // Stars, placed the same way every time for a legend.
-    final rnd = math.Random(legend.id.codeUnits.fold<int>(7, (h, u) => h * 31 + u) & 0x7fffffff);
-    for (var i = 0; i < 22; i++) {
-      final o = Offset(rnd.nextDouble() * s, rnd.nextDouble() * s);
-      final r = (0.003 + rnd.nextDouble() * 0.009) * s;
-      canvas.drawCircle(o, r, Paint()..color = Colors.white.withValues(alpha: 0.25 + rnd.nextDouble() * 0.55));
-    }
-
-    // Halo behind the emblem.
-    canvas.drawCircle(
-      c,
-      0.36 * s,
-      Paint()
-        ..shader = RadialGradient(colors: [legend.glow.withValues(alpha: 0.55), legend.glow.withValues(alpha: 0)])
-            .createShader(Rect.fromCircle(center: c, radius: 0.36 * s)),
-    );
-
-    // The emblem: a soft shadow, then the glyph in metal.
+    // The emblem in brushed metal, with a faint shadow.
     TextPainter glyph(Paint paint) => TextPainter(
           text: TextSpan(
             text: String.fromCharCode(legend.icon.codePoint),
             style: TextStyle(
               fontFamily: legend.icon.fontFamily,
               package: legend.icon.fontPackage,
-              fontSize: 0.46 * s,
+              fontSize: 0.4 * s,
               height: 1,
               foreground: paint,
             ),
@@ -172,52 +154,40 @@ class _LegendPainter extends CustomPainter {
           textDirection: TextDirection.ltr,
         )..layout();
     final shadow = glyph(Paint()
-      ..color = Colors.black.withValues(alpha: 0.6)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 0.02 * s));
+      ..color = Colors.black.withValues(alpha: 0.45)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 0.012 * s));
     final at = c - Offset(shadow.width / 2, shadow.height / 2);
-    shadow.paint(canvas, at + Offset(0, 0.025 * s));
+    shadow.paint(canvas, at + Offset(0, 0.015 * s));
     final glyphRect = at & Size(shadow.width, shadow.height);
     glyph(Paint()
           ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: metal,
-            stops: const [0, 0.5, 1],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [metal[0], metal[1], Color.lerp(metal[1], metal[2], 0.5)!],
           ).createShader(glyphRect))
         .paint(canvas, at);
-
-    // Glassy shine across the top.
-    canvas.drawOval(
-      Rect.fromLTWH(0.12 * s, 0.02 * s, 0.76 * s, 0.42 * s),
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.white.withValues(alpha: 0.14), Colors.white.withValues(alpha: 0)],
-        ).createShader(Rect.fromLTWH(0, 0, s, 0.44 * s)),
-    );
     canvas.restore();
 
-    // Metal rim with a fine inner line.
-    final ring = Rect.fromCircle(center: c, radius: s / 2 - 0.022 * s);
+    // Thin metal rim and a fine inner line.
+    final ring = Rect.fromCircle(center: c, radius: s / 2 - 0.016 * s);
     canvas.drawCircle(
       c,
       ring.width / 2,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.044 * s
+        ..strokeWidth = 0.032 * s
         ..shader = SweepGradient(
-          colors: [metal[0], metal[1], metal[2], metal[1], metal[0], metal[1], metal[2], metal[1], metal[0]],
-          transform: const GradientRotation(-math.pi / 3),
+          colors: [metal[1], metal[0], metal[1], metal[2], metal[1]],
+          transform: const GradientRotation(-math.pi / 4),
         ).createShader(ring),
     );
     canvas.drawCircle(
       c,
-      s / 2 - 0.055 * s,
+      s / 2 - 0.075 * s,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.008 * s
-        ..color = metal[0].withValues(alpha: 0.35),
+        ..strokeWidth = 0.006 * s
+        ..color = metal[1].withValues(alpha: 0.4),
     );
   }
 

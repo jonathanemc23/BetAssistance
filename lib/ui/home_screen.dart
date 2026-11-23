@@ -294,9 +294,7 @@ class _HomeHeader extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(26),
         gradient: LinearGradient(colors: hero.gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
-        boxShadow: [
-          BoxShadow(color: hero.gradient.first.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 8)),
-        ],
+        boxShadow: const [BoxShadow(color: Color(0x30000000), blurRadius: 12, offset: Offset(0, 2))],
       ),
       child: Stack(
         children: [
@@ -506,8 +504,21 @@ class _SectionTitle extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(left: 4, bottom: 8),
       child: Row(children: [
+        Container(
+          width: 4,
+          height: 18,
+          margin: const EdgeInsets.only(right: 8),
+          decoration: BoxDecoration(
+            color: gold ? _gold[1] : theme.colorScheme.primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
         if (gold) ...[Icon(Icons.auto_awesome, size: 18, color: _gold[1]), const SizedBox(width: 6)],
-        Expanded(child: Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
+        Expanded(
+            child: Text(title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.1))),
         if (action != null)
           TextButton(
             style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
@@ -848,27 +859,51 @@ class _FreeTipRow extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final level = levelColor(tip.level);
+    Widget crest(Team t) => Container(
+          width: 30,
+          height: 30,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.94),
+            shape: BoxShape.circle,
+            border: Border.all(color: cs.surfaceContainerLow, width: 2),
+          ),
+          child: TeamLogo(url: t.logo, name: t.name, size: 22),
+        );
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Material(
         color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: Container(
+            decoration: BoxDecoration(border: Border(left: BorderSide(color: level, width: 4))),
+            padding: const EdgeInsets.fromLTRB(12, 12, 6, 12),
             child: Row(children: [
-              TeamLogo(url: match.home.logo, name: match.home.name, size: 22),
-              const SizedBox(width: 2),
-              TeamLogo(url: match.away.logo, name: match.away.name, size: 22),
+              SizedBox(
+                width: 52,
+                height: 30,
+                child: Stack(children: [
+                  crest(match.home),
+                  Positioned(left: 22, child: crest(match.away)),
+                ]),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(trPick(tip.pick),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Row(children: [
+                    Flexible(
+                      child: Text(trPick(tip.pick),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    ),
+                    const SizedBox(width: 6),
+                    LevelPill(level: tip.level, showCost: false),
+                  ]),
+                  const SizedBox(height: 2),
                   Text('${match.title} · ${DateFormat.Hm().format(match.kickoff.toLocal())}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -877,10 +912,16 @@ class _FreeTipRow extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text(formatOdds(tip.odds, format),
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-                Text('${tip.percent}%', style: theme.textTheme.labelSmall?.copyWith(color: level, fontWeight: FontWeight.w800)),
+                Text.rich(TextSpan(children: [
+                  TextSpan(text: '${tr('Odds')} ', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                  TextSpan(
+                      text: formatOdds(tip.odds, format),
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                ])),
+                Text(tr('{pct}% chance', {'pct': tip.percent}),
+                    style: theme.textTheme.labelSmall?.copyWith(color: level, fontWeight: FontWeight.w800)),
               ]),
+              Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
             ]),
           ),
         ),
