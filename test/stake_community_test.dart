@@ -49,7 +49,11 @@ Match match({String id = '77', DateTime? kickoff}) => Match(
       away: const Team('Chelsea', 'Chelsea', null, null),
       state: MatchState.scheduled,
       detail: '',
+      odds: realOdds,
     );
+
+/// A bookmaker's real prices: tips and listings never invent one.
+const realOdds = MatchOdds(home: 2.3, draw: 3.3, away: 3.1, totalLine: 2.5, over: 1.9, under: 1.9);
 
 void main() {
   group('stake stats', () {
@@ -221,6 +225,7 @@ void main() {
         away: const Team('Chelsea', 'Chelsea', null, null),
         state: MatchState.scheduled,
         detail: '',
+        odds: realOdds,
       );
       final a = demoListings([m], day: '2030-01-01'), b = demoListings([m], day: '2030-01-01');
       expect(a, hasLength(1));

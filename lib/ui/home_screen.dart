@@ -96,8 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final open = [for (final m in matches ?? const <Match>[]) if (m.state == MatchState.scheduled) m];
     final tips = [for (final m in open) (m, tipsFor(store, m))];
     final pro = [
-      for (final (m, t) in tips)
-        if (t.pro.isNotEmpty) (m, t.pro.first),
+      for (final (m, t) in tips) ...[for (final p in t.pro) (m, p)],
     ];
     final free = [
       for (final (m, t) in tips)
@@ -139,11 +138,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 22),
         _SectionTitle(title: tr('Pro tips'), action: tr('See all'), onAction: () => _openHub(1), gold: true),
-        _ProBanner(count: pro.length, tokens: store.tokens, onTap: () => _openHub(1)),
+        _ProBanner(onTap: () => _openHub(1)),
         if (pro.isNotEmpty) ...[
           const SizedBox(height: 10),
           SizedBox(
-            height: 150,
+            height: 214,
             child: ListView.separated(
               key: const Key('home-pro-tips'),
               scrollDirection: Axis.horizontal,
@@ -154,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 match: pro[i].$1,
                 tip: pro[i].$2,
                 store: store,
-                onTap: () => _openTips(pro[i].$1, tab: 1),
+                onTap: () => openTipPage(context, store: store, match: pro[i].$1, tip: pro[i].$2),
               ),
             ),
           ),
@@ -173,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              tr('Preview: tips are simulated while our prediction model is being built. Bet responsibly.'),
+              tr('Picks read from real bookmaker prices, with their margin removed. Bet responsibly.'),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
@@ -184,7 +183,8 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 /// Avatar and greeting, the bank, a few highlights and the way to the full
-/// summary.
+/// summary. The bank is the money not riding on a bet: it drops when a bet
+/// is placed, and the stakes of open bets show as "In play".
 class _HomeHeader extends StatelessWidget {
   const _HomeHeader({required this.store, required this.onSummary, required this.onLogBet, required this.onOpenBets});
   final BankStore store;
@@ -200,97 +200,252 @@ class _HomeHeader extends StatelessWidget {
     final fmt = Fmt(store.settings);
     final s = store.stats;
     final hour = DateTime.now().hour;
-    final greeting = hour < 12 ? tr('Good morning') : hour < 19 ? tr('Good afternoon') : tr('Good evening');
+    final greeting = hour < 12
+        ? tr('Good morning')
+        : hour < 19
+        ? tr('Good afternoon')
+        : tr('Good evening');
     final openParlays = store.parlays.where((p) => p.isOpen).length;
+    final muted = fg.withValues(alpha: 0.72);
 
-    Widget chip(IconData icon, String text, {VoidCallback? onTap}) => Material(
-          color: fg.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(20),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(icon, size: 15, color: fg),
-                const SizedBox(width: 5),
-                Text(text, style: theme.textTheme.labelMedium?.copyWith(color: fg, fontWeight: FontWeight.w700)),
-              ]),
+    // One figure under the bank: a label over its value.
+    Widget stat(String label, String value, {Color? color, Key? key}) => Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall?.copyWith(color: muted, letterSpacing: 0.8, fontSize: 10),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              key: key,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: color ?? fg,
+                fontWeight: FontWeight.w900,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
-        );
+        ],
+      ),
+    );
+    Widget divider() => Container(
+      width: 1,
+      height: 30,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      color: fg.withValues(alpha: 0.18),
+    );
+
+    final good = Color.lerp(BankColors.win(context), fg, 0.35)!;
+    final bad = Color.lerp(BankColors.loss(context), fg, 0.35)!;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(26),
         gradient: LinearGradient(colors: hero.gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
-        boxShadow: [BoxShadow(color: hero.gradient.first.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 6))],
+        boxShadow: [
+          BoxShadow(color: hero.gradient.first.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 8)),
+        ],
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          InkWell(
-            key: const Key('home-avatar'),
-            customBorder: const CircleBorder(),
-            onTap: () => showAvatarPicker(context, store),
-            child: ProfileAvatar(store: store, size: 56),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(greeting, style: theme.textTheme.bodySmall?.copyWith(color: fg.withValues(alpha: 0.8))),
-              Text(store.profileName.isEmpty ? tr('Welcome back') : store.profileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w800)),
-            ]),
-          ),
-        ]),
-        const SizedBox(height: 14),
-        Text(tr('BANK'), style: theme.textTheme.labelSmall?.copyWith(color: fg.withValues(alpha: 0.8), letterSpacing: 1.2)),
-        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Flexible(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(fmt.money(s.balance),
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                      color: fg, fontWeight: FontWeight.w900, fontFeatures: const [FontFeature.tabularFigures()])),
+      child: Stack(
+        children: [
+          // Soft rings in the corner, for depth.
+          Positioned(
+            right: -50,
+            top: -60,
+            child: Container(
+              width: 190,
+              height: 190,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: fg.withValues(alpha: 0.07), width: 26),
+              ),
             ),
           ),
-          const SizedBox(width: 8),
-          Text(tr('{amount} available', {'amount': fmt.money(s.available)}),
-              style: theme.textTheme.bodySmall?.copyWith(color: fg.withValues(alpha: 0.8))),
-        ]),
-        const SizedBox(height: 14),
-        Wrap(spacing: 6, runSpacing: 6, children: [
-          chip(Icons.receipt_long, trn(s.pendingCount, '{n} open bet', '{n} open bets'), onTap: onOpenBets),
-          if (s.exposure > 0) chip(Icons.hourglass_bottom, tr('{amount} at risk', {'amount': fmt.money(s.exposure)})),
-          chip(s.profit >= 0 ? Icons.trending_up : Icons.trending_down, 'P/L ${fmt.money(s.profit, sign: true)}'),
-          chip(Icons.percent, 'ROI ${fmt.pct(s.roi)}'),
-          if (openParlays > 0) chip(Icons.account_tree_outlined, trn(openParlays, '{n} open parlay', '{n} open parlays')),
-        ]),
-        const SizedBox(height: 14),
-        Row(children: [
-          Expanded(
-            child: FilledButton.icon(
-              style: FilledButton.styleFrom(backgroundColor: fg, foregroundColor: hero.gradient.first),
-              onPressed: onSummary,
-              icon: const Icon(Icons.dashboard_outlined, size: 18),
-              label: Text(tr('See summary'), style: TextStyle(fontWeight: FontWeight.w800)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    InkWell(
+                      key: const Key('home-avatar'),
+                      customBorder: const CircleBorder(),
+                      onTap: () => showAvatarPicker(context, store),
+                      child: Container(
+                        padding: const EdgeInsets.all(2.5),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: fg.withValues(alpha: 0.55), width: 2),
+                        ),
+                        child: ProfileAvatar(store: store, size: 52),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(greeting, style: theme.textTheme.bodySmall?.copyWith(color: muted)),
+                          Text(
+                            store.profileName.isEmpty ? tr('Welcome back') : store.profileName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleLarge?.copyWith(color: fg, fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(tr('BANK'), style: theme.textTheme.labelSmall?.copyWith(color: muted, letterSpacing: 1.4)),
+                const SizedBox(height: 2),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          fmt.money(s.available),
+                          key: const Key('home-bank'),
+                          style: theme.textTheme.headlineLarge?.copyWith(
+                            color: fg,
+                            fontWeight: FontWeight.w900,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // What open bets have staked; opens the register.
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 150),
+                      child: Material(
+                        color: fg.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(16),
+                        child: InkWell(
+                          key: const Key('home-in-play'),
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: onOpenBets,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 7, 10, 7),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  tr('In play'),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: muted,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Text(
+                                  fmt.money(s.exposure),
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    color: fg,
+                                    fontWeight: FontWeight.w900,
+                                    fontFeatures: const [FontFeature.tabularFigures()],
+                                  ),
+                                ),
+                                Text(
+                                  [
+                                    trn(s.pendingCount, '{n} open bet', '{n} open bets'),
+                                    if (openParlays > 0) trn(openParlays, '{n} open parlay', '{n} open parlays'),
+                                  ].join(' · '),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(color: muted, fontSize: 10),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      stat(
+                        tr('Profit'),
+                        fmt.money(s.profit, sign: true),
+                        color: s.profit > 0
+                            ? good
+                            : s.profit < 0
+                            ? bad
+                            : null,
+                      ),
+                      divider(),
+                      stat(
+                        'ROI',
+                        fmt.pct(s.roi),
+                        color: s.roi > 0
+                            ? good
+                            : s.roi < 0
+                            ? bad
+                            : null,
+                      ),
+                      divider(),
+                      stat(tr('Hit rate'), s.wins + s.losses == 0 ? '-' : '${(s.winRate * 100).round()}%'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: fg,
+                          foregroundColor: hero.gradient.first,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        onPressed: onSummary,
+                        icon: const Icon(Icons.dashboard_outlined, size: 18),
+                        label: Text(tr('See summary'), style: const TextStyle(fontWeight: FontWeight.w800)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: fg,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: BorderSide(color: fg.withValues(alpha: 0.6)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        onPressed: onLogBet,
+                        icon: const Icon(Icons.add, size: 18),
+                        label: Text(tr('Log bet'), style: const TextStyle(fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(foregroundColor: fg, side: BorderSide(color: fg.withValues(alpha: 0.6))),
-              onPressed: onLogBet,
-              icon: const Icon(Icons.add, size: 18),
-              label: Text(tr('Log bet')),
-            ),
-          ),
-        ]),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -452,9 +607,7 @@ class _MatchBox extends StatelessWidget {
 
 /// The gold strip that leads to the day's Pro tips.
 class _ProBanner extends StatelessWidget {
-  const _ProBanner({required this.count, required this.tokens, required this.onTap});
-  final int count;
-  final int tokens;
+  const _ProBanner({required this.onTap});
   final VoidCallback onTap;
 
   @override
@@ -481,14 +634,17 @@ class _ProBanner extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(tr('Value bets for today'), style: theme.textTheme.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w900)),
+                  Text(tr('Bets with real value every day, with the best analysis from our model'),
+                      style: theme.textTheme.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 3),
                   Text(
-                    count == 0
-                        ? tr('Expert picks with the reasons behind them. You have {tokens} tokens.', {'tokens': tokens})
-                        : trn(count, '{n} big match with Pro picks at odds of 1.60 to 2.00. You have {tokens} tokens.',
-                            '{n} big matches with Pro picks at odds of 1.60 to 2.00. You have {tokens} tokens.', {'tokens': tokens}),
+                    tr('Choose between our High and Max levels of trust. Real odds of 1.80 or more.'),
                     style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.8)),
                   ),
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 6, runSpacing: 4, children: [
+                    for (final c in proLevels) LevelPill(level: c, dark: true),
+                  ]),
                 ]),
               ),
               Container(
@@ -504,8 +660,9 @@ class _ProBanner extends StatelessWidget {
   }
 }
 
-/// One Pro tip in the strip: its match, level, odds and value; the pick
-/// only once bought.
+/// One Pro tip in the strip: both teams with their crests, the level, the
+/// bet type, the odds and the chance; the pick only once bought. Opens the
+/// tip's own page.
 class _ProTipBox extends StatelessWidget {
   const _ProTipBox({required this.match, required this.tip, required this.store, required this.onTap});
   final Match match;
@@ -516,71 +673,118 @@ class _ProTipBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cs = theme.colorScheme;
+    const fg = Colors.white;
     final unlocked = store.isUnlocked(tip);
     final level = levelColor(tip.level);
+    Widget team(Team t) => Row(children: [
+          Container(
+            width: 26,
+            height: 26,
+            padding: const EdgeInsets.all(2.5),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.95), shape: BoxShape.circle),
+            child: TeamLogo(url: t.logo, name: t.name, size: 21),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(t.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(color: fg, fontWeight: FontWeight.w800)),
+          ),
+        ]);
     return SizedBox(
-      width: 220,
+      width: 252,
       child: Material(
-        color: cs.surfaceContainerLow,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: _gold[1].withValues(alpha: 0.55)),
-        ),
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                LevelPill(level: tip.level),
-                const Spacer(),
-                Text(formatOdds(tip.odds, store.settings.oddsFormat),
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: level)),
-              ]),
-              const SizedBox(height: 8),
-              Text(match.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-              Text('${DateFormat.Hm().format(match.kickoff.toLocal())} · ${match.league.name}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-              const Spacer(),
-              if (unlocked)
-                Text(trPick(tip.pick),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800))
-              else
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF17160F), Color(0xFF2B2412)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _gold[1].withValues(alpha: 0.6)),
+          ),
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  Flexible(
-                    child: Text(tr('Value +{pct}%', {'pct': (tip.value * 100).round()}),
+                  LevelPill(level: tip.level, dark: true, showCost: false),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('${DateFormat.Hm().format(match.kickoff.toLocal())} · ${match.league.name}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelLarge
-                            ?.copyWith(color: BankColors.win(context), fontWeight: FontWeight.w900)),
+                        textAlign: TextAlign.end,
+                        style: theme.textTheme.labelSmall?.copyWith(color: Colors.white70)),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                team(match.home),
+                const SizedBox(height: 5),
+                team(match.away),
+                const SizedBox(height: 10),
+                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Expanded(
+                    child: Text(unlocked ? trPick(tip.pick) : tip.group,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: unlocked ? fg : Colors.white70, fontWeight: unlocked ? FontWeight.w800 : null)),
                   ),
                   const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: _gold),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.lock_open, size: 14, color: _onGold),
-                      const SizedBox(width: 4),
-                      Text('${tip.cost}',
-                          style: TextStyle(color: _onGold, fontWeight: FontWeight.w900, fontSize: 12)),
-                      const SizedBox(width: 3),
-                      const TokenCoin(size: 14),
+                  Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: '${tr('Odds')} ', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                      TextSpan(
+                          text: formatOdds(tip.odds, store.settings.oddsFormat),
+                          style: TextStyle(color: _gold[0], fontSize: 18, fontWeight: FontWeight.w900)),
                     ]),
                   ),
                 ]),
-            ]),
+                Text(tr('{pct}% chance', {'pct': tip.percent}),
+                    style: theme.textTheme.labelSmall?.copyWith(color: level, fontWeight: FontWeight.w800)),
+                const Spacer(),
+                if (unlocked)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                        border: Border.all(color: _gold[1]), borderRadius: BorderRadius.circular(20)),
+                    child: Text(tr('See analysis'), style: TextStyle(color: _gold[0], fontWeight: FontWeight.w800, fontSize: 12.5)),
+                  )
+                else
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 10),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: _gold),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [BoxShadow(color: _gold[1].withValues(alpha: 0.35), blurRadius: 8)],
+                    ),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Icon(Icons.lock_open, size: 15, color: _onGold),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(tr('Unlock Pro analysis'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: _onGold, fontWeight: FontWeight.w900, fontSize: 12.5)),
+                      ),
+                      const SizedBox(width: 6),
+                      Text('${tip.cost}', style: TextStyle(color: _onGold, fontWeight: FontWeight.w900, fontSize: 12.5)),
+                      const SizedBox(width: 3),
+                      const TokenCoin(size: 15),
+                    ]),
+                  ),
+              ]),
+            ),
           ),
         ),
       ),

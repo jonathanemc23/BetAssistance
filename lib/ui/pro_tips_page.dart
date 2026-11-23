@@ -59,10 +59,10 @@ Future<void> openProTips(BuildContext context,
       builder: (_) => ProTipsPage(store: store, match: match, details: details, api: api, initialTab: tab),
     ));
 
-/// The tips for [m] as the app shows them everywhere: the simulated ones,
+/// The tips for [m] as the app shows them everywhere: from real prices,
 /// with the Pro tips already bought in their place.
 MatchTips tipsFor(BankStore store, Match m, [MatchDetails? details]) =>
-    simulateTips(m, details ?? MatchDetails.statusOf(m)).withBought(store.boughtTips(m.id));
+    pickTips(m, details ?? MatchDetails.statusOf(m)).withBought(store.boughtTips(m.id));
 
 /// The match's predictions: free Daily tips, and Pro tips unlocked with tokens.
 class ProTipsPage extends StatefulWidget {
@@ -406,7 +406,7 @@ class ProTipsPromo extends StatelessWidget {
                 Text(text, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: 0.85))),
                 const SizedBox(height: 12),
                 Wrap(spacing: 6, runSpacing: 6, children: [
-                  for (final c in Confidence.values) LevelPill(level: c, dark: true),
+                  for (final c in proLevels) LevelPill(level: c, dark: true),
                 ]),
                 const SizedBox(height: 14),
                 Container(
@@ -438,7 +438,7 @@ class _PreviewNote extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Text(
-        tr('Preview: tips are simulated while our prediction model is being built. Bet responsibly.'),
+        tr('Picks read from real bookmaker prices, with their margin removed. Bet responsibly.'),
         textAlign: TextAlign.center,
         style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
       ),
@@ -449,7 +449,7 @@ class _PreviewNote extends StatelessWidget {
 // ---------------------------------------------------------------- Pro tips
 
 /// How Pro tips are priced, under the token balance.
-String get proRulesText => tr('The more a Pro tip costs, the better its odds: Max (3 tokens) from 1.80 to 2.00, High (2 tokens) and Medium (1 token) from 1.60 to 2.00. Free tips go from 1.40 to 2.00. If a Pro tip loses, the tokens go back to your balance.');
+String get proRulesText => tr('Pro tips come in two levels of trust, High (2 tokens) and Max (3 tokens), always at real odds of 1.80 or more. If a Pro tip loses, the tokens go back to your balance.');
 
 /// The token balance with the Get tokens button and the pricing rules.
 class _Wallet extends StatelessWidget {
@@ -508,6 +508,72 @@ class _ProTab extends StatelessWidget {
   }
 }
 
+/// Opens one tip on a page of its own: the match, the bet type, the odds
+/// and the chance; the pick and the reasons once it is free or unlocked.
+Future<void> openTipPage(BuildContext context, {required BankStore store, required Match match, required Tip tip}) =>
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => TipPage(store: store, match: match, tip: tip)));
+
+class TipPage extends StatelessWidget {
+  const TipPage({super.key, required this.store, required this.match, required this.tip});
+  final BankStore store;
+  final Match match;
+  final Tip tip;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final open = match.state == MatchState.scheduled;
+    return ListenableBuilder(
+      listenable: store,
+      builder: (context, _) {
+        final unlocked = store.isUnlocked(tip);
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(tip.free ? tr('Free pick') : tr('Pro pick')),
+            actions: [Padding(padding: const EdgeInsets.only(right: 12), child: TokenChip(store: store))],
+          ),
+          body: ListView(padding: const EdgeInsets.only(bottom: 32), children: [
+            _Teams(match: match, score: null),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                const SizedBox(height: 6),
+                TipCard(
+                  key: const Key('tip-page-card'),
+                  tip: tip,
+                  store: store,
+                  onBuy: open && !unlocked ? () => buyTip(context, store, tip) : null,
+                ),
+                if (!tip.free && !unlocked)
+                  Container(
+                    key: const Key('tip-refund-note'),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: _gold[1].withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: _gold[1].withValues(alpha: 0.4)),
+                    ),
+                    child: Row(children: [
+                      Icon(Icons.verified_user_outlined, color: _gold[1]),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                            trn(tip.cost, 'If this pick loses, your {n} token comes back to you.',
+                                'If this pick loses, your {n} tokens come back to you.'),
+                            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                      ),
+                    ]),
+                  ),
+                const _PreviewNote(),
+              ]),
+            ),
+          ]),
+        );
+      },
+    );
+  }
+}
+
 /// Asks, then spends tokens on [t]; opens the wallet when there aren't enough.
 Future<void> buyTip(BuildContext context, BankStore store, Tip t) async {
   if (store.tokens < t.cost) {
@@ -532,6 +598,9 @@ Future<void> buyTip(BuildContext context, BankStore store, Tip t) async {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Unlocked: {pick}', {'pick': trPick(t.pick)}))));
   }
 }
+
+/// The levels Pro tips are sold at.
+const proLevels = [Confidence.max, Confidence.high];
 
 /// The colour of a confidence level.
 Color levelColor(Confidence c) => switch (c) {
@@ -636,7 +705,7 @@ class TipCard extends StatelessWidget {
 
     final facts = Wrap(spacing: 6, runSpacing: 6, children: [
       _Fact(tip.isCombo ? tr('Combined odds') : tr('Odds'), formatOdds(tip.odds, format)),
-      _Fact(tr('Value'), '+${(tip.value * 100).round()}%', color: BankColors.win(context)),
+      _Fact(tr('Chance'), '${tip.percent}%', color: level),
     ]);
 
     final pick = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -711,7 +780,7 @@ class TipCard extends StatelessWidget {
               style: FilledButton.styleFrom(backgroundColor: _gold[1], foregroundColor: _onGold),
               onPressed: onBuy,
               icon: const Icon(Icons.lock_open, size: 18),
-              label: Text(trn(tip.cost, 'Buy prediction · {n} token', 'Buy prediction · {n} tokens'),
+              label: Text(trn(tip.cost, 'Unlock Pro analysis · {n} token', 'Unlock Pro analysis · {n} tokens'),
                   style: const TextStyle(fontWeight: FontWeight.w900)),
             ),
           )
@@ -739,9 +808,8 @@ class TipCard extends StatelessWidget {
         ],
         Row(children: [
           Expanded(
-            // The market stays hidden on a locked tip: with the odds it would
-            // give the pick away.
-            child: Text(unlocked ? tip.group.toUpperCase() : tr('PRO TIP'),
+            // The bet type shows even on a locked tip; the pick stays hidden.
+            child: Text(tip.group.toUpperCase(),
                 style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1, color: cs.onSurfaceVariant)),
           ),
           if (unlocked && won != null) ...[

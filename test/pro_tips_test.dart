@@ -16,100 +16,126 @@ Match match({String id = '401841641', MatchOdds? odds}) => Match(
       odds: odds,
     );
 
+const proLevelsForTest = [Confidence.max, Confidence.high];
+
 void main() {
   sqfliteFfiInit();
 
-  test('confidence sets the price: max 3, high 2, medium 1', () {
-    expect(Confidence.of(0.65), Confidence.max);
-    expect(Confidence.of(0.55), Confidence.high);
-    expect(Confidence.of(0.45), Confidence.medium);
+  test('confidence sets the price: max 3, high 2; Pro tips start at 1.80', () {
+    expect(Confidence.of(0.65), Confidence.high);
+    expect(Confidence.of(0.55), Confidence.medium);
     expect([for (final c in Confidence.values) c.cost], [3, 2, 1]);
-    expect([for (final c in Confidence.values) c.minOdds], [1.8, 1.6, 1.6]);
+    expect([for (final c in Confidence.values) c.minOdds], [1.8, 1.8, 1.8]);
   });
 
-  test('every tip follows the odds rules and is a value bet', () {
-    final books = <MatchOdds?>[
-      null,
+  test('tips come only from real prices: chance is the price without its margin', () {
+    // No bookmaker price: no tips at all, nothing estimated.
+    final none = pickTips(match(), const MatchDetails());
+    expect(none.all, isEmpty);
+    expect(pricedMarkets(match(), const MatchDetails()), isEmpty);
+
+    const book = MatchOdds(home: 1.9, draw: 3.4, away: 4.2, totalLine: 2.5, over: 1.95, under: 1.85);
+    final priced = pricedMarkets(match(odds: book), const MatchDetails());
+    expect({for (final c in priced) c.leg.market},
+        {TipMarket.homeWin, TipMarket.draw, TipMarket.awayWin, TipMarket.over25, TipMarket.under25});
+    final home = priced.firstWhere((c) => c.leg.market == TipMarket.homeWin);
+    expect(home.leg.odds, 1.9);
+    final sum = 1 / 1.9 + 1 / 3.4 + 1 / 4.2;
+    expect(home.chance, closeTo((1 / 1.9) / sum, 1e-9));
+    for (final c in priced) {
+      expect(c.chance, lessThan(1 / c.leg.odds), reason: 'the margin is taken out');
+    }
+
+    // Every market stays on the list; the unpriced ones carry no odds.
+    final all = matchMarkets(match(odds: book), const MatchDetails());
+    expect(all.firstWhere((o) => o.market == TipMarket.bttsYes).odds, isNull);
+    expect(all.firstWhere((o) => o.market == TipMarket.over25).odds, 1.95);
+  });
+
+  test('Pro tips: High or Max singles at real odds of 1.80 to 2.00; free tips 1.40 to 2.00', () {
+    final books = <MatchOdds>[
+      const MatchOdds(home: 1.9, draw: 3.4, away: 4.2, totalLine: 2.5, over: 1.95, under: 1.85),
       const MatchOdds(home: 2.1, draw: 3.2, away: 3.6),
       const MatchOdds(home: 1.25, draw: 6.0, away: 11.0, totalLine: 2.5, over: 1.55, under: 2.45),
       const MatchOdds(home: 4.5, draw: 3.6, away: 1.8),
       const MatchOdds(home: 2.6, draw: 2.9, away: 2.9, totalLine: 2.5, over: 2.2, under: 1.68),
     ];
-    var pro = 0, combos = 0, free = 0;
-    for (var i = 0; i < 60; i++) {
-      final tips = simulateTips(match(id: '40184${1000 + i}', odds: books[i % books.length]), const MatchDetails());
+    var pro = 0, free = 0;
+    for (final b in books) {
+      final tips = pickTips(match(odds: b), const MatchDetails());
       for (final t in tips.pro) {
         expect(followsOddsRules(t), isTrue, reason: '${t.pick} at ${t.odds}');
-        expect(t.free, isFalse);
-        expect(t.odds, inInclusiveRange(t.level.minOdds, 2.0), reason: '${t.level} ${t.pick}');
-        if (t.level == Confidence.max) expect(t.odds, greaterThanOrEqualTo(1.8));
-        if (t.isCombo) {
-          expect(t.legs, hasLength(2));
-          combos++;
-        }
-        expect(t.value, greaterThan(0), reason: '${t.pick} at ${t.odds}');
+        expect(t.level, isNot(Confidence.medium));
+        expect(t.odds, inInclusiveRange(1.8, 2.0));
+        expect(t.chance, greaterThanOrEqualTo(0.44));
+        if (t.level == Confidence.max) expect(t.chance, greaterThanOrEqualTo(0.5));
+        expect(t.isCombo, isFalse);
         pro++;
       }
       for (final t in tips.daily) {
-        expect(t.odds, inInclusiveRange(1.4, 2.0), reason: t.pick);
-        expect(t.isCombo, isFalse);
+        expect(followsOddsRules(t), isTrue, reason: t.pick);
+        expect(t.level, isNot(Confidence.max));
         free++;
       }
+      // Never two tips that can't both win.
+      final legs = [for (final t in tips.all) t.legs.single];
+      for (var i = 0; i < legs.length; i++) {
+        for (var j = i + 1; j < legs.length; j++) {
+          final (x, y) = (legs[i].market, legs[j].market);
+          var both = false;
+          for (var h = 0; h <= 8; h++) {
+            for (var a = 0; a <= 8; a++) {
+              if (x.wins(h, a) && y.wins(h, a)) both = true;
+            }
+          }
+          expect(both, isTrue, reason: '$x and $y');
+        }
+      }
     }
-    expect(pro, greaterThan(120));
-    expect(combos, greaterThan(20));
-    expect(free, greaterThan(80));
+    expect(pro, greaterThan(2));
+    expect(free, greaterThan(1));
+    // The first book: under 2.5 at 1.85 is the market's 51% pick, so Max.
+    final first = pickTips(match(odds: books.first), const MatchDetails());
+    expect(first.pro.first.market, TipMarket.under25);
+    expect(first.pro.first.level, Confidence.max);
   });
 
-  test('the price range follows what the tip costs', () {
+  test('the odds rules', () {
     Tip tip(List<TipLeg> legs, {bool free = false, Confidence level = Confidence.max}) =>
         Tip(matchId: '1', legs: legs, chance: 0.6, reasons: const [], free: free, level: level);
     const short = TipLeg(TipMarket.homeWin, 'Home', 1.75), mid = TipLeg(TipMarket.over25, 'Over', 1.85);
-    const long = TipLeg(TipMarket.draw, 'Draw', 2.2), low = TipLeg(TipMarket.homeWin, 'Home', 1.5);
-    // Max (3 tokens): 1.80 to 2.00.
-    expect(followsOddsRules(tip([short])), isFalse);
-    expect(followsOddsRules(tip([mid])), isTrue);
-    expect(followsOddsRules(tip([long])), isFalse);
-    // High and Medium: 1.60 to 2.00.
-    for (final level in [Confidence.high, Confidence.medium]) {
-      expect(followsOddsRules(tip([short], level: level)), isTrue);
-      expect(followsOddsRules(tip([low], level: level)), isFalse);
+    const long = TipLeg(TipMarket.draw, 'Draw', 2.2);
+    for (final level in proLevelsForTest) {
+      expect(followsOddsRules(tip([short], level: level)), isFalse);
+      expect(followsOddsRules(tip([mid], level: level)), isTrue);
       expect(followsOddsRules(tip([long], level: level)), isFalse);
     }
-    // Two selections count by their combined odds.
+    expect(followsOddsRules(tip([mid], level: Confidence.medium)), isFalse);
     expect(followsOddsRules(tip([const TipLeg(TipMarket.homeWin, 'Home', 1.3), const TipLeg(TipMarket.over15, 'O', 1.45)])),
-        isTrue);
-    expect(followsOddsRules(tip([short, mid])), isFalse);
-    // Free: 1.40 to 2.00.
+        isFalse);
     expect(followsOddsRules(tip([short], free: true)), isTrue);
     expect(followsOddsRules(tip([const TipLeg(TipMarket.homeWin, 'Home', 2.2)], free: true)), isFalse);
     expect(followsOddsRules(tip([const TipLeg(TipMarket.homeWin, 'Home', 1.3)], free: true)), isFalse);
   });
 
   test('a bought tip keeps its place when the prices move', () {
-    final before = simulateTips(match(odds: const MatchOdds(home: 2.1, draw: 3.2, away: 3.6)), const MatchDetails());
+    const before0 = MatchOdds(home: 1.9, draw: 3.4, away: 4.2);
+    final before = pickTips(match(odds: before0), const MatchDetails());
     final bought = Tip.fromJson(before.pro.first.toJson())!;
     expect(bought.id, before.pro.first.id);
     expect(bought.odds, closeTo(before.pro.first.odds, 1e-9));
-    final after = simulateTips(match(odds: const MatchOdds(home: 1.6, draw: 3.9, away: 5.5)), const MatchDetails())
+    final after = pickTips(match(odds: const MatchOdds(home: 1.6, draw: 3.9, away: 5.5)), const MatchDetails())
         .withBought([bought]);
     expect(after.pro.where((t) => t.id == bought.id), hasLength(1));
-    expect(after.pro.where((t) => t.level == bought.level), hasLength(1));
   });
 
-  test('simulated tips are the same on every visit and never contradict each other', () {
-    final m = match(odds: const MatchOdds(home: 2.1, draw: 3.2, away: 3.6));
-    final a = simulateTips(m, const MatchDetails()), b = simulateTips(m, const MatchDetails());
+  test('tips are the same on every visit', () {
+    final m = match(odds: const MatchOdds(home: 1.9, draw: 3.4, away: 4.2, totalLine: 2.5, over: 1.95, under: 1.85));
+    final a = pickTips(m, const MatchDetails()), b = pickTips(m, const MatchDetails());
     expect(a.all.map((t) => t.id), b.all.map((t) => t.id));
-    expect(a.daily, isNotEmpty);
-    expect(a.pro, hasLength(3));
     expect(a.daily.every((t) => t.free), isTrue);
     expect(a.pro.any((t) => t.free), isFalse);
     expect(a.all.map((t) => t.id).toSet(), hasLength(a.all.length));
-    final markets = {for (final t in a.all) ...t.legs.map((l) => l.market)};
-    expect(markets.containsAll([TipMarket.over25, TipMarket.under25]), isFalse);
-    expect(markets.containsAll([TipMarket.bttsYes, TipMarket.bttsNo]), isFalse);
-    expect(a.pro.map((t) => t.level), [Confidence.max, Confidence.high, Confidence.medium]);
   });
 
   test('tips settle from the final score', () {
@@ -124,7 +150,7 @@ void main() {
     final store = BankStore(db);
     await store.load();
     expect(store.tokens, BankStore.starterTokens);
-    final tips = simulateTips(match(), const MatchDetails()).pro;
+    final tips = pickTips(match(odds: const MatchOdds(home: 1.9, draw: 3.4, away: 4.2)), const MatchDetails()).pro;
     final t = tips.first;
     expect(await store.unlockTip(t), isTrue);
     expect(store.tokens, BankStore.starterTokens - t.cost);
@@ -158,7 +184,7 @@ void main() {
     final store = BankStore(db);
     await store.load();
     await store.addTokens(-store.tokens);
-    final t = simulateTips(match(id: 'other'), const MatchDetails()).pro.first;
+    final t = pickTips(match(id: 'other', odds: const MatchOdds(home: 1.9, draw: 3.4, away: 4.2)), const MatchDetails()).pro.first;
     expect(await store.unlockTip(t), isFalse);
     expect(store.tokens, 0);
     expect(store.isUnlocked(t), isFalse);
