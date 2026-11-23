@@ -309,7 +309,7 @@ const demoSellers = [
   ProSeller('valuehunter', 'Marcus T.', 'portrait:03', 52, 31),
   ProSeller('la_pizarra', 'Camila V.', 'portrait:05', 33, 18),
   ProSeller('underdog_fc', 'Andrés P.', 'portrait:02', 45, 28),
-  ProSeller('stats_nerd', 'Hannah K.', 'legend:wizard', 39, 24),
+  ProSeller('stats_nerd', 'Kwame A.', 'portrait:09', 39, 24),
 ];
 
 /// The bettors who post free bets: some pros, some still building a following.
@@ -317,9 +317,9 @@ const demoTipsters = [
   ProSeller('cornerqueen', 'Sofia M.', 'portrait:06', 37, 19, followers: 1840),
   ProSeller('btts_daily', 'Lucas F.', 'portrait:04', 21, 15, followers: 312, pro: false),
   ProSeller('la_pizarra', 'Camila V.', 'portrait:05', 33, 18, followers: 960),
-  ProSeller('over_kings', 'Valentina G.', 'legend:phoenix', 14, 9, followers: 145, pro: false),
+  ProSeller('over_kings', 'Bruno G.', 'portrait:07', 14, 9, followers: 145, pro: false),
   ProSeller('goalmachine', 'Diego R.', 'portrait:01', 41, 22, followers: 2210),
-  ProSeller('tikitaka_tips', 'Mateo L.', 'legend:knight', 9, 7, followers: 58, pro: false),
+  ProSeller('tikitaka_tips', 'Mateo L.', 'portrait:08', 9, 7, followers: 58, pro: false),
 ];
 
 /// A bet for sale: who sells it, its price in tokens, and the bet itself,

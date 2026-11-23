@@ -10,6 +10,9 @@ class Portrait {
 
 /// The portraits the picker offers. Append new ones at the end.
 const portraits = <Portrait>[
+  Portrait('07'),
+  Portrait('08'),
+  Portrait('09'),
   Portrait('01'),
   Portrait('02'),
   Portrait('03'),

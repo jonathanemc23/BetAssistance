@@ -159,7 +159,7 @@ Future<String?> Function() pickAvatarPhoto = () async {
   return f?.path;
 };
 
-/// The avatar choices: the legends, a photo from the gallery, or none.
+/// The avatar choices: the portraits, a photo from the gallery, or none.
 Future<void> showAvatarPicker(BuildContext context, BankStore store) => pickAvatar(
       context,
       current: () => store.avatar,
@@ -197,8 +197,6 @@ Future<void> pickAvatar(
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 16),
-                Text(tr('Portraits'), style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant)),
-                const SizedBox(height: 10),
                 Wrap(spacing: 10, runSpacing: 14, alignment: WrapAlignment.center, children: [
                   for (final p in portraits)
                     () {
@@ -215,41 +213,6 @@ Future<void> pickAvatar(
                             border: Border.all(color: on ? cs.primary : Colors.transparent, width: 3),
                           ),
                           child: PortraitAvatar(portrait: p, size: 74),
-                        ),
-                      );
-                    }(),
-                ]),
-                const SizedBox(height: 18),
-                Text(tr('Emblems'), style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant)),
-                const SizedBox(height: 10),
-                Wrap(spacing: 10, runSpacing: 14, alignment: WrapAlignment.center, children: [
-                  for (final legend in legends)
-                    () {
-                      final value = 'legend:${legend.id}';
-                      final on = avatar == value;
-                      return SizedBox(
-                        width: 74,
-                        child: InkWell(
-                          key: Key('avatar-$value'),
-                          borderRadius: BorderRadius.circular(12),
-                          onTap: () => onPick(value),
-                          child: Column(children: [
-                            Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: on ? cs.primary : Colors.transparent, width: 3),
-                              ),
-                              child: LegendAvatar(legend: legend, size: 58),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(legend.name,
-                                maxLines: 2,
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                    fontWeight: on ? FontWeight.w800 : FontWeight.w600,
-                                    color: on ? cs.primary : cs.onSurfaceVariant)),
-                          ]),
                         ),
                       );
                     }(),
