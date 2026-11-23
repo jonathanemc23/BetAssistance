@@ -7,6 +7,7 @@ import '../l10n/l10n.dart';
 import '../data/store.dart';
 import 'legend_avatar.dart';
 import 'person_avatar.dart';
+import 'portrait_avatar.dart';
 
 /// Avatars from before 0.17: an emoji on a coloured disc. Still shown for
 /// users who picked one; the picker offers [legends] now.
@@ -64,6 +65,18 @@ class AvatarImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final a = avatar;
+    final portrait = portraitOf(a);
+    if (portrait != null) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: border ? const [BoxShadow(color: Color(0x44000000), blurRadius: 8, offset: Offset(0, 2))] : null,
+        ),
+        child: PortraitAvatar(portrait: portrait, size: size),
+      );
+    }
     final legend = legendOf(a);
     if (legend != null) {
       return Container(
@@ -146,7 +159,7 @@ Future<String?> Function() pickAvatarPhoto = () async {
   return f?.path;
 };
 
-/// The avatar choices: the legends, a photo from the gallery, or none.
+/// The avatar choices: the portraits, a photo from the gallery, or none.
 Future<void> showAvatarPicker(BuildContext context, BankStore store) => pickAvatar(
       context,
       current: () => store.avatar,
@@ -185,33 +198,21 @@ Future<void> pickAvatar(
                     style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 16),
                 Wrap(spacing: 10, runSpacing: 14, alignment: WrapAlignment.center, children: [
-                  for (final legend in legends)
+                  for (final p in portraits)
                     () {
-                      final value = 'legend:${legend.id}';
+                      final value = 'portrait:${p.id}';
                       final on = avatar == value;
-                      return SizedBox(
-                        width: 74,
-                        child: InkWell(
-                          key: Key('avatar-$value'),
-                          borderRadius: BorderRadius.circular(12),
-                          onTap: () => onPick(value),
-                          child: Column(children: [
-                            Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: on ? cs.primary : Colors.transparent, width: 3),
-                              ),
-                              child: LegendAvatar(legend: legend, size: 58),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(legend.name,
-                                maxLines: 2,
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                    fontWeight: on ? FontWeight.w800 : FontWeight.w600,
-                                    color: on ? cs.primary : cs.onSurfaceVariant)),
-                          ]),
+                      return InkWell(
+                        key: Key('avatar-$value'),
+                        customBorder: const CircleBorder(),
+                        onTap: () => onPick(value),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: on ? cs.primary : Colors.transparent, width: 3),
+                          ),
+                          child: PortraitAvatar(portrait: p, size: 74),
                         ),
                       );
                     }(),
