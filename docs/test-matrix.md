@@ -22,7 +22,7 @@ Line coverage of `lib/` on 2026-11-18: 83% (`flutter test --coverage`).
 | Screenshot import | Betano, Bet365, others; single and parlay; unreadable picture | `slip_reader_test.dart`, `slip_bet_test.dart` | 5 real slips per bookmaker on iPhone, Android and web | more bookmakers |
 | Automatic results | singles, parlay legs, parlay builder, community bets, NBA pro tips; void; markets left to the user | `auto_settle_test.dart` | a real match day | iPhone with the app closed (only catches up on open) |
 | Live alerts | kick-off, goal, full time; switched off | `live_alerts_test.dart`, `push_alerts_test.dart` | one real match on each platform | |
-| Matches and match page | countries, days, leagues, live, table, line-ups, shot map, Players tab | `fixtures_test.dart`, `match_details_test.dart`, `app_test.dart` | | feed format changes (Q4) |
+| Matches and match page | countries, days, leagues, live, table, line-ups, shot map, Players tab | `fixtures_test.dart`, `match_details_test.dart`, `app_test.dart`; the real feeds every morning in `test_live/` | | |
 | Parlay builder and check | legs from matches, combined odds, warnings | `parlay_check_test.dart`, `leg_linker_test.dart`, `app_test.dart` | | |
 | Stake builder (football) | stats of the last six games, picks from two matches, validate before and after kick-off | `stake_community_test.dart`, `app_test.dart` | | |
 | NBA pro tip | lines from the day's games, odds range, no games today, settle from box score | `stake_community_test.dart`, `auto_settle_test.dart` | | real model (M1 to M6) |
