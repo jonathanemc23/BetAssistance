@@ -176,6 +176,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('home-pro-tips')), findsOneWidget);
     await shot('home_tips');
+    // A locked Pro tip opens its own page: the match, the bet type, the
+    // unlock button and the refund promise; the pick stays hidden.
+    await tester.tap(find.descendant(of: find.byKey(const Key('home-pro-tips')), matching: find.text('Unlock Pro analysis')).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Pro pick'), findsOneWidget);
+    expect(find.byKey(const Key('tip-refund-note')), findsOneWidget);
+    expect(find.textContaining('Unlock Pro analysis ·'), findsOneWidget);
+    expect(find.text('Locked prediction pick'), findsOneWidget);
+    await shot('tip_locked');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.drag(find.text('Free tips'), const Offset(0, 2000));
     await tester.pumpAndSettle();
 
@@ -361,14 +372,13 @@ void main() {
     await settle(tester);
     expect(find.text('Get our full bet analysis'), findsOneWidget);
     expect(find.text('FREE TODAY'), findsOneWidget);
-    expect(find.textContaining('Value +'), findsWidgets);
     await shot('pro_tips_daily');
     await tester.tap(find.text('See Pro tips'));
     await tester.pumpAndSettle();
     expect(store.tokens, BankStore.starterTokens);
-    expect(find.textContaining('Buy prediction'), findsWidgets);
+    expect(find.textContaining('Unlock Pro analysis'), findsWidgets);
     await shot('pro_tips_locked');
-    await tester.tap(find.textContaining('Buy prediction').first);
+    await tester.tap(find.textContaining('Unlock Pro analysis').first);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Buy prediction'));
     await settle(tester);
@@ -406,7 +416,7 @@ void main() {
     expect(find.text('Added to Parlay 1 · 1 pick'), findsOneWidget);
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('2.20'));
+    await tester.tap(find.text('1.90').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add to Parlay 1'));
     await settle(tester);
@@ -465,8 +475,8 @@ void main() {
     await shot('pro_tips_hub');
     await tester.tap(find.widgetWithText(Tab, 'Pro tips'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('The more a Pro tip costs, the better its odds'), findsOneWidget);
-    expect(find.textContaining('Buy prediction'), findsWidgets);
+    expect(find.textContaining('two levels of trust'), findsOneWidget);
+    expect(find.textContaining('Unlock Pro analysis'), findsWidgets);
     await shot('pro_tips_hub_pro');
     await tester.tap(find.byKey(const Key('search-match')));
     await settle(tester);
@@ -504,8 +514,8 @@ void main() {
     await tester.pumpAndSettle();
     final parlay = store.parlays.single;
     expect(parlay.legs.length, 3);
-    expect(parlay.odds, closeTo(2.1 * 2.2 * 2.0, 1e-9));
-    expect(find.text('\$92.40'), findsOneWidget);
+    expect(parlay.odds, closeTo(2.1 * 1.9 * 2.0, 1e-9));
+    expect(find.text('\$79.80'), findsOneWidget);
     await shot('parlay');
 
     final check = find.text('Check parlay');
@@ -831,6 +841,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.following, hasLength(1));
     await shot('community_free_bets');
+    await tester.scrollUntilVisible(find.byKey(const Key('community-post-free')), -300,
+        scrollable: find.byType(Scrollable).first);
     await tester.ensureVisible(find.byKey(const Key('community-post-free')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('community-post-free')));
@@ -1462,7 +1474,9 @@ http.Client _fixturesClient() => MockClient((req) async {
         ),
         espnEvent('2', '2026-10-18T14:00:00Z', 'Arsenal', 'Tottenham Hotspur', state: 'in', detail: "67'", hs: '2', as: '1'),
         espnEvent('3', '2026-10-18T16:30:00Z', 'AFC Bournemouth', 'Sunderland', odds: [2.1, 3.4, 3.6]),
-        espnEvent('401878771', '2026-10-18T19:00:00Z', 'Everton', 'Chelsea', odds: [3.0, 3.8, 2.2]),
+        espnEvent('401878771', '2026-10-18T19:00:00Z', 'Everton', 'Chelsea', odds: [3.0, 3.8, 1.9], total: (2.5, 115, -140)),
+        // Priced in the Pro range: the home favourite at 1.90.
+        espnEvent('4', '2026-10-18T20:00:00Z', 'Brighton & Hove Albion', 'Wolverhampton Wanderers', odds: [1.9, 3.6, 4.2], total: (2.5, -150, 125)),
       ]),
       200,
     ),

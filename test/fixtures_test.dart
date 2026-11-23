@@ -19,6 +19,7 @@ Map<String, Object?> espnEvent(
   String hs = '0',
   String as = '0',
   List<double>? odds,
+  (double, int, int)? total,
 }) => {
   'id': id,
   'date': date,
@@ -37,6 +38,8 @@ Map<String, Object?> espnEvent(
                 'homeTeamOdds': {'summary': '', 'value': odds[0]},
                 'drawOdds': {'summary': '', 'value': odds[1]},
                 'awayTeamOdds': {'summary': '', 'value': odds[2]},
+                // Total line with American over / under prices, as DraftKings sends them.
+                if (total != null) ...{'overUnder': total.$1, 'overOdds': total.$2, 'underOdds': total.$3},
               },
             ],
       'competitors': [

@@ -1730,8 +1730,9 @@ List<String> get challengeSteps => [
       tr('Win 60% or more of the 30 (18 bets) and you are a pro bettor: a verified badge and your own bets for sale.'),
     ];
 
-/// Asks for a market of [m] at its price, only those priced over [above]
-/// when set; null when the sheet is closed.
+/// Asks for a market of [m], only those priced over [above] when set; null
+/// when the sheet is closed. Markets a bookmaker prices show the real odds;
+/// the rest ask the user to type the odds in, never an estimate.
 Future<TipLeg?> pickMarket(BuildContext context, FixturesApi api, Match m, {double? above}) async {
   MatchDetails details;
   try {
@@ -1740,7 +1741,9 @@ Future<TipLeg?> pickMarket(BuildContext context, FixturesApi api, Match m, {doub
     details = const MatchDetails();
   }
   if (!context.mounted) return null;
-  final legs = [for (final c in pricedMarkets(m, details)) c.leg]..sort((a, b) => a.odds.compareTo(b.odds));
+  final options = matchMarkets(m, details);
+  final priced = [for (final o in options) if (o.odds != null) o]..sort((a, b) => a.odds!.compareTo(b.odds!));
+  final manual = [for (final o in options) if (o.odds == null) o];
   return showModalBottomSheet<TipLeg>(
     context: context,
     showDragHandle: true,
@@ -1748,6 +1751,11 @@ Future<TipLeg?> pickMarket(BuildContext context, FixturesApi api, Match m, {doub
     builder: (context) {
       final theme = Theme.of(context);
       final cs = theme.colorScheme;
+      Future<void> typeOdds(MarketOption o) async {
+        final odds = await askOdds(context, trPick(o.pick), above: above);
+        if (odds != null && context.mounted) Navigator.pop(context, TipLeg(o.market, o.pick, odds, line: o.line));
+      }
+
       return DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.7,
@@ -1756,20 +1764,72 @@ Future<TipLeg?> pickMarket(BuildContext context, FixturesApi api, Match m, {doub
           Text(above == null ? tr('Pick your bet') : tr('Pick your bet: odds over {odds}', {'odds': above.toStringAsFixed(2)}),
               style: TextStyle(color: cs.onSurfaceVariant)),
           const SizedBox(height: 8),
-          for (final leg in legs)
-            if (above == null || leg.odds > above)
+          for (final o in priced)
+            if (above == null || o.odds! > above)
               ListTile(
-              key: Key('market-${leg.market.name}'),
-              contentPadding: EdgeInsets.zero,
-              title: Text(trPick(leg.pick), style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text(leg.market.group),
-              trailing: Text(leg.odds.toStringAsFixed(2),
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: cs.primary)),
-              onTap: () => Navigator.pop(context, leg),
-            ),
+                key: Key('market-${o.market.name}'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(trPick(o.pick), style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text(o.market.group),
+                trailing: Text(o.odds!.toStringAsFixed(2),
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: cs.primary)),
+                onTap: () => Navigator.pop(context, TipLeg(o.market, o.pick, o.odds!, line: o.line)),
+              ),
+          if (manual.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(tr('No bookmaker price in our feed: type the odds you got'),
+                style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+            for (final o in manual)
+              ListTile(
+                key: Key('market-${o.market.name}'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(trPick(o.pick), style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text(o.market.group),
+                trailing: OutlinedButton(onPressed: () => typeOdds(o), child: Text(tr('Add odds'))),
+                onTap: () => typeOdds(o),
+              ),
+          ],
         ]),
       );
     },
+  );
+}
+
+/// Asks for decimal odds typed by hand, over [above] when set.
+Future<double?> askOdds(BuildContext context, String pick, {double? above}) {
+  final ctrl = TextEditingController();
+  String? error;
+  return showDialog<double>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) {
+        void done() {
+          final v = double.tryParse(ctrl.text.trim().replaceAll(',', '.'));
+          final min = above ?? 1.0;
+          if (v == null || v <= min || v > 1000) {
+            setState(() => error = tr('Type odds over {odds}', {'odds': min.toStringAsFixed(2)}));
+            return;
+          }
+          Navigator.pop(context, v);
+        }
+
+        return AlertDialog(
+          title: Text(pick),
+          content: TextField(
+            key: const Key('manual-odds'),
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(labelText: tr('Odds'), hintText: '1.85', errorText: error),
+            onSubmitted: (_) => done(),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Cancel'))),
+            FilledButton(onPressed: done, child: Text(tr('Use these odds'))),
+          ],
+        );
+      },
+    ),
   );
 }
 
