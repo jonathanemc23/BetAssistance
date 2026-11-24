@@ -123,7 +123,7 @@ class ClaudeAssistant implements MatchAssistant {
   String _system(Match m, MatchDetails d) {
     final b = DataAssistant.bestOdds(m, d);
     final lines = <String>[
-      'You are the research assistant in BetPilot, a betting tracker app. The user is studying one football '
+      'You are the research assistant in ProBets, a betting tracker app. The user is studying one football '
           'match and may ask anything: teams, players, injuries, tactics, referees, weather, odds, betting markets or '
           'general questions. Answer in the language the user writes in. Be concise and concrete: a short answer '
           'first, then the key facts. Use web search for anything recent or not in the data below. Never promise '

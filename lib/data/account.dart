@@ -10,7 +10,7 @@ import 'push_alerts.dart' show pushServer;
 import 'store.dart';
 
 /// The Web API key of the Firebase project (Project settings > Your apps >
-/// BetPilot web). It only identifies the project and is public by design:
+/// ProBets web). It only identifies the project and is public by design:
 /// Firebase web keys ship in every web app. Override at build time with
 /// `--dart-define=FIREBASE_API_KEY=...`; empty switches accounts off.
 const firebaseApiKey =
@@ -163,9 +163,9 @@ class AccountService extends ChangeNotifier {
     if (r.error != null) {
       return switch (r.error) {
         'auth/popup-closed-by-user' || 'auth/cancelled-popup-request' || 'auth/user-cancelled' => null,
-        'auth/popup-blocked' => tr('The browser blocked the Google window. Allow pop-ups for BetPilot and try again.'),
+        'auth/popup-blocked' => tr('The browser blocked the Google window. Allow pop-ups for ProBets and try again.'),
         'auth/unauthorized-domain' || 'auth/operation-not-allowed' =>
-          tr('Google sign-in is not switched on for BetPilot yet. Use your email for now.'),
+          tr('Google sign-in is not switched on for ProBets yet. Use your email for now.'),
         'auth/network-request-failed' || 'load' =>
           tr("Couldn't reach the sign-in service. Check your connection and try again."),
         _ => tr('Google sign-in failed ({code}). Try again or use your email.', {'code': r.error}),
@@ -269,7 +269,7 @@ class AccountService extends ChangeNotifier {
       'MISSING_PASSWORD' => tr('Enter your password.'),
       'USER_DISABLED' => tr('This account has been disabled.'),
       'TOO_MANY_ATTEMPTS_TRY_LATER' => tr('Too many attempts. Wait a few minutes and try again.'),
-      'OPERATION_NOT_ALLOWED' => tr('Email sign-in is not switched on for BetPilot yet.'),
+      'OPERATION_NOT_ALLOWED' => tr('Email sign-in is not switched on for ProBets yet.'),
       _ => tr('Sign-in failed ({code}). Try again.', {'code': code}),
     };
   }

@@ -362,7 +362,7 @@ class _Brand extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        Text('BetPilot',
+        Text('ProBets',
             style: TextStyle(color: color, fontSize: 34, fontWeight: FontWeight.w900, letterSpacing: 0.3, height: 1.1)),
         const SizedBox(height: 6),
         Text(tr('Track every bet. Grow your bank.'),
@@ -798,7 +798,7 @@ Future<void> signOutAndClear(BuildContext context, {required AccountService acco
       builder: (ctx) => AlertDialog(
         title: Text(tr('Some changes are not saved yet')),
         content: Text(tr(
-            "BetPilot couldn't reach the server, so your latest changes are only on this device. If you sign out now they are lost. Try again when you're online.")),
+            "ProBets couldn't reach the server, so your latest changes are only on this device. If you sign out now they are lost. Try again when you're online.")),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('Cancel'))),
           TextButton(

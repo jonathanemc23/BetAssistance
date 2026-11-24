@@ -334,7 +334,7 @@ class _ParlayPageState extends State<ParlayPage> {
           ListTile(
             leading: const Icon(Icons.link),
             title: Text(tr('Share as a link')),
-            subtitle: Text(tr('Opens in BetPilot ready to log')),
+            subtitle: Text(tr('Opens in ProBets ready to log')),
             onTap: () => Navigator.pop(c, 'link'),
           ),
           ListTile(
@@ -366,7 +366,7 @@ class _ParlayPageState extends State<ParlayPage> {
         text.writeln('• $s');
       }
     }
-    text.write('\n${tr('Built with BetPilot')}');
+    text.write('\n${tr('Built with ProBets')}');
     await SharePlus.instance.share(ShareParams(text: text.toString(), subject: p.name));
   }
 

@@ -248,7 +248,7 @@ class SyncService extends ChangeNotifier {
     try {
       await store.restoreSnapshot(jsonDecode(data) as Map<String, dynamic>);
     } on StateError {
-      return _set(SyncState.error, tr('Your account has data from a newer version of BetPilot. Update the app to load it.'));
+      return _set(SyncState.error, tr('Your account has data from a newer version of ProBets. Update the app to load it.'));
     } finally {
       _restoring = false;
     }

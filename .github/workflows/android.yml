@@ -66,7 +66,7 @@ jobs:
       - run: flutter build apk --release --dart-define=PUSH_SERVER=${{ steps.server.outputs.url }}
       - uses: actions/upload-artifact@v5
         with:
-          name: bank-track-apk
+          name: probets-apk
           path: build/app/outputs/flutter-apk/app-release.apk
       # Publish a GitHub release with the APK for every release-signed build on
       # main. Debug-signed builds are never published: installing one would
@@ -78,10 +78,10 @@ jobs:
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//')
           TAG="v${VERSION/+/-build}"
-          cp build/app/outputs/flutter-apk/app-release.apk "bank-track-${TAG}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "probets-${TAG}.apk"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "bank-track-${TAG}.apk" --clobber
+            gh release upload "$TAG" "probets-${TAG}.apk" --clobber
           else
-            gh release create "$TAG" "bank-track-${TAG}.apk" --title "Bank Track ${TAG}" \
+            gh release create "$TAG" "probets-${TAG}.apk" --title "ProBets ${TAG}" \
               --notes "Install on Android by opening this APK on the phone. Updates install over the previous version and keep your data."
           fi

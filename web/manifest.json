@@ -1,6 +1,6 @@
 {
-    "name": "BetPilot",
-    "short_name": "BetPilot",
+    "name": "ProBets",
+    "short_name": "ProBets",
     "start_url": ".",
     "scope": ".",
     "display": "standalone",

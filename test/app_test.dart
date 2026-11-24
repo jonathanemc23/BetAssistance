@@ -29,6 +29,9 @@ import 'package:bank_track/logic/pro_tips.dart';
 import 'package:bank_track/logic/slip_reader.dart';
 import 'package:bank_track/logic/stake_stats.dart';
 import 'package:bank_track/ui/slip_import.dart';
+import 'package:bank_track/ui/pro_tips_page.dart' show openProTipsHub;
+import 'package:bank_track/ui/stake_builder.dart' show openStakeBuilder;
+import 'package:bank_track/ui/tools_screen.dart' show BetToolsScreen;
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -174,7 +177,7 @@ void main() {
     expect(find.text('Leeds United'), findsNothing); // finished: not in the strip
     expect(find.text('Barcelona to win'), findsNothing);
     await shot('home');
-    await tester.scrollUntilVisible(find.text('BetPilot free picks for today'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(find.text('ProBets free picks for today'), 300, scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('home-pro-tips')), findsOneWidget);
     await shot('home_tips');
@@ -200,7 +203,7 @@ void main() {
     await shot('tip_free');
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await tester.drag(find.text('BetPilot free picks for today'), const Offset(0, 2000));
+    await tester.drag(find.text('ProBets free picks for today'), const Offset(0, 2000));
     await tester.pumpAndSettle();
 
     // The avatar is picked from Home, and shows there.
@@ -468,18 +471,24 @@ void main() {
     await tester.tap(find.widgetWithText(Tab, 'Matches'));
     await tester.pumpAndSettle();
 
-    // Bet Tools, from the side menu: Pro tips and the parlay builder.
+    // Bet Tools, from the side menu: only the parlay builder, with the NBA
+    // pro tip below it.
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Bet Tools'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('1 open'), findsOneWidget);
     expect(find.text('Money movement'), findsNothing);
-    expect(find.text('Pro tips'), findsOneWidget);
+    expect(find.text('Parlay builder'), findsOneWidget);
+    expect(find.text('NBA pro tip'), findsOneWidget);
+    expect(find.text('Pro tips'), findsNothing);
+    expect(find.text('Stake builder'), findsNothing);
+    expect(tester.getTopLeft(find.text('Parlay builder')).dy, lessThan(tester.getTopLeft(find.text('NBA pro tip')).dy));
     await shot('bet_tools');
 
-    // Pro tips from Bet Tools: the day's page, not a match page.
-    await tester.tap(find.text('Pro tips'));
+    // The Pro tips hub (opened from Home): the day's page, not a match page.
+    openProTipsHub(tester.element(find.byType(BetToolsScreen)),
+        store: store, api: FixturesApi(client: _fixturesClient()), today: DateTime(2026, 10, 18));
     await settle(tester);
     expect(find.text('Search a match'), findsOneWidget);
     expect(find.text("Today's best value bets"), findsOneWidget);
@@ -683,7 +692,7 @@ void main() {
     expect(find.byKey(const Key('home-next-day')), findsOneWidget);
     expect(find.textContaining('Big matches on'), findsOneWidget);
     expect(find.text('AFC Bournemouth'), findsOneWidget);
-    await tester.scrollUntilVisible(find.textContaining('BetPilot free picks for'), 300,
+    await tester.scrollUntilVisible(find.textContaining('ProBets free picks for'), 300,
         scrollable: find.byType(Scrollable).first);
     expect(find.byKey(const Key('home-pro-tips')), findsOneWidget);
   });
@@ -779,8 +788,10 @@ void main() {
     await tester.tap(find.byKey(const Key('drawer-tools')));
     await tester.pumpAndSettle();
     expect(find.text('Community'), findsNothing);
-    await tester.tap(find.text('Stake builder'));
-    await tester.pumpAndSettle();
+    expect(find.text('Stake builder'), findsNothing);
+    openStakeBuilder(tester.element(find.byType(BetToolsScreen)),
+        store: store, api: FixturesApi(client: _fixturesClient()), today: DateTime(2026, 10, 18));
+    await settle(tester);
     expect(find.text('Build a stake from match stats'), findsOneWidget);
 
     // Pick a match: the day's soccer matches.
@@ -1165,9 +1176,14 @@ void main() {
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('drawer-tools')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Constructor de apuestas'));
-    await tester.pumpAndSettle();
+    await settle(tester);
+    // Bet Tools: the parlay builder, then the NBA pro tip.
+    expect(find.text('Constructor de combinadas'), findsOneWidget);
+    expect(find.text('Pro tip NBA'), findsOneWidget);
+    expect(find.text('Constructor de apuestas'), findsNothing);
+    openStakeBuilder(tester.element(find.byType(BetToolsScreen)),
+        store: store, api: FixturesApi(client: _fixturesClient()), today: DateTime(2026, 10, 18));
+    await settle(tester);
     await tester.tap(find.byKey(const Key('stake-pick-match')));
     await settle(tester);
     await tester.tap(find.text('Everton vs Chelsea'));

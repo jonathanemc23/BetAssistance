@@ -196,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
         const SizedBox(height: 22),
         _SectionTitle(
-            title: later ? tr('BetPilot free picks for {day}', {'day': dayName}) : tr('BetPilot free picks for today'),
+            title: later ? tr('ProBets free picks for {day}', {'day': dayName}) : tr('ProBets free picks for today'),
             action: tr('More'),
             onAction: () => _openHub(0)),
         if (matches != null && free.isEmpty)

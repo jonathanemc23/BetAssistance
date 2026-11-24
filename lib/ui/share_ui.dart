@@ -22,7 +22,7 @@ Future<void> showShareBet(BuildContext context, BankStore store, Bet bet) {
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Text(tr('Share this bet'), style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
-            Text(tr('Anyone with BetPilot who opens the link gets the same bet ready to log. Your result and notes are not included.'),
+            Text(tr('Anyone with ProBets who opens the link gets the same bet ready to log. Your result and notes are not included.'),
                 style: theme.textTheme.bodySmall),
             const SizedBox(height: 12),
             Container(
@@ -57,7 +57,7 @@ Future<void> showShareBet(BuildContext context, BankStore store, Bet bet) {
                     Navigator.pop(c);
                     SharePlus.instance.share(ShareParams(
                       text: BetLink.shareText(bet, store.settings),
-                      subject: tr('Bet from BetPilot'),
+                      subject: tr('Bet from ProBets'),
                     ));
                   },
                 ),
@@ -101,7 +101,7 @@ class _PasteLinkDialogState extends State<_PasteLinkDialog> {
   void _open() {
     final b = BetLink.decode(_ctrl.text, today: isoDate(DateTime.now()), created: DateTime.now().toIso8601String());
     if (b == null) {
-      setState(() => _error = tr("That doesn't look like a BetPilot bet link"));
+      setState(() => _error = tr("That doesn't look like a ProBets bet link"));
     } else {
       Navigator.pop(context, b);
     }

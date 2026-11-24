@@ -213,7 +213,7 @@ void main() {
 
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
-      expect(find.text("That doesn't look like a BetPilot bet link"), findsOneWidget);
+      expect(find.text("That doesn't look like a ProBets bet link"), findsOneWidget);
       expect(closed, isFalse);
 
       await tester.enterText(find.byType(TextField), 'Look at this: ${BetLink.webLink(bet)}');
