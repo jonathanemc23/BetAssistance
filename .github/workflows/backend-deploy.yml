@@ -48,6 +48,21 @@ jobs:
           service_account: ${{ env.GCP_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@v2
         if: env.READY == 'true'
+      # The server reads the database as it starts (Flyway), so a database that
+      # refuses connections (Neon over its free compute hours, a changed
+      # password) shows up as "container failed to start". Check it first so the
+      # log says what is wrong.
+      - name: Check the database
+        if: env.READY == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if ! out=$(timeout 60 psql "$DATABASE_URL" -tAc 'select 1' 2>&1); then
+            echo "::error::The database refused the connection: $out"
+            echo "Check the Neon project (Neon console > Usage, and Settings > Compute) and the DATABASE_URL secret." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Database: ok"
       - name: Deploy to Cloud Run
         if: env.READY == 'true'
         env:
@@ -80,3 +95,13 @@ jobs:
           fi
           curl -sf "$URL/push/key" >/dev/null
           echo "Server: $URL" >> "$GITHUB_STEP_SUMMARY"
+      # When the new revision doesn't start, print its own log here (needs the
+      # roles/logging.viewer role on the deploy account; see gcp.sh).
+      - name: Server log of the failed start
+        if: failure() && env.READY == 'true'
+        run: |
+          REV=$(gcloud run services describe "$SERVICE" --region "$REGION" --format 'value(status.latestCreatedRevisionName)' || true)
+          echo "Revision: $REV"
+          gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE AND resource.labels.revision_name=$REV" \
+            --freshness 1h --limit 80 --order asc --format 'value(textPayload)' \
+            || echo "::warning::The deploy account can't read logs. Run in Cloud Shell: gcloud projects add-iam-policy-binding betpilot-513404 --member=serviceAccount:$GCP_ACCOUNT --role=roles/logging.viewer"
