@@ -32,13 +32,13 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+# Built in one job and published in another, as GitHub's Pages template
+# does: deploy-pages in the same job as the upload sometimes found no
+# artifact yet ("No artifacts named github-pages") and nothing went live.
 jobs:
-  deploy:
+  build:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     env:
       HAS_GCP: ${{ secrets.DATABASE_URL != '' }}
     steps:
@@ -74,5 +74,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v4
         with:
           path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v4
