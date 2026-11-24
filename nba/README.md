@@ -78,7 +78,7 @@ the engine changes.
 
 | Stage | Status |
 | --- | --- |
-| 0. Package, settings, logs, ESPN provider, schema `nba`, CI | Done |
+| 0. Package, settings, logs, ESPN provider, own ids, availability, schema `nba`, CI ([report](reports/stage-0.md)) | Done |
 | 1. Historical load and daily update, validation, import log | Next |
 | 2. Features (windows, rates, rest, opponent) with time cut-off | |
 | 3. Minutes engine and backtest | |
