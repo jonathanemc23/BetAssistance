@@ -146,7 +146,7 @@ asks which data to keep (`lib/data/sync.dart`).
 3. Authentication > **Settings > Authorized domains** > Add domain:
    `jonathanemc23.github.io` (for the Google window in the web app).
 4. Project settings (gear) > General > **Your apps** > the web icon `</>`:
-   register an app named BetPilot (no Hosting). Its `apiKey` is
+   register an app named ProBets (no Hosting). Its `apiKey` is
    `firebaseApiKey` in `lib/data/account.dart` (public by design; Firebase
    web keys ship in every web app).
 

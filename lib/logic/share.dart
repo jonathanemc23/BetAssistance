@@ -5,7 +5,7 @@ import 'stats.dart';
 import '../l10n/l10n.dart';
 
 /// Share links: the bet is encoded in the link itself (no server), so anyone
-/// with BetPilot can open it and get the same bet pre-filled.
+/// with ProBets can open it and get the same bet pre-filled.
 ///
 /// Formats accepted when opening:
 ///   https://raw.githack.com/jonathanemc23/BetAssistance/main/web/b/index.html#<code>
@@ -55,7 +55,7 @@ class BetLink {
       ] else
         '${trPick(b.selection)}${b.event.isEmpty ? '' : ' (${b.event})'} @ $odds',
       '',
-      tr('Open it in BetPilot: {link}', {'link': webLink(b)}),
+      tr('Open it in ProBets: {link}', {'link': webLink(b)}),
     ];
     return lines.join('\n');
   }

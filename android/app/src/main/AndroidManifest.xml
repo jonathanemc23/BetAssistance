@@ -4,7 +4,7 @@
     <!-- Live alerts for matches in open bets (asked for on Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="BetPilot"
+        android:label="ProBets"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"

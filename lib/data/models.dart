@@ -1,4 +1,4 @@
-/// Data model shared with the BetPilot web version: bets, bankroll
+/// Data model shared with the ProBets web version: bets, bankroll
 /// transactions (deposits and withdrawals) and user settings.
 library;
 

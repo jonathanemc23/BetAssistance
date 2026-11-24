@@ -1,4 +1,4 @@
-// BetPilot's service worker: shows the live bet alerts the alert server
+// ProBets's service worker: shows the live bet alerts the alert server
 // pushes (kick-off, goals, full time), also when the app is closed. On
 // iPhone this works for the home-screen app on iOS 16.4 and later.
 // Registered by lib/data/push_channel_web.dart.
@@ -16,7 +16,7 @@ self.addEventListener('push', (event) => {
   // Safari stops delivering to a site that receives a push without showing
   // a notification, so one is always shown.
   event.waitUntil(
-    self.registration.showNotification(data.title || 'BetPilot', {
+    self.registration.showNotification(data.title || 'ProBets', {
       body: data.body || '',
       // One notification per match, replaced as the game goes on.
       tag: data.tag,

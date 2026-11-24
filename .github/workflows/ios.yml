@@ -42,12 +42,12 @@ jobs:
           echo "TAG=$TAG" >> "$GITHUB_ENV"
           mkdir -p build/unsigned/Payload
           cp -R build/ios/iphoneos/Runner.app build/unsigned/Payload/
-          (cd build/unsigned && zip -qry "bank-track-${TAG}-unsigned.ipa" Payload)
+          (cd build/unsigned && zip -qry "probets-${TAG}-unsigned.ipa" Payload)
 
       - uses: actions/upload-artifact@v5
         if: env.HAS_SIGNING != 'true'
         with:
-          name: bank-track-ipa-unsigned
+          name: probets-ipa-unsigned
           path: build/unsigned/*.ipa
 
       # Attach it to the version's GitHub release, next to the Android APK.
@@ -56,10 +56,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          FILE="build/unsigned/bank-track-${TAG}-unsigned.ipa"
-          NOTES="iPhone: bank-track-${TAG}-unsigned.ipa is not signed by Apple. Install it with Sideloadly or AltStore and your Apple ID; with a free Apple ID it has to be reinstalled every 7 days."
+          FILE="build/unsigned/probets-${TAG}-unsigned.ipa"
+          NOTES="iPhone: probets-${TAG}-unsigned.ipa is not signed by Apple. Install it with Sideloadly or AltStore and your Apple ID; with a free Apple ID it has to be reinstalled every 7 days."
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "Bank Track ${TAG}" --notes "$NOTES" || true
+            gh release create "$TAG" --title "ProBets ${TAG}" --notes "$NOTES" || true
           fi
           gh release upload "$TAG" "$FILE" --clobber
 
@@ -123,7 +123,7 @@ jobs:
       - uses: actions/upload-artifact@v5
         if: env.HAS_SIGNING == 'true'
         with:
-          name: bank-track-ipa
+          name: probets-ipa
           path: build/ios/ipa/*.ipa
 
       # Every signed build on main goes to TestFlight. Apple only takes each

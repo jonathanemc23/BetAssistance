@@ -1,4 +1,4 @@
-# Bank Track (mobile MVP)
+# ProBets (mobile MVP)
 
 Flutter app for tracking a betting bankroll, for Android, iPhone and the web
 from the same code (see [iPhone](#iphone) and [Web app](#web-app) below).
@@ -154,7 +154,7 @@ by hand from the Actions tab (Feed check, Run workflow).
 ## iPhone
 
 `ios/` is the iPhone app: bundle id `com.banktrack.app` (same as Android),
-shown as BetPilot, iOS 15.5 or newer (ML Kit's text recognition needs it),
+shown as ProBets, iOS 15.5 or newer (ML Kit's text recognition needs it),
 iPhone only. Everything in the app works the same, with these iPhone notes:
 
 - **Live alerts and automatic results** run while the app is open. iOS
@@ -227,7 +227,7 @@ GitHub Pages has to be switched on once: Settings, Pages, Source: GitHub
 Actions.
 
 On iPhone, open it in Safari, tap Share, then **Add to Home Screen**: it gets
-the BetPilot icon and opens full screen like an app. Data is kept in the
+the ProBets icon and opens full screen like an app. Data is kept in the
 browser (SQLite in WebAssembly, stored in IndexedDB), separate from any
 installed app. Removing the home screen icon or clearing Safari's website data
 deletes it. Differences from the phone apps:

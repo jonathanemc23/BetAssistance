@@ -370,8 +370,8 @@ class _SettingsPageState extends State<SettingsPage> {
           onChanged: _setAlerts,
           title: Text(tr('Alerts for matches in open bets')),
           subtitle: Text(PushAlerts.instance.available
-              ? tr('Kick-off, every goal and the final score for matches in your pending bets and open parlays, also with BetPilot closed. On iPhone, open BetPilot from its Home Screen icon to turn them on.')
-              : tr('Kick-off, every goal and the final score for matches in your pending bets and open parlays. Checked every minute while BetPilot is open or running in the background.')),
+              ? tr('Kick-off, every goal and the final score for matches in your pending bets and open parlays, also with ProBets closed. On iPhone, open ProBets from its Home Screen icon to turn them on.')
+              : tr('Kick-off, every goal and the final score for matches in your pending bets and open parlays. Checked every minute while ProBets is open or running in the background.')),
         ),
         // Alerts are on from the start, but the browser only asks for a tap.
         if (_alerts && PushAlerts.instance.available && !PushAlerts.instance.channel.permitted)
@@ -386,7 +386,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 if (mounted) setState(() {});
                 if (!ok && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(tr('Notifications are blocked. Allow them for BetPilot in the iPhone Settings app, under Notifications.'))));
+                      content: Text(tr('Notifications are blocked. Allow them for ProBets in the iPhone Settings app, under Notifications.'))));
                 }
               },
             ),

@@ -89,7 +89,7 @@ class BankTrackApp extends StatelessWidget {
         // Rebuilds only when the store notifies; the theme comes from it.
         listenable: store,
         builder: (context, child) => MaterialApp(
-          title: 'BetPilot',
+          title: 'ProBets',
           debugShowCheckedModeBanner: false,
           theme: theme(store.themeId),
           locale: store.language.locale,
@@ -345,6 +345,6 @@ class BrandTitle extends StatelessWidget {
           child: Image.asset('assets/brand/icon.png', width: size, height: size),
         ),
         SizedBox(width: size * 0.35),
-        Text('BetPilot', style: TextStyle(fontWeight: FontWeight.w800, fontSize: size * 0.72, letterSpacing: 0.2)),
+        Text('ProBets', style: TextStyle(fontWeight: FontWeight.w800, fontSize: size * 0.72, letterSpacing: 0.2)),
       ]);
 }
