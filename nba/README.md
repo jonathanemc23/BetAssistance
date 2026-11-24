@@ -17,6 +17,8 @@ is built.
 | --- | --- |
 | `nba_engine/providers/base.py` | The types every data provider returns (`Game`, `BoxScore`, `PlayerLine`, `TeamLine`) and the `Provider` interface |
 | `nba_engine/providers/espn.py` | ESPN's public JSON feed (scoreboard + game summary) |
+| `nba_engine/ids.py` | Our own team, player and game ids; providers' ids are only links to them (`nba.external_ids`) |
+| `nba_engine/availability.py` | Hand-entered availability (available, questionable, out, restricted) and how it changes the minutes projection |
 | `nba_engine/http.py` | GET with a pause between requests and retries with backoff |
 | `nba_engine/config.py` | Settings from environment variables |
 | `nba_engine/db.py` | Connection to the server's Postgres, schema `nba` |
@@ -55,6 +57,11 @@ real Postgres, and `check` against it and the live feed.
   information existed (`available_at`, a game's final whistle), so backtests
   only use what was known before each game.
 - Raw provider responses are kept unchanged in `nba.raw_payloads`.
+- Teams, players and games carry our own ids. Each provider's ids live in
+  `nba.external_ids`, so a new provider adds links; models never see a
+  provider id.
+- Availability reports are insert-only; a prediction uses the latest report
+  made before it and stores which one (`availability_id`, `play_probability`).
 - Predictions are insert-only, with model name and version, so any past
   prediction can be reproduced.
 

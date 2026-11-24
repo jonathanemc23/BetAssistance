@@ -8,8 +8,8 @@ from __future__ import annotations
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 EXPECTED_TABLES = (
-    "raw_payloads", "import_log", "teams", "players", "player_team_spells", "games",
-    "player_games", "team_games", "features", "models", "predictions",
+    "raw_payloads", "import_log", "teams", "players", "external_ids", "player_team_spells", "games",
+    "player_games", "team_games", "player_availability", "features", "models", "predictions",
     "backtest_runs", "backtest_metrics", "pipeline_runs",
 )
 
