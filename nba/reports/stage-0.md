@@ -43,7 +43,7 @@ Date: 2026-11-24. Pull request: #54.
 | Suite | Result |
 | --- | --- |
 | `nba` pytest | 23 passed |
-| Server `mvn verify` (H2) | 19 passed, including the new quiet-mode test |
+| Server `mvn verify` (H2) | 18 passed, including the new quiet-mode test |
 | Migrations V1-V4 on Postgres 16 | Applied; `nba_engine check` reports the schema complete |
 | Quiet-mode test with the fix switched off | Fails, so the test does guard the fix |
 
