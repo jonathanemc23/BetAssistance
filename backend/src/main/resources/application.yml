@@ -5,6 +5,11 @@ spring:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/banktrack}
     username: ${DATABASE_USER:banktrack}
     password: ${DATABASE_PASSWORD:banktrack}
+    # No idle connections kept open: Neon suspends its compute (and stops
+    # counting hours) only when nothing is connected.
+    hikari:
+      minimum-idle: 0
+      idle-timeout: 30000
   jpa:
     open-in-view: false
     hibernate:
