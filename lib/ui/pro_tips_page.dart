@@ -136,7 +136,7 @@ class _ProTipsPageState extends State<ProTipsPage> {
               Expanded(
                 child: TabBarView(children: [
                   _DailyTab(store: widget.store, tips: tips, score: _score),
-                  _ProTab(store: widget.store, tips: tips, score: _score, open: _open),
+                  _ProTab(store: widget.store, match: widget.match, tips: tips, score: _score, open: _open),
                 ]),
               ),
             ]),
@@ -484,8 +484,9 @@ class _Wallet extends StatelessWidget {
 }
 
 class _ProTab extends StatelessWidget {
-  const _ProTab({required this.store, required this.tips, required this.score, required this.open});
+  const _ProTab({required this.store, required this.match, required this.tips, required this.score, required this.open});
   final BankStore store;
+  final Match match;
   final MatchTips tips;
   final (int, int)? score;
   final bool open;
@@ -502,7 +503,7 @@ class _ProTab extends StatelessWidget {
           child: Text(tr('No Pro tips for this match yet.'),
               textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
         ),
-      for (final t in tips.pro) TipCard(tip: t, store: store, score: score, onBuy: open ? () => buyTip(context, store, t) : null),
+      for (final t in tips.pro) TipCard(tip: t, store: store, score: score, onBuy: open ? () => buyTip(context, store, t, match: match) : null),
       const _PreviewNote(),
     ]);
   }
@@ -566,7 +567,7 @@ class _TipPageState extends State<TipPage> {
                   key: const Key('tip-page-card'),
                   tip: tip,
                   store: store,
-                  onBuy: open && !unlocked ? () => buyTip(context, store, tip) : null,
+                  onBuy: open && !unlocked ? () => buyTip(context, store, tip, match: match) : null,
                 ),
                 if (!tip.free && !unlocked)
                   Container(
@@ -803,7 +804,8 @@ class TipAnalysis extends StatelessWidget {
 }
 
 /// Asks, then spends tokens on [t]; opens the wallet when there aren't enough.
-Future<void> buyTip(BuildContext context, BankStore store, Tip t) async {
+/// With [match] the tip goes to the bet register's Bought section.
+Future<void> buyTip(BuildContext context, BankStore store, Tip t, {Match? match}) async {
   if (store.tokens < t.cost) {
     await showTokensSheet(context, store, need: t.cost);
     return;
@@ -822,7 +824,7 @@ Future<void> buyTip(BuildContext context, BankStore store, Tip t) async {
     ),
   );
   if (ok != true) return;
-  if (await store.unlockTip(t) && context.mounted) {
+  if (await store.unlockTip(t, match: match) && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('Unlocked: {pick}', {'pick': trPick(t.pick)}))));
   }
 }
@@ -1333,7 +1335,7 @@ class _HubPro extends StatelessWidget {
             store: store,
             match: e.key,
             onOpenMatch: () => onOpen(e.key),
-            onBuy: () => buyTip(context, store, t),
+            onBuy: () => buyTip(context, store, t, match: e.key),
           ),
       const _PreviewNote(),
     ]);

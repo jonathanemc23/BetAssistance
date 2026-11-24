@@ -151,6 +151,19 @@ const esStrings = <String, String>{
   '{label}: {n} settled, {won} won, {lost} lost, {roi}.': '{label}: {n} resueltas, {won} ganadas, {lost} perdidas, {roi}.',
   'no stake': 'sin importe',
   'Parlays': 'Combinadas',
+  // bets_screen.dart: Bought section
+  'Bought': 'Compradas',
+  '{n} bought bet': '{n} apuesta comprada',
+  '{n} bought bets': '{n} apuestas compradas',
+  'Bought in Community': 'Compradas en Comunidad',
+  'The Pro tips you unlock with tokens show here, with their result.':
+      'Aquí salen los pronósticos Pro que desbloqueas con tokens, con su resultado.',
+  'The bets you buy from other bettors in Community show here, with their result.':
+      'Aquí salen las apuestas que compras a otros apostadores en Comunidad, con su resultado.',
+  "Bought bets settle on their own with the match's final score. They have no stake, so they don't change your bankroll.":
+      'Las apuestas compradas se liquidan solas con el resultado final del partido. No tienen importe apostado, así que no cambian tu banca.',
+  '{p}% won': '{p}% ganadas',
+  'Won vs lost': 'Ganadas vs perdidas',
   'Odds under 1.70': 'Cuotas menores a 1.70',
   'Odds 1.70 to 2.50': 'Cuotas de 1.70 a 2.50',
   'Odds 2.50 and up': 'Cuotas de 2.50 o más',

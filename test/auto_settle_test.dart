@@ -245,6 +245,28 @@ void main() {
       expect(s.status, BetStatus.lost);
     });
 
+    test('settles bought Pro tips with their match, and a lost one refunds', () async {
+      const won = Tip(
+          matchId: '701', legs: [TipLeg(TipMarket.homeWin, 'Arsenal to win', 1.9)], chance: 0.5, reasons: [],
+          free: false, level: Confidence.high);
+      const lost = Tip(
+          matchId: '701', legs: [TipLeg(TipMarket.bttsNo, 'Both teams to score: No', 2.0)], chance: 0.5, reasons: [],
+          free: false, level: Confidence.max);
+      final m = match(MatchState.scheduled);
+      expect(await store.unlockTip(won, match: m), isTrue);
+      expect(await store.unlockTip(lost, match: m), isTrue);
+      final tokens = store.tokens;
+      expect(store.openTips.length, 2);
+
+      feed['701'] = match(MatchState.finished, h: '2', a: '1');
+      await settler.run();
+
+      expect(store.unlockedTips[won.id]!.result, 'won');
+      expect(store.unlockedTips[lost.id]!.result, 'refunded');
+      expect(store.tokens, tokens + lost.cost);
+      expect(store.openTips, isEmpty);
+    });
+
     test('the alert service settles and notifies, and settles with alerts off', () async {
       await store.saveBet(single('Arsenal to win'));
       feed['701'] = match(MatchState.finished, h: '0', a: '1');
