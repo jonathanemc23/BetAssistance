@@ -69,23 +69,20 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com cloudscheduler.googleapis.com
-          # The secret is postgresql://user:password@host:port/db?params; Spring
-          # wants the JDBC address with the user and password apart, always over
-          # SSL. Supabase's transaction pooler (port 6543) breaks the server's
-          # prepared statements: use the session pooler (5432).
-          PARTS=$(python3 -c '
-          import sys, urllib.parse as u
-          p = u.urlparse(sys.argv[1])
-          if p.port == 6543: sys.exit("DATABASE_URL uses the transaction pooler (6543); use the session pooler (5432)")
-          q = p.query if "sslmode=" in p.query else "&".join(x for x in (p.query, "sslmode=require") if x)
-          print("jdbc:postgresql://%s%s?%s" % (p.hostname + (":%d" % p.port if p.port else ""), p.path, q),
-                u.unquote(p.username or ""), u.unquote(p.password or ""), sep="\t")' "$DATABASE_URL")
+          # Spring wants the JDBC address with the user and password apart.
+          # libpq splits the secret, as psql does (.github/scripts/jdbc_parts.py).
+          python3 -m venv /tmp/pg && /tmp/pg/bin/pip install -q "psycopg[binary]==3.3.9"
+          PARTS=$(/tmp/pg/bin/python .github/scripts/jdbc_parts.py "$DATABASE_URL")
           IFS=$'\t' read -r JDBC USER PASS <<< "$PARTS"
           echo "::add-mask::$PASS"
           # The scheduler's key for POST /push/tick, the same on every deploy.
           TICK=$(printf '%s' "$DATABASE_URL tick" | sha256sum | cut -c1-40)
           echo "::add-mask::$TICK"
-          printf 'DATABASE_URL: "%s"\nDATABASE_USER: "%s"\nDATABASE_PASSWORD: "%s"\nPUSH_TICK_KEY: "%s"\n' "$JDBC" "$USER" "$PASS" "$TICK" > env.yaml
+          # JSON strings are YAML strings: any character in the password is safe.
+          JDBC="$JDBC" DBUSER="$USER" PASS="$PASS" TICK="$TICK" python3 -c '
+          import json, os
+          for k, v in (("DATABASE_URL", "JDBC"), ("DATABASE_USER", "DBUSER"), ("DATABASE_PASSWORD", "PASS"), ("PUSH_TICK_KEY", "TICK")):
+              print("%s: %s" % (k, json.dumps(os.environ[v])))' > env.yaml
           printf 'AUTH_ISSUER_URI: "https://securetoken.google.com/%s"\nAUTH_AUDIENCE: "%s"\n' "$FIREBASE_PROJECT" "$FIREBASE_PROJECT" >> env.yaml
           gcloud run deploy "$SERVICE" --source backend --region "$REGION" --allow-unauthenticated \
             --max-instances 1 --memory 512Mi --env-vars-file env.yaml --quiet
