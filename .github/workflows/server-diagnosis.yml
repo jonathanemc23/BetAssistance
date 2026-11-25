@@ -87,6 +87,17 @@ jobs:
                 u.unquote(p.username or ""), u.unquote(p.password or ""), sep="\t")' "$DATABASE_URL")
           IFS=$'\t' read -r JDBC USER PASS <<< "$PARTS"
           echo "::add-mask::$PASS"
+          # Shapes only, never values: what the secret holds besides the address.
+          python3 -c '
+          import sys, urllib.parse as u
+          p = u.urlparse(sys.argv[1])
+          print("scheme", p.scheme, "| host", p.hostname, "| port", p.port, "| path", repr(p.path),
+                "| query keys", [k for k, _ in u.parse_qsl(p.query)],
+                "| user", p.username, "| password length", len(u.unquote(p.password or "")),
+                "| raw password has % [ ] or spaces:", any(c in (p.password or "") for c in "%[] "),
+                "| text after the url:", repr(sys.argv[1][len(sys.argv[1].rstrip()):]))' "$DATABASE_URL"
+          echo "== psql with the parts the deploy uses"
+          PGPASSWORD="$PASS" psql "host=$(python3 -c 'import sys,urllib.parse as u;print(u.urlparse(sys.argv[1]).hostname)' "$DATABASE_URL") port=5432 dbname=postgres user=$USER sslmode=require" -tAc "select 'parts work'" 2>&1 || true
           export DATABASE_URL="$JDBC" DATABASE_USER="$USER" DATABASE_PASSWORD="$PASS" PORT=8080
           export AUTH_ISSUER_URI=https://securetoken.google.com/betpilot-513404 AUTH_AUDIENCE=betpilot-513404
           java -jar backend/target/community-*.jar > server.log 2>&1 &
