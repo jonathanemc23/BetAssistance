@@ -1,7 +1,9 @@
 name: Server diagnosis
 
-# Read-only checks of the live server and its database: deploys nothing,
-# changes nothing. Runs on pull requests that change this file, or by hand.
+# Checks of the live server and its database: deploys nothing. The last
+# step starts the server on the runner against the real database for a
+# minute, to show why it fails to start (it runs the same migrations a
+# deploy would). Runs on pull requests that change this file, or by hand.
 on:
   pull_request:
     paths: ['.github/workflows/server-diagnosis.yml']
@@ -29,6 +31,10 @@ jobs:
           if [ -z "$DATABASE_URL" ]; then echo "::error::DATABASE_URL secret is not available"; exit 0; fi
           timeout 60 psql "$DATABASE_URL" -tAc "select 'connected', version(), now()" 2>&1 || echo "::error::The database refused the connection (see above)"
           timeout 60 psql "$DATABASE_URL" -tAc "select version, description, success from flyway_schema_history order by installed_rank" 2>&1 || true
+          echo "== objects in schemas public and nba"
+          timeout 60 psql "$DATABASE_URL" -tAc "select n.nspname, c.relkind, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname in ('public', 'nba') order by 1, 2, 3 limit 80" 2>&1 || true
+          timeout 60 psql "$DATABASE_URL" -tAc "select 'function', p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' limit 20" 2>&1 || true
+          timeout 60 psql "$DATABASE_URL" -tAc "select current_user, rolsuper, has_database_privilege(current_database(), 'CREATE') from pg_roles where rolname = current_user" 2>&1 || true
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ env.GCP_PROVIDER }}
@@ -56,3 +62,38 @@ jobs:
           echo "== current serving revision, last errors"
           gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE AND severity>=ERROR" \
             --freshness 2d --limit 20 --format 'value(timestamp,textPayload)' 2>&1 || true
+
+  start-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Build
+        run: mvn -B -q -f backend/pom.xml package -DskipTests
+      - name: Start against the real database for a minute
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python3 -m venv /tmp/pg && /tmp/pg/bin/pip install -q "psycopg[binary]==3.3.9"
+          PARTS=$(/tmp/pg/bin/python .github/scripts/jdbc_parts.py "$DATABASE_URL")
+          IFS=$'\t' read -r JDBC USER PASS <<< "$PARTS"
+          echo "::add-mask::$PASS"
+          HOST=$(/tmp/pg/bin/python -c 'import sys; from psycopg.conninfo import conninfo_to_dict as c; print(c(sys.argv[1])["host"])' "$DATABASE_URL")
+          echo "== psql with the parts the server gets"
+          PGPASSWORD="$PASS" psql "host=$HOST port=5432 dbname=postgres user=$USER sslmode=require" -tAc "select 'parts work'" 2>&1 || true
+          export DATABASE_URL="$JDBC" DATABASE_USER="$USER" DATABASE_PASSWORD="$PASS" PORT=8080
+          export AUTH_ISSUER_URI=https://securetoken.google.com/betpilot-513404 AUTH_AUDIENCE=betpilot-513404
+          java -jar backend/target/community-*.jar > server.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf -m 5 http://localhost:8080/actuator/health; then echo; echo "Server started"; break; fi
+            if ! kill -0 $! 2>/dev/null; then echo "Server exited"; break; fi
+            sleep 2
+          done
+          kill $! 2>/dev/null || true
+          grep -v -i "password" server.log | tail -n 120
+
