@@ -96,6 +96,14 @@ from the same code (see [iPhone](#iphone) and [Web app](#web-app) below).
 The data model and the stat rules are the same as the web version
 (ROI = profit / settled non-void stakes; win rate counts won and lost bets only).
 
+## NBA Intelligence (in progress)
+
+A statistics engine for NBA player props (minutes, points, rebounds,
+assists as probability distributions, with backtesting) is being built in
+`nba/` (Python) with its own database schema `nba` on the server
+(`backend/src/main/resources/db/migration/V4__nba.sql`). It never touches the
+bankroll or the bets. See [nba/README.md](nba/README.md).
+
 ## Data safety between releases
 
 Data lives in a SQLite database (`bank_track.db`) in the app's private storage.

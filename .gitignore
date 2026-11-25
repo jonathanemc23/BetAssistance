@@ -49,3 +49,8 @@ app.*.map.json
 
 # Community server build output
 backend/target/
+
+# Python (nba/)
+__pycache__/
+*.pyc
+.pytest_cache/

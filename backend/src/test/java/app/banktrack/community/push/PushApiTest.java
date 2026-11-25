@@ -37,9 +37,11 @@ class PushApiTest {
     /** Match 701 is Everton v Chelsea, kicking off now (the clock is the real one). */
     static class FakeFeed implements LiveFeed {
         final Map<String, Game> games = new HashMap<>();
+        int reads;
 
         @Override
         public Optional<Game> read(String feed, String matchId) {
+            reads++;
             return Optional.ofNullable(games.get(feed + "|" + matchId));
         }
     }
@@ -68,12 +70,15 @@ class PushApiTest {
     @Autowired FakeSender sender;
     @Autowired PushDeviceRepository devices;
     @Autowired PushWatchRepository watches;
+    @Autowired LiveAlertJob job;
 
     @BeforeEach
     void reset() {
+        job.wake();
         watches.deleteAll();
         devices.deleteAll();
         feed.games.clear();
+        feed.reads = 0;
         sender.sent.clear();
         sender.answer = PushSender.Result.SENT;
     }
@@ -128,6 +133,27 @@ class PushApiTest {
                 .andExpect(jsonPath("$.phones").value(1))
                 .andExpect(jsonPath("$.matchesFollowed").value(1))
                 .andExpect(jsonPath("$.lastRound").value(org.hamcrest.Matchers.not("none since start")));
+    }
+
+    @Test
+    void staysOffTheDatabaseUntilAFollowedMatchIsNear() throws Exception {
+        // Only a match three hours away: the round finds nothing and goes quiet until 30 minutes before it.
+        sync(ENDPOINT, everton(java.time.Instant.now().plusSeconds(3 * 3600).toString()));
+        score(State.LIVE, "0", "0");
+        assertThat(tick()).isZero();
+        // A row that appears without a phone saving (so nothing wakes the job) isn't read while quiet.
+        PushWatch sneaky = watches.findAll().getFirst();
+        sneaky.update("soccer/eng.1", "Soccer", java.time.Instant.now(), "Everton", "Chelsea", List.of());
+        watches.save(sneaky);
+        assertThat(tick()).isZero();
+        assertThat(feed.reads).isZero();
+        // A phone saving its matches wakes it: the match is read again and the next goal is sent.
+        sync(ENDPOINT, everton(java.time.Instant.now().toString()));
+        tick();
+        assertThat(feed.reads).isEqualTo(1);
+        score(State.LIVE, "1", "0");
+        assertThat(tick()).isEqualTo(1);
+        assertThat(sender.sent.getLast()).contains("Goal! Everton 1-0 Chelsea");
     }
 
     @Test

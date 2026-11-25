@@ -90,15 +90,24 @@ here, by Web Push, the way Safari delivers notifications to a closed web app.
 | `DELETE /push/devices` | `{endpoint}`: alerts switched off |
 | `POST /push/tick` | Run a round now (Cloud Scheduler) |
 
-## Deploy (Google Cloud Run + Neon)
+## Deploy (Google Cloud Run + Supabase)
 
 `.github/workflows/backend-deploy.yml` deploys on every change to `backend/`
 on main, or by hand from Actions > Deploy server > Run workflow. After it, the
 web app is rebuilt and finds the server by itself. It needs:
 
 1. **`DATABASE_URL`** repository secret (Settings > Secrets and variables >
-   Actions): at neon.tech, create a project (free), then copy the direct
-   connection string from Connect (`postgresql://...?sslmode=require`).
+   Actions) with the database's connection string. The database is a free
+   Supabase project (since Nov 2026; Neon's free plan ran out of compute
+   hours): at supabase.com, New project, region East US (Ohio), a strong
+   database password. Then Connect > Connection string > **Session pooler**
+   (port 5432, works from Cloud Run's IPv4), and put the password in it:
+   `postgresql://postgres.<project>:<password>@aws-0-us-east-2.pooler.supabase.com:5432/postgres`.
+   Not the transaction pooler (6543): the deploy refuses it. The deploy adds
+   `sslmode=require`, checks the database answers, and Flyway creates the
+   tables on first start. Free projects pause after 7 days with no use; the
+   alert job keeps it in use, and a paused project is resumed from the
+   Supabase dashboard.
 2. **Google Cloud** (project `betpilot-513404`, billing on, a $10 budget
    alert): a service account `github-deploy`, then in Cloud Shell
    `curl -sL https://raw.githubusercontent.com/jonathanemc23/BetAssistance/main/gcp.sh | bash`.

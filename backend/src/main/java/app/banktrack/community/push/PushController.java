@@ -82,12 +82,14 @@ public class PushController {
     @PutMapping("/devices")
     public ResponseEntity<Void> sync(@RequestBody PushService.Sync sync) {
         service.sync(sync);
+        job.wake();
         return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/devices")
     public ResponseEntity<Void> remove(@RequestBody Removal removal) {
         if (removal.endpoint() != null) service.remove(removal.endpoint());
+        job.wake();
         return ResponseEntity.noContent().build();
     }
 

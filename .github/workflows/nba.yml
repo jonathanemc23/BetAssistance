@@ -1,0 +1,51 @@
+name: NBA engine
+
+# Tests the NBA Intelligence engine (nba/): unit tests, then the server's
+# migrations on a real Postgres and the engine's own check against it and
+# against the live ESPN feed. The daily data run joins this file in stage 1.
+on:
+  push:
+    branches: [main]
+    paths: ['nba/**', 'backend/src/main/resources/db/migration/**', '.github/workflows/nba.yml']
+  pull_request:
+    paths: ['nba/**', 'backend/src/main/resources/db/migration/**', '.github/workflows/nba.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nba
+          POSTGRES_PASSWORD: nba
+          POSTGRES_DB: nba
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nba" --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: nba
+    env:
+      DATABASE_URL: postgresql://nba:nba@localhost:5432/nba
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: nba/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - name: Server migrations on Postgres
+        run: |
+          for f in ../backend/src/main/resources/db/migration/V*.sql; do
+            psql "$DATABASE_URL" -q -v ON_ERROR_STOP=1 -f "$f"
+          done
+      - name: Engine check (database and live feed)
+        run: python -m nba_engine check

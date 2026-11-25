@@ -5,6 +5,12 @@ spring:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/banktrack}
     username: ${DATABASE_USER:banktrack}
     password: ${DATABASE_PASSWORD:banktrack}
+    # Few connections and none kept idle: free Postgres plans limit
+    # connections (Supabase's pooler) or count hours while connected (Neon).
+    hikari:
+      minimum-idle: 0
+      maximum-pool-size: 5
+      idle-timeout: 30000
   jpa:
     open-in-view: false
     hibernate:

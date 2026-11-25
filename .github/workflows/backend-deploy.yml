@@ -1,10 +1,10 @@
 name: Deploy server
 
-# Puts the server in backend/ on Google Cloud Run, with the database from
-# Neon, and sets up a Cloud Scheduler job that runs a round of live alerts
+# Puts the server in backend/ on Google Cloud Run, with its Postgres
+# database (Supabase's session pooler, or any Postgres URL), and sets up a Cloud Scheduler job that runs a round of live alerts
 # every minute (Cloud Run sleeps between requests, so the server's own
-# timer can't be relied on). Skipped until the DATABASE_URL secret (Neon's
-# connection string, postgresql://user:password@host/db?sslmode=require)
+# timer can't be relied on). Skipped until the DATABASE_URL secret (the
+# connection string, postgresql://user:password@host:5432/db)
 # exists. GitHub signs in to Google without a key (Workload Identity
 # Federation), set up once with gcp.sh in Cloud Shell.
 # The web app finds the server by itself after this (see pages.yml).
@@ -36,7 +36,7 @@ jobs:
     env:
       READY: ${{ secrets.DATABASE_URL != '' }}
     steps:
-      - name: Waiting for the Neon secret
+      - name: Waiting for the database secret
         if: env.READY != 'true'
         run: echo "::notice::DATABASE_URL is missing, so the server isn't deployed. See backend/README.md."
       - uses: actions/checkout@v5
@@ -48,19 +48,39 @@ jobs:
           service_account: ${{ env.GCP_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@v2
         if: env.READY == 'true'
+      # The server reads the database as it starts (Flyway), so a database that
+      # refuses connections (a free plan's quota used up, a paused project,
+      # a changed password) shows up as "container failed to start". Check it first so the
+      # log says what is wrong.
+      - name: Check the database
+        if: env.READY == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if ! out=$(timeout 60 psql "$DATABASE_URL" -tAc 'select 1' 2>&1); then
+            echo "::error::The database refused the connection: $out"
+            echo "Check the database project (paused? quota used up?) and the DATABASE_URL secret." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Database: ok"
       - name: Deploy to Cloud Run
         if: env.READY == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com cloudscheduler.googleapis.com
-          # Neon gives postgresql://user:password@host/db?params; Spring wants
-          # the JDBC address with the user and password apart.
-          IFS=$'\t' read -r JDBC USER PASS < <(python3 -c '
+          # The secret is postgresql://user:password@host:port/db?params; Spring
+          # wants the JDBC address with the user and password apart, always over
+          # SSL. Supabase's transaction pooler (port 6543) breaks the server's
+          # prepared statements: use the session pooler (5432).
+          PARTS=$(python3 -c '
           import sys, urllib.parse as u
           p = u.urlparse(sys.argv[1])
-          print("jdbc:postgresql://%s%s%s" % (p.hostname + (":%d" % p.port if p.port else ""), p.path, "?" + p.query if p.query else ""),
+          if p.port == 6543: sys.exit("DATABASE_URL uses the transaction pooler (6543); use the session pooler (5432)")
+          q = p.query if "sslmode=" in p.query else "&".join(x for x in (p.query, "sslmode=require") if x)
+          print("jdbc:postgresql://%s%s?%s" % (p.hostname + (":%d" % p.port if p.port else ""), p.path, q),
                 u.unquote(p.username or ""), u.unquote(p.password or ""), sep="\t")' "$DATABASE_URL")
+          IFS=$'\t' read -r JDBC USER PASS <<< "$PARTS"
           echo "::add-mask::$PASS"
           # The scheduler's key for POST /push/tick, the same on every deploy.
           TICK=$(printf '%s' "$DATABASE_URL tick" | sha256sum | cut -c1-40)
@@ -80,3 +100,13 @@ jobs:
           fi
           curl -sf "$URL/push/key" >/dev/null
           echo "Server: $URL" >> "$GITHUB_STEP_SUMMARY"
+      # When the new revision doesn't start, print its own log here (needs the
+      # roles/logging.viewer role on the deploy account; see gcp.sh).
+      - name: Server log of the failed start
+        if: failure() && env.READY == 'true'
+        run: |
+          REV=$(gcloud run services describe "$SERVICE" --region "$REGION" --format 'value(status.latestCreatedRevisionName)' || true)
+          echo "Revision: $REV"
+          gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE AND resource.labels.revision_name=$REV" \
+            --freshness 1h --limit 80 --order asc --format 'value(textPayload)' \
+            || echo "::warning::The deploy account can't read logs. Run in Cloud Shell: gcloud projects add-iam-policy-binding betpilot-513404 --member=serviceAccount:$GCP_ACCOUNT --role=roles/logging.viewer"

@@ -191,6 +191,27 @@ void main() {
     expect(await a.store.pref('ai.key'), 'sk-ant-secret');
   });
 
+  test('when the server loses its data, the phone saves its copy again without asking', () async {
+    final a = await device();
+    await a.store.saveBet(bet('Arsenal to win'));
+    await a.account.signUp('laura@example.com', 'secret1');
+    await a.sync.sync();
+    expect(cloud.data['uid-1']!.version, 1);
+
+    cloud.data.clear(); // a new, empty server database
+    await a.sync.sync();
+    expect(a.sync.state, SyncState.synced);
+    expect(a.selections, ['Arsenal to win']);
+    expect(cloud.data['uid-1']!.version, 1);
+    expect(cloud.data['uid-1']!.data, contains('Arsenal to win'));
+
+    // Another phone gets it back from the server.
+    final b = await device();
+    await b.account.signIn('laura@example.com', 'secret1');
+    await b.sync.sync();
+    expect(b.selections, ['Arsenal to win']);
+  });
+
   test('a phone that already has other bets asks which data to keep', () async {
     final a = await device();
     await a.store.saveBet(bet('Arsenal to win'));

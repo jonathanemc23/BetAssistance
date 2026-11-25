@@ -2,6 +2,7 @@ package app.banktrack.community.push;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -10,6 +11,8 @@ public interface PushWatchRepository extends JpaRepository<PushWatch, Long> {
     List<PushWatch> findByDevice(PushDevice device);
 
     List<PushWatch> findByKickoffBetween(Instant from, Instant to);
+
+    Optional<PushWatch> findFirstByKickoffAfterOrderByKickoffAsc(Instant after);
 
     @Modifying
     @Query("delete from PushWatch w where w.kickoff < ?1 or w.device.id in (select d.id from PushDevice d where d.updatedAt < ?2)")
