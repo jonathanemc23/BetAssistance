@@ -185,6 +185,11 @@ class SyncService extends ChangeNotifier {
     if (remote.data != null && _fingerprint(remote.data!) == hash) {
       return _matched(uid, remote.version, hash);
     }
+    if (base != null && remote.version == 0 && remote.data == null) {
+      // The server has nothing for this account (its database was replaced):
+      // this device's copy becomes the account's data again.
+      return _save(token, uid, local, hash, 0, retried);
+    }
     if (base == null) {
       // The first time this device meets this account.
       if (remote.version == 0) return _save(token, uid, local, hash, 0, retried);

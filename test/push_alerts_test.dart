@@ -17,6 +17,7 @@ import 'live_alerts_test.dart' show bet, kickoff, match, ListSink;
 class FakeChannel implements PushChannel {
   bool allowed = true;
   bool subscribed = false;
+  int unsubscribes = 0;
   @override
   bool get supported => true;
   @override
@@ -38,6 +39,7 @@ class FakeChannel implements PushChannel {
   Future<Map<String, dynamic>?> current() async => subscribed ? await subscribe('') : null;
   @override
   Future<String?> unsubscribe() async {
+    unsubscribes++;
     subscribed = false;
     return 'https://web.push.apple.com/abc';
   }
@@ -108,6 +110,30 @@ void main() {
     expect(requests.last.method, 'DELETE');
     expect(jsonDecode(requests.last.body), {'endpoint': 'https://web.push.apple.com/abc'});
     expect(p.active, isFalse);
+  });
+
+  test('a new server key (a new server database) makes a new subscription and sends it', () async {
+    await store.setPref('push.key', 'OLDKEY');
+    channel.subscribed = true;
+    final p = push();
+    await p.prepare(store);
+    expect(channel.unsubscribes, 1);
+    expect(channel.subscribed, isTrue);
+    expect(await store.pref('push.key'), 'BHfw');
+    expect(requests.where((r) => r.method == 'PUT'), hasLength(1));
+
+    // Same key next time: nothing changes.
+    await p.prepare(store);
+    expect(channel.unsubscribes, 1);
+  });
+
+  test('a new server key without alerts switched on subscribes nobody', () async {
+    await store.setPref('push.key', 'OLDKEY');
+    final p = push();
+    await p.prepare(store);
+    expect(channel.unsubscribes, 0);
+    expect(channel.subscribed, isFalse);
+    expect(requests.where((r) => r.method == 'PUT'), isEmpty);
   });
 
   test('a new bet goes to the server right away, before the app is closed', () async {

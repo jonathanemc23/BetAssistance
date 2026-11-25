@@ -65,7 +65,17 @@ class PushAlerts {
       final res = await _client.get(_url('/push/key')).timeout(const Duration(seconds: 20));
       if (res.statusCode == 200) {
         final key = (jsonDecode(res.body) as Map<String, dynamic>)['key'] as String?;
-        if (key != null && key.isNotEmpty) await store.setPref(_keyPref, key);
+        if (key != null && key.isNotEmpty) {
+          final old = await store.pref(_keyPref);
+          await store.setPref(_keyPref, key);
+          if (old != null && old.isNotEmpty && old != key && channel.permitted && await channel.current() != null) {
+            // The server has a new key (a new database): a subscription made
+            // with the old one can't receive its alerts, so make a new one.
+            await channel.unsubscribe();
+            await store.setPref(_sentPref, '');
+            await sync(store);
+          }
+        }
       }
     } catch (e) {
       debugPrint('Push key: $e');
