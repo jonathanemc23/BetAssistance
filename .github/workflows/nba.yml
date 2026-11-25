@@ -2,7 +2,8 @@ name: NBA engine
 
 # Tests the NBA Intelligence engine (nba/): unit tests, then the server's
 # migrations on a real Postgres and the engine's own check against it and
-# against the live ESPN feed. The daily data run joins this file in stage 1.
+# against the live ESPN feed, and a short live load into that Postgres. The
+# data runs against the real database are in nba-data.yml.
 on:
   push:
     branches: [main]
@@ -33,6 +34,7 @@ jobs:
         working-directory: nba
     env:
       DATABASE_URL: postgresql://nba:nba@localhost:5432/nba
+      TEST_DATABASE_URL: postgresql://nba:nba@localhost:5432/nba
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -41,11 +43,18 @@ jobs:
           cache: pip
           cache-dependency-path: nba/requirements*.txt
       - run: pip install -r requirements-dev.txt
-      - run: python -m pytest -q
       - name: Server migrations on Postgres
         run: |
           for f in ../backend/src/main/resources/db/migration/V*.sql; do
             psql "$DATABASE_URL" -q -v ON_ERROR_STOP=1 -f "$f"
           done
+      - run: python -m pytest -q
       - name: Engine check (database and live feed)
         run: python -m nba_engine check
+      - name: Live load of three days, loaded twice, and the report
+        run: |
+          python -m nba_engine backfill --from 2025-11-19 --to 2025-11-21
+          python -m nba_engine backfill --from 2025-11-19 --to 2025-11-21 | tee second.txt
+          grep -q "'loaded': 0" second.txt
+          python -m nba_engine ingest
+          python -m nba_engine report

@@ -1,0 +1,59 @@
+name: NBA data
+
+# The NBA engine's data runs against the real database (DATABASE_URL secret):
+# every morning the daily update (yesterday's results and today's games);
+# by hand, the historical load from 2022-23, which resumes where it stopped.
+# Only schema nba is written; the community tables and the bankroll (on the
+# phone) are never touched.
+on:
+  schedule:
+    - cron: '0 11 * * *'   # 6-7 AM US Eastern, after the last game ends
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'daily, backfill or report'
+        default: backfill
+        type: choice
+        options: [daily, backfill, report]
+      max_days:
+        description: 'Backfill: most days in this run (empty = all)'
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nba-data
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    defaults:
+      run:
+        working-directory: nba
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NBA_REQUEST_PAUSE: '0.5'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: nba/requirements*.txt
+      - run: pip install -r requirements.txt
+      - name: Check
+        run: python -m nba_engine check
+      - name: Daily update
+        if: github.event_name == 'schedule' || inputs.mode == 'daily'
+        run: python -m nba_engine ingest
+      - name: Historical load
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'backfill'
+        run: python -m nba_engine backfill ${{ inputs.max_days && format('--max-days {0}', inputs.max_days) || '' }}
+      - name: Report
+        if: always()
+        run: |
+          python -m nba_engine report | tee report.md
+          { echo '## NBA data'; echo; cat report.md; } >> "$GITHUB_STEP_SUMMARY"

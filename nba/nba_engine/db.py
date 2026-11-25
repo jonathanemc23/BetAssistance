@@ -36,3 +36,14 @@ def missing_tables(conn) -> list[str]:
         cur.execute("select table_name from information_schema.tables where table_schema = 'nba'")
         have = {r[0] for r in cur.fetchall()}
     return [t for t in EXPECTED_TABLES if t not in have]
+
+
+# Columns added after V4, by migration: the engine needs them all.
+EXPECTED_COLUMNS = (("raw_payloads", "body_encoding"),)  # V5
+
+
+def missing_columns(conn) -> list[str]:
+    with conn.cursor() as cur:
+        cur.execute("select table_name, column_name from information_schema.columns where table_schema = 'nba'")
+        have = set(cur.fetchall())
+    return [f"{t}.{c}" for t, c in EXPECTED_COLUMNS if (t, c) not in have]
