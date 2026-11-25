@@ -22,11 +22,16 @@ is built.
 | `nba_engine/http.py` | GET with a pause between requests and retries with backoff |
 | `nba_engine/config.py` | Settings from environment variables |
 | `nba_engine/db.py` | Connection to the server's Postgres, schema `nba` |
-| `nba_engine/cli.py` | `python -m nba_engine check` and `fetch --date` |
+| `nba_engine/store.py` | Writes games, players, box scores and raw responses (compressed) into schema `nba`, under our own ids; every write can be repeated |
+| `nba_engine/validate.py` | Checks each box score before it is stored: impossible stats, odd minutes, totals that don't add up, duplicates |
+| `nba_engine/ingest.py` | Loads days: the historical load (resumable) and the daily update |
+| `nba_engine/report.py` | What the database holds, by season, and the problems found |
+| `nba_engine/cli.py` | `python -m nba_engine check`, `fetch`, `ingest`, `backfill`, `report` |
 | `tests/` | Unit tests, with real ESPN responses in `tests/fixtures/` |
 
-The database schema is `backend/src/main/resources/db/migration/V4__nba.sql`,
-run by the server's Flyway on deploy. The engine never creates tables.
+The database schema is `backend/src/main/resources/db/migration/V4__nba.sql`
+(and `V5__nba_raw_encoding.sql`), run by the server's Flyway on deploy. The
+engine never creates tables.
 
 ## Running
 
@@ -35,8 +40,16 @@ cd nba
 pip install -r requirements-dev.txt
 python -m pytest -q
 python -m nba_engine fetch --date 2025-11-20      # read a day from ESPN, no writes
-DATABASE_URL=postgresql://... python -m nba_engine check
+export DATABASE_URL=postgresql://...
+python -m nba_engine check
+python -m nba_engine ingest                       # yesterday and today (US Eastern)
+python -m nba_engine backfill [--max-days 200]    # from NBA_FIRST_SEASON; resumes where it stopped
+python -m nba_engine backfill --from 2025-01-10 --to 2025-01-12 --force   # load some days again
+python -m nba_engine report
 ```
+
+Database tests (`tests/test_ingest.py`) run when `TEST_DATABASE_URL` points
+at a Postgres with the server's migrations; they empty schema `nba` first.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -46,8 +59,14 @@ DATABASE_URL=postgresql://... python -m nba_engine check
 | `NBA_REQUEST_PAUSE` | `0.5` | Seconds between provider requests |
 | `NBA_LOG_LEVEL` | `INFO` | Log level |
 
-CI: `.github/workflows/nba.yml` runs the tests, the server migrations on a
-real Postgres, and `check` against it and the live feed.
+CI: `.github/workflows/nba.yml` runs the server migrations on a real
+Postgres, the tests, `check`, and a short live load (three days, loaded
+twice to show nothing changes the second time).
+
+Data runs: `.github/workflows/nba-data.yml` runs the daily update every
+morning at 11:00 UTC against the real database, and the historical load or
+the report when started by hand (Actions → NBA data → Run workflow). The
+daily run also keeps the free Supabase project from pausing.
 
 ## Data rules
 
@@ -56,7 +75,14 @@ real Postgres, and `check` against it and the live feed.
 - Every stored row records when it was fetched (`fetched_at`) and when the
   information existed (`available_at`, a game's final whistle), so backtests
   only use what was known before each game.
-- Raw provider responses are kept unchanged in `nba.raw_payloads`.
+- Raw provider responses are kept in `nba.raw_payloads`, gzip-compressed:
+  a scoreboard whole, a game summary's `header`, `boxscore` and `gameInfo`
+  sections as sent (the rest, plays and news, is most of the size and isn't
+  read). About 8 KB a game, so the whole history fits the free 500 MB.
+- A game's rows become available at its final whistle: when we saw it
+  final, or for a game loaded later, tip-off + 4 hours (the safe side).
+- Problems are flagged, never fixed or dropped: `player_games.flags` and
+  `nba.import_log`. Models leave flagged rows out.
 - Teams, players and games carry our own ids. Each provider's ids live in
   `nba.external_ids`, so a new provider adds links; models never see a
   provider id.
@@ -79,7 +105,7 @@ the engine changes.
 | Stage | Status |
 | --- | --- |
 | 0. Package, settings, logs, ESPN provider, own ids, availability, schema `nba`, CI ([report](reports/stage-0.md)) | Done |
-| 1. Historical load and daily update, validation, import log | Next |
+| 1. Historical load and daily update, validation, import log ([report](reports/stage-1.md)) | In review |
 | 2. Features (windows, rates, rest, opponent) with time cut-off | |
 | 3. Minutes engine and backtest | |
 | 4. Points, rebounds, assists, distributions, Over/Under/Push | |
